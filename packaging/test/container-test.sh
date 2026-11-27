@@ -767,6 +767,7 @@ done
 expect_mode /etc/fail2ban/jail.d/hostashi.conf "644 root:root"
 expect_mode /etc/fail2ban/filter.d/hostashi-panel.conf "644 root:root"
 expect_mode /etc/fail2ban/fail2ban.d/hostashi.conf "644 root:root"
+expect_mode /etc/fail2ban/action.d/hostashi-nftables.conf "644 root:root"
 [ "$(api POST /api/v1/auth/login '{"username":"kim","password":"not-the-password-1"}')" = 401 ] || fail "wrong password: $(x cat /tmp/api.out)"
 sleep 1
 x sh -c 'journalctl -u hostashi.service -o cat --no-pager | grep auth.failed' || fail "no auth.failed line in the journal"

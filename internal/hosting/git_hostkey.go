@@ -16,6 +16,7 @@ import (
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/backup"
+	"github.com/maki-it/hostashi/internal/netaddrs"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
@@ -30,6 +31,9 @@ var (
 	// SSH. The reason is logged, not shown: it could tell what listens
 	// where.
 	ErrHostKeyUnreachable = errors.New("hosting: the repository's server did not answer over SSH")
+	// ErrIPv4Only: the repository's server has only IPv4 addresses and
+	// this server cannot reach IPv4 (an IPv6-only server without NAT64).
+	ErrIPv4Only = errors.New("hosting: the repository's server has only IPv4 addresses and this server has no IPv4 route (NAT64 needed)")
 	// ErrBadHostKey: not a host key Hostashi pins.
 	ErrBadHostKey = errors.New("hosting: not a usable host key (Ed25519, ECDSA or RSA with at least 3072 bits)")
 )
@@ -106,6 +110,10 @@ func (s *Service) ScanGitHostKey(ctx context.Context, name string) (ssh.PublicKe
 
 	s.log.WarnContext(ctx, "scan git host key", "site", name, "host", rem.Host, "err", lastErr)
 
+	if netaddrs.Unreachable(lastErr) && onlyIPv4(addrs) {
+		return nil, ErrIPv4Only
+	}
+
 	return nil, ErrHostKeyUnreachable
 }
 
@@ -160,4 +168,20 @@ func (s *Service) SetGitHostKey(ctx context.Context, actor int64, name, line str
 	}
 
 	return toGitView(saved), nil
+}
+
+// onlyIPv4 reports whether every ip:port in addrs is an IPv4 address.
+func onlyIPv4(addrs []string) bool {
+	ips := make([]netip.Addr, 0, len(addrs))
+
+	for _, a := range addrs {
+		ap, err := netip.ParseAddrPort(a)
+		if err != nil {
+			return false
+		}
+
+		ips = append(ips, ap.Addr())
+	}
+
+	return netaddrs.OnlyIPv4(ips)
 }

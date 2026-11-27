@@ -37,6 +37,8 @@ Without a confirmation the rules roll back after the time shown on the page. The
 
 Independent of these rules, fail2ban blocks addresses for a while after repeated failed SSH or panel logins, and after repeated wrong passwords on a site with [access protection](Access-protection.md). An address that is blocked again and again is blocked from everything, SSH included, for a week.
 
+For IPv6, fail2ban blocks the whole /64 network of the address, because one connection usually has a /64 of its own and an attacker can pick a new address in it for every attempt. When the /64 also holds an address of this server (a network shared with other customers), only the single address is blocked. Unblocking an address lifts the block of its /64.
+
 The card **Blocked addresses** on the same page shows each blocked address, why it was blocked, since when and until when, and how many failed logins each kind of protection has counted. When a customer or you were locked out by mistake, choose **Unblock** next to the address and confirm. The address is unblocked everywhere at once; new failed logins block it again. Every unblock is in the audit log.
 
 ![Blocked addresses on the Firewall page](images/firewall-bans.png)

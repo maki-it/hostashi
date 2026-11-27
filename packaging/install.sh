@@ -951,14 +951,17 @@ do_backup() { apt_install "${BACKUP_PKGS[@]}"; }
 # fail2ban from the distribution, on by default (ADR-0021): jails sshd,
 # hostashi-panel (the panel's auth.failed lines) and recidive, all reading
 # the journal, and hostashi-site-auth (failed site passwords, ADR-0066)
-# reading nginx's server error log, banning through nftables. python3-systemd is its journal
-# backend, nftables its ban action; neither is pulled in without recommends.
+# reading nginx's server error log, banning through nftables (an IPv6
+# address with its /64, unless the /64 holds an address of this server).
+# python3-systemd is its journal backend, nftables its ban action; neither
+# is pulled in without recommends.
 F2B_SRC=${HOSTASHI_F2B_SRC:-$HERE/fail2ban}
 F2B_PKGS=(fail2ban python3-systemd nftables)
 F2B_FILES=(
   "fail2ban-hostashi.conf:/etc/fail2ban/fail2ban.d/hostashi.conf"
   "hostashi.conf:/etc/fail2ban/jail.d/hostashi.conf"
   "hostashi-panel.conf:/etc/fail2ban/filter.d/hostashi-panel.conf"
+  "hostashi-nftables.conf:/etc/fail2ban/action.d/hostashi-nftables.conf"
 )
 F2B_JAILS=(sshd hostashi-panel hostashi-site-auth recidive)
 F2B_CHANGED=no

@@ -91,6 +91,15 @@ A push to another branch, a tag or another event is ignored. A push while a depl
 
 The payload URL is on the panel's address, so the Git host must be able to reach the panel over HTTPS.
 
+## IPv6-only servers
+
+GitHub has no IPv6 addresses, so a server without IPv4 cannot fetch from `github.com` on its own. Hostashi says so when you confirm the host key or when a deploy fails ("only IPv4 addresses ... NAT64"). There are two ways out:
+
+- Use NAT64: DNS64 resolvers answer with IPv6 addresses for IPv4-only hosts and a NAT64 gateway forwards the connection. Some providers run one for their networks; public NAT64 services exist as well. Set their resolvers in the server's network configuration (for example `/etc/systemd/resolved.conf`).
+- Use a Git host that has IPv6, such as GitLab or your own Gitea or Forgejo.
+
+Everything else in Hostashi works without IPv4: the apt repository, PHP, Node.js and Python downloads and WP-CLI all come from hosts with IPv6.
+
 ## Emails
 
 Every user who can see the site can get an email when a deploy fails: switch on **Git deploys** under **Your account → Notifications**. It is off by default, admins included. See [Email notifications](Email-notifications.md).

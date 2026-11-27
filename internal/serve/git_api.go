@@ -119,6 +119,9 @@ func gitFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusNotFound, "git_not_configured", "the site has no Git repository")
 	case errors.Is(err, hosting.ErrNotSSH):
 		writeError(w, http.StatusConflict, "not_ssh", "the site does not deploy over SSH")
+	case errors.Is(err, hosting.ErrIPv4Only):
+		writeError(w, http.StatusBadGateway, "ipv4_only",
+			"the repository's server has only IPv4 addresses and this server has no IPv4 route: an IPv6-only server needs NAT64 to reach it")
 	case errors.Is(err, hosting.ErrHostKeyUnreachable):
 		writeError(w, http.StatusBadGateway, "unreachable", "the repository's server did not answer over SSH")
 	case errors.Is(err, hosting.ErrBadHostKey):

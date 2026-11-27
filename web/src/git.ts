@@ -264,6 +264,8 @@ export function gitMessage(err: unknown): string {
         return "Confirm the server's host key first.";
       case "not_ssh":
         return "The site does not deploy over SSH.";
+      case "ipv4_only":
+        return "The repository's server has only IPv4 addresses and this server has no IPv4 route. An IPv6-only server needs NAT64 to reach it, see the Git deploy page in the wiki.";
       case "unreachable":
         return "The repository's server did not answer over SSH. Check the address and port.";
       case "invalid_host_key":

@@ -44,6 +44,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/netaddrs"
 )
 
 func init() {
@@ -162,6 +163,10 @@ func Sync(ctx context.Context, o Options) (Result, error) {
 		Force:      true,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if ipv4Only(ctx, o.URL, err) {
+			return Result{}, fmt.Errorf("gitsync: fetch %s: %w (%s)", o.Branch, err, netaddrs.NAT64Hint)
+		}
+
 		return Result{}, fmt.Errorf("gitsync: fetch %s: %w", o.Branch, err)
 	}
 
@@ -196,6 +201,30 @@ func Sync(ctx context.Context, o Options) (Result, error) {
 		When: commit.Author.When.UTC(), Files: n,
 	}, nil
 }
+
+// ipv4Only reports whether err is an unreachable network and the
+// repository's host has only IPv4 addresses: an IPv6-only server without
+// NAT64 fetching from github.com, for example.
+func ipv4Only(ctx context.Context, url string, err error) bool {
+	if !netaddrs.Unreachable(err) {
+		return false
+	}
+
+	rem, perr := agentapi.ParseGitURL(url)
+	if perr != nil {
+		return false
+	}
+
+	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	addrs, lerr := lookupHost(lctx, "ip", strings.Trim(rem.Host, "[]"))
+
+	return lerr == nil && netaddrs.OnlyIPv4(addrs)
+}
+
+// lookupHost is net.DefaultResolver.LookupNetIP; tests replace it.
+var lookupHost = net.DefaultResolver.LookupNetIP
 
 func (o Options) check() error {
 	if !o.allowLocal {

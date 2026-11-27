@@ -250,7 +250,7 @@ x curl -fsS -o /dev/null -g "http://[::1]:9999/" || fail "test listener not up"
 if port_open 9999; then fail "a port the firewall should drop answered over IPv6"; fi
 x pkill -f 'http.server --bind :: 9999' || true
 
-step "a failed panel login is logged with the IPv6 address, fail2ban bans it, the panel lifts the ban"
+step "a failed panel login is logged with the IPv6 address, fail2ban bans it (/64 elsewhere), the panel lifts the ban"
 x fail2ban-client set hostashi-panel bantime 120 >/dev/null
 for _ in $(seq 12); do
   panel /api/v1/auth/login -o /dev/null -H 'Content-Type: application/json' \
@@ -260,12 +260,23 @@ x sh -c 'journalctl -u hostashi.service -o cat --no-pager | grep auth.failed' | 
   fail "auth.failed without the client's IPv6 address: $(x sh -c 'journalctl -u hostashi.service -o cat --no-pager | grep auth.failed | tail -n 2')"
 for _ in $(seq 30); do x fail2ban-client status hostashi-panel | grep -F "$C6" >/dev/null && break; sleep 1; done
 x fail2ban-client status hostashi-panel | grep -F "$C6" >/dev/null || fail "fail2ban did not ban $C6: $(x fail2ban-client status hostashi-panel)"
-x nft list ruleset | grep -F "$C6" >/dev/null || fail "ban not in nftables"
+# Client and server share the Docker network's /64, so only the client's
+# own address is banned, never the server's network.
+x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "$C6" >/dev/null || fail "ban not in nftables: $(x nft list set inet f2b-table addr6-set-hostashi-panel)"
+x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "/64" >/dev/null && fail "the server's own /64 was banned"
 if port_open 8443; then fail "banned client still reaches the panel"; fi
 [ "$(api GET /api/v1/firewall/bans)" = 200 ] || fail "bans through the panel: $(x cat /tmp/api.out)"
 x grep -F "\"$C6\"" /tmp/api.out >/dev/null || fail "panel does not show the IPv6 ban: $(x cat /tmp/api.out)"
 [ "$(api DELETE "/api/v1/firewall/bans/$C6")" = 200 ] || fail "unblock through the panel: $(x cat /tmp/api.out)"
 port_open 8443 || fail "client still blocked after the unblock"
+# An address of another /64 is banned with its whole /64; a second
+# address of it shares the element, and the unban lifts it.
+x fail2ban-client set hostashi-panel banip 2001:db8:f2b:1::5 2001:db8:f2b:1::6 >/dev/null
+for _ in $(seq 10); do x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "2001:db8:f2b:1::/64" >/dev/null && break; sleep 0.5; done
+x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "2001:db8:f2b:1::/64" >/dev/null || fail "no /64 ban: $(x nft list set inet f2b-table addr6-set-hostashi-panel)"
+x fail2ban-client set hostashi-panel unbanip 2001:db8:f2b:1::5 2001:db8:f2b:1::6 >/dev/null
+for _ in $(seq 10); do x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "2001:db8:f2b:1::" >/dev/null || break; sleep 0.5; done
+if x nft list set inet f2b-table addr6-set-hostashi-panel | grep -F "2001:db8:f2b:1::" >/dev/null; then fail "the /64 ban was not lifted"; fi
 x fail2ban-client set hostashi-panel bantime 3600 >/dev/null
 
 step "the firewall's panel allowlist takes an IPv6 prefix (ADR-0034)"
