@@ -175,7 +175,7 @@ for u in hostashi-agent hostashi; do
   [ "$(x readlink "/proc/$pid/exe")" = /usr/bin/hostashi ] || fail "$u does not run /usr/bin/hostashi"
 done
 for u in hostashi-backup.service hostashi-dbjob@.service hostashi-restore@.service hostashi-files@.service hostashi-wpcli-install.service; do
-  x systemctl cat "$u" | grep -q '^ExecStart=/usr/bin/hostashi ' || fail "$u does not start /usr/bin/hostashi"
+  x systemctl cat "$u" | grep '^ExecStart=/usr/bin/hostashi ' >/dev/null || fail "$u does not start /usr/bin/hostashi"
 done
 [ "$(x bash -lc 'command -v hostashi')" = /usr/bin/hostashi ] || fail "hostashi in PATH is not /usr/bin/hostashi"
 x bash -c 'source /usr/local/share/bash-completion/completions/hostashi && COMP_WORDS=(hostashi site li) COMP_CWORD=2 && _hostashi && [ "${COMPREPLY[*]}" = "list limits" ]' ||
