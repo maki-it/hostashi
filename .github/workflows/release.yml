@@ -79,7 +79,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release upload "$TAG" dist/SHA256SUMS.sigstore.json --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$TAG" dist/SHA256SUMS.sigstore.json --clobber --repo "$GITHUB_REPOSITORY"
       - name: Keep the packages for the apt job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -172,7 +172,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release upload "$TAG" apt-repo.tar.gz --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" apt-repo.tar.gz --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
 
   pages:
@@ -251,6 +251,6 @@ jobs:
           else
             gh pr edit "$pr" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
           fi
-          for wf in go.yml web.yml reuse.yml licenses.yml; do
+          for wf in go.yml web.yml licenses.yml; do
             gh workflow run "$wf" --repo "$REPO" --ref "$BRANCH"
           done

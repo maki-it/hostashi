@@ -486,6 +486,115 @@ func (s *Service) TOTPConfirm(ctx context.Context, userID int64, code string) ([
 	return codes, nil
 }
 
+// TOTPReplaceStart begins moving TOTP to a new device. Like TOTPDisable it
+// needs the password and a current code or a recovery code, so a stolen
+// session alone cannot swap the second factor. The old seed keeps working
+// until TOTPReplaceConfirm accepts a code from the new app.
+func (s *Service) TOTPReplaceStart(ctx context.Context, userID int64, password, code string) (secret, uri string, err error) {
+	if s.box == nil {
+		return "", "", ErrTOTPUnavailable
+	}
+
+	u, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return "", "", fmt.Errorf("auth: %w", err)
+	}
+
+	if !u.TOTPEnabled {
+		return "", "", ErrTOTPState
+	}
+
+	key := "user:" + u.Username
+	if s.userLimit.Blocked(key) {
+		return "", "", ErrRateLimited
+	}
+
+	ok, verr := VerifyPassword(u.PasswordHash, password)
+	if verr != nil || !ok || !s.secondFactor(ctx, u, code) {
+		s.userLimit.Fail(key)
+
+		return "", "", ErrInvalidCredentials
+	}
+
+	seed, err := NewTOTPSecret()
+	if err != nil {
+		return "", "", err
+	}
+
+	sealed, err := s.box.Seal(seed, totpContext(u.ID))
+	if err != nil {
+		return "", "", fmt.Errorf("auth: %w", err)
+	}
+
+	if err := s.st.SetReplacementTOTP(ctx, u.ID, sealed); err != nil {
+		if errors.Is(err, store.ErrTOTPState) {
+			return "", "", ErrTOTPState
+		}
+
+		return "", "", fmt.Errorf("auth: %w", err)
+	}
+
+	return TOTPSecretString(seed), TOTPURI(s.issuer, u.Username, seed), nil
+}
+
+// TOTPReplaceConfirm finishes the move with the first valid code from the
+// new app. The new seed becomes the active one, the old one and the old
+// recovery codes stop working, and eight new recovery codes are returned once.
+func (s *Service) TOTPReplaceConfirm(ctx context.Context, userID int64, code string) ([]string, error) {
+	if s.box == nil {
+		return nil, ErrTOTPUnavailable
+	}
+
+	u, err := s.st.UserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+
+	sealed, err := s.st.ReplacementTOTP(ctx, u.ID)
+	if err != nil {
+		if errors.Is(err, store.ErrTOTPState) {
+			return nil, ErrTOTPState
+		}
+
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+
+	key := "user:" + u.Username
+	if s.userLimit.Blocked(key) {
+		return nil, ErrRateLimited
+	}
+
+	secret, err := s.box.Open(sealed, totpContext(u.ID))
+	if err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+
+	step, ok := VerifyTOTP(secret, code, s.now())
+	if !ok {
+		s.userLimit.Fail(key)
+
+		return nil, ErrInvalidCredentials
+	}
+
+	codes, hashes, err := newRecoveryCodes(8)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.st.ReplaceTOTP(ctx, u.ID, sealed, step, hashes); err != nil {
+		if errors.Is(err, store.ErrTOTPState) {
+			return nil, ErrTOTPState
+		}
+
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+
+	_ = s.st.Audit(ctx, &u.ID, "totp.replace", u.Username, nil)
+	s.notify(ctx, AccountEvent{UserID: u.ID, Kind: EventTOTPReplaced})
+
+	return codes, nil
+}
+
 // TOTPDisable turns TOTP off. It needs the password and a current code or
 // a recovery code, so a stolen session alone cannot remove the second factor.
 // An account that must have a second factor keeps TOTP unless it has a

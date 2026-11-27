@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { cleanPath, formatSize, modeProblem, nameProblem, zipUrl, type FileEntry } from "./files";
@@ -45,7 +45,7 @@ describe("FileManager", () => {
 
     const table = await screen.findByRole("table", { name: "Files in htdocs" });
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((r) => within(r).getAllByRole("cell")[1]!.textContent)).toEqual([
+    expect(rows.map((r) => within(r).getAllByRole("cell")[1]!.querySelector(".ui-files-name")?.textContent)).toEqual([
       "wp-content",
       "current→ ../release",
       "index.php",
@@ -67,6 +67,41 @@ describe("FileManager", () => {
     await userEvent.click(within(crumbs).getByRole("button", { name: "blog" }));
     expect(onPath).toHaveBeenLastCalledWith("");
     expect(within(crumbs).getByRole("button", { name: "htdocs" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps toolbar, filter and selection in a bar that turns compact once stuck", async () => {
+    let observe: ((e: Partial<IntersectionObserverEntry>[]) => void) | undefined;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: (e: Partial<IntersectionObserverEntry>[]) => void) {
+          observe = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      mockFetch({ [list("htdocs")]: listing("htdocs") });
+      const { container } = render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+      const table = await screen.findByRole("table", { name: "Files in htdocs" });
+      const bar = container.querySelector<HTMLElement>(".ui-files-bar")!;
+      expect(bar).toHaveAttribute("data-stuck", "false");
+      expect(within(bar).getByRole("toolbar", { name: "Files" })).toBeInTheDocument();
+      expect(within(bar).getByRole("searchbox", { name: "Filter files" })).toBeInTheDocument();
+
+      await userEvent.click(within(table).getByRole("checkbox", { name: "Select index.php" }));
+      expect(within(bar).getByRole("region", { name: "Selection" })).toHaveTextContent("1 selected");
+
+      // The sentinel above the bar scrolled out at the top: stuck.
+      act(() => observe!([{ isIntersecting: false, boundingClientRect: { top: -5 } as DOMRectReadOnly }]));
+      expect(bar).toHaveAttribute("data-stuck", "true");
+      // Out at the bottom (the page is scrolled up) is not stuck.
+      act(() => observe!([{ isIntersecting: false, boundingClientRect: { top: 900 } as DOMRectReadOnly }]));
+      expect(bar).toHaveAttribute("data-stuck", "false");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("warns about entries it cannot show and explains errors", async () => {
@@ -101,6 +136,41 @@ describe("FileManager", () => {
     expect(calls.find((c) => c.path.endsWith("/mkdir"))?.body).toEqual({ path: "htdocs/uploads" });
   });
 
+  it("scans a selection for viruses while the scan is on", async () => {
+    const scan = (engine: string) => ({ body: { engine, schedule: "weekly", nextScheduled: "", runs: [], findings: [] } });
+    let calls = mockFetch({ [list("htdocs")]: listing("htdocs"), ["GET /api/v1/sites/blog/malware-scan"]: scan("off") });
+    const { unmount } = render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByLabelText("Select index.php"));
+    expect(within(screen.getByRole("region", { name: "Selection" })).queryByRole("button", { name: "Scan for viruses" })).toBeNull();
+    unmount();
+
+    calls = mockFetch({
+      [list("htdocs")]: listing("htdocs"),
+      ["GET /api/v1/sites/blog/malware-scan"]: scan("on"),
+      ["POST /api/v1/sites/blog/malware-scans"]: (body) =>
+        (body as { paths: string[] }).paths.length === 1
+          ? { status: 409, body: { error: { code: "scan_running", message: "a scan of this site is queued or running" } } }
+          : { status: 202, body: { id: 4, state: "queued", source: "panel" } },
+    });
+    render(<FileManager site={site} path="htdocs" onPath={() => undefined} />);
+    await screen.findByRole("table");
+
+    await userEvent.click(screen.getByLabelText("Select index.php"));
+    await userEvent.click(await within(screen.getByRole("region", { name: "Selection" })).findByRole("button", { name: "Scan for viruses" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/waiting or running/);
+
+    await userEvent.click(screen.getByLabelText("Select wp-content"));
+    await userEvent.click(within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Scan for viruses" }));
+    expect(await screen.findByText("Virus scan of 2 items started.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Virus scan" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([
+      { paths: ["htdocs/index.php"] },
+      { paths: ["htdocs/index.php", "htdocs/wp-content"] },
+    ]);
+    expect(screen.queryByRole("region", { name: "Selection" })).toBeNull();
+  });
+
   it("acts on a selection: ZIP link, mode and delete", async () => {
     const calls = mockFetch({
       [list("htdocs")]: listing("htdocs"),
@@ -128,8 +198,10 @@ describe("FileManager", () => {
     expect(await screen.findByText("Mode set to 640.")).toBeInTheDocument();
     expect(calls.find((c) => c.path.endsWith("/chmod"))?.body).toEqual({ paths: ["htdocs/index.php", "htdocs/wp-content"], mode: "0640" });
 
-    // The selection is cleared after an action; pick again to delete.
-    await userEvent.click(screen.getByLabelText("Select all"));
+    // The selection is cleared after an action; pick again to delete, with
+    // the box in the table head.
+    const head = screen.getAllByRole("columnheader")[0]!;
+    await userEvent.click(within(head).getByRole("checkbox", { name: "Select all" }));
     await userEvent.click(within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Delete" }));
     dialog = within(screen.getByRole("alertdialog", { name: "Delete 4 entries?" }));
     expect(dialog.getByText(/There is no recycle bin/)).toBeInTheDocument();

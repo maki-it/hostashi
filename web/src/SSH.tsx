@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Notice } from "./ui";
+import { Badge, Button, Card, CopyValue, Field, Notice } from "./ui";
 import {
   accessName,
   addSSHKey,
@@ -128,15 +128,13 @@ function LoginInfo({ site, host, shell }: { site: Site; host: string; shell: boo
 
   return (
     <div className="ui-stack-tight" role="group" aria-label={"Login of " + site.name}>
-      <p className="ui-flush">
-        Log in with <code>sftp {site.name + "@" + host}</code>
+      <p className="ui-flush ui-row">
+        Log in with <CopyValue value={`sftp ${site.name}@${host}`} label="Copy the SFTP command" />
         {shell && (
           <>
-            {" "}
-            or <code>ssh {site.name + "@" + host}</code>
+            or <CopyValue value={`ssh ${site.name}@${host}`} label="Copy the SSH command" />
           </>
         )}
-        .
       </p>
       {keys && keys.length > 0 && (
         <>

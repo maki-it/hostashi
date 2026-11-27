@@ -90,11 +90,13 @@ func ResetLink(to, resetBy, username, link, panel string, expires time.Time) (Me
 
 // securityText says what happened, by event kind of internal/auth.
 var securityText = map[string]string{ //nolint:gosec // event texts, not credentials
-	"totp-enabled":    "An authenticator app (TOTP) was set up as a second factor.",
-	"totp-disabled":   "The authenticator app (TOTP) was removed as a second factor.",
-	"passkey-added":   "A passkey was added",
-	"passkey-removed": "A passkey was removed",
-	"token-created":   "A new API token was created",
+	"totp-enabled":     "An authenticator app (TOTP) was set up as a second factor.",
+	"totp-disabled":    "The authenticator app (TOTP) was removed as a second factor.",
+	"totp-replaced":    "The authenticator app (TOTP) was moved to a new device. Codes from the old app and the old recovery codes no longer work.",
+	"passkey-added":    "A passkey was added",
+	"passkey-removed":  "A passkey was removed",
+	"token-created":    "A new API token was created",
+	"password-changed": "The password was changed and every other session was logged out.",
 }
 
 // AccountSecurity tells the user about a change to their login or access.

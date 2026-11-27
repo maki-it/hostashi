@@ -19,12 +19,14 @@ export const pages = [
   "health",
   "services",
   "system",
+  "pools",
   "php",
   "node",
   "python",
   "backups",
   "firewall",
   "limits",
+  "profiles",
   "users",
   "mail",
   "import",
@@ -35,7 +37,7 @@ export const pages = [
 
 export type Page = (typeof pages)[number];
 
-export const siteTabs = ["overview", "domains", "web", "files", "php", "databases", "cron", "ssh", "limits", "logs", "nginx", "backups"] as const;
+export const siteTabs = ["overview", "domains", "access", "web", "files", "git", "malware", "php", "cache", "databases", "cron", "ssh", "limits", "usage", "logs", "nginx", "backups", "https", "headers", "realip", "hardening"] as const;
 
 export type SiteTab = (typeof siteTabs)[number];
 

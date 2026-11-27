@@ -335,7 +335,9 @@ func TestIPAllowlist(t *testing.T) {
 
 	for ip, want := range map[string]bool{
 		"198.51.100.7": true, "198.51.100.255": true, "::ffff:198.51.100.7": true, "2001:db8::1": true,
-		"198.51.101.1": false, "203.0.113.1": false, "2001:db8::2": false, "not-an-ip": false, "": false,
+		// The server itself always: the hostashi command on it.
+		"127.0.0.1": true, "::1": true, "::ffff:127.0.0.1": true,
+		"127.0.0.2": false, "198.51.101.1": false, "203.0.113.1": false, "2001:db8::2": false, "not-an-ip": false, "": false,
 	} {
 		_, err := e.svc.AuthenticateToken(ctx, nt.Secret, ip)
 

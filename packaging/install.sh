@@ -29,7 +29,10 @@
 #   --php-versions LIST  more PHP versions from sury.org next to the distribution's, comma-separated
 #                        from 7.4, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 (7.4, 8.1 and 8.2 are legacy). Kept for later runs
 #   --auto-update        also install new Hostashi versions from its apt repository automatically,
-#                        with the daily security updates (ADR-0050); off by default
+#                        with the daily security updates (ADR-0050); off by default. The panel
+#                        switches it on and off later, so the option is not kept for later runs
+#   --malware-scan       install ClamAV from the distribution for the malware scan (ADR-0064); the panel
+#                        switches it on and off later, so the option is not kept for later runs
 #   --no-apt             install no packages; a step that needs a missing one fails and names it.
 #                        For runs from the hostashi package, whose dependencies are installed (ADR-0050)
 #
@@ -84,7 +87,7 @@ OPTIONS_FILE=${HOSTASHI_OPTIONS_FILE:-/etc/hostashi/install.options}
 PKG_BIN=${HOSTASHI_PKG_BIN:-/usr/bin/hostashi}
 
 PHP_REQUEST=""
-MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no AUTO_UPDATE=no
+MODE=plan YES=no BINARY="" PANEL_DOMAIN="" PUBLIC_URL="" LISTEN=127.0.0.1:8080 PANEL_PORT=8443 ALLOW_UNTESTED=no NO_QUOTA=no NO_FIREWALL=no AUTO_UPDATE=no MALWARE_SCAN=no
 FW_ALLOW=()
 NO_DB_TOOL=no DB_TOOL_PORT=8444 NO_APT=no
 PHP_REQUEST_SET=no
@@ -107,7 +110,7 @@ detect() {
   case "$RAW_ARCH" in x86_64|amd64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; *) ARCH=unsupported;; esac
 }
 
-pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q '^install ok installed$'; }
+pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep '^install ok installed$' >/dev/null; }
 
 # apt_install PKG... installs the packages that are missing, without
 # recommends, and does nothing if all are there. With --no-apt (a package
@@ -224,7 +227,7 @@ preflight() {
     for v in $(tr ',' ' ' <<<"$PHP_REQUEST"); do
       php_allowed "$v" || fail "--php-versions: '$v' is not one of ${PHP_VERSIONS[*]}"
     done
-    printf '%s' "$PHP_REQUEST" | grep -Eq '^[0-9.]+(,[0-9.]+)*$' || fail "--php-versions '$PHP_REQUEST' must be a comma-separated list such as 8.1,7.4"
+    printf '%s' "$PHP_REQUEST" | grep -E '^[0-9.]+(,[0-9.]+)*$' >/dev/null || fail "--php-versions '$PHP_REQUEST' must be a comma-separated list such as 8.1,7.4"
   fi
 
   if [ "$MODE" = apply ]; then
@@ -256,7 +259,7 @@ preflight() {
 
 # ------------------------------------------------------------- steps
 # chk_<step> returns 0 if the step is satisfied and prints why not otherwise.
-STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient node python valkey mariadb dbtool backup units service fail2ban firewall updates quota"
+STEPS="account dirs key binary completion config ssh harden sysctl system nginx php phpversions pgclient malwarescan node python valkey mariadb dbtool backup units service fail2ban firewall updates runtimes quota"
 
 chk_account() {
   getent passwd hostashi >/dev/null || { echo "user hostashi missing"; return 1; }
@@ -353,12 +356,15 @@ do_config() { env_file | write_file /etc/hostashi/hostashi.env 0640 root:hostash
 # passwords and no forwarding. The block ends with its file, so root and the
 # admin's own sshd settings stay as they are. sshd -t checks the result
 # before sshd is reloaded; a file that fails the test is removed again, so
-# a later reload cannot lock anyone out.
+# a later reload cannot lock anyone out. The step also installs the site
+# users' wp command (ADR-0069), a root-owned wrapper that runs the pinned
+# WP-CLI phar with the PHP version of the caller's site.
 SSH_GROUP=hostashi-sites
 SSH_KEYS_DIR=/etc/hostashi-ssh/keys
 SSH_DROPIN=/etc/ssh/sshd_config.d/10-hostashi.conf
 SSH_SRC=${HOSTASHI_SSH_SRC:-$HERE/ssh}
 SSH_CHANGED=no
+WP_CMD=/usr/local/bin/wp
 
 chk_ssh() {
   pkg_installed openssh-server || { echo "openssh-server not installed"; return 1; }
@@ -366,13 +372,16 @@ chk_ssh() {
   dir_ok /etc/hostashi-ssh 755 root:root || { echo "/etc/hostashi-ssh"; return 1; }
   dir_ok "$SSH_KEYS_DIR" 755 root:root || { echo "$SSH_KEYS_DIR"; return 1; }
   file_matches "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf" || { echo "sshd drop-in differs"; return 1; }
+  file_matches "$WP_CMD" 0755 root:root <"$SSH_SRC/wp" || { echo "$WP_CMD differs"; return 1; }
   [ "$SSH_CHANGED" = no ] || { echo "sshd reload needed after a change"; return 1; }
 }
 do_ssh() {
   local rc
   apt_install openssh-server || return 1
   getent group "$SSH_GROUP" >/dev/null || groupadd --system "$SSH_GROUP" >>"$LOG" 2>&1 || return 1
-  install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d || return 1
+  install -d -m 0755 -o root -g root /etc/hostashi-ssh "$SSH_KEYS_DIR" /etc/ssh/sshd_config.d "${WP_CMD%/*}" || return 1
+  write_file "$WP_CMD" 0755 root:root <"$SSH_SRC/wp"
+  [ $? -le 1 ] || return 1
   write_file "$SSH_DROPIN" 0644 root:root <"$SSH_SRC/10-hostashi.conf"; rc=$?
   [ "$rc" -le 1 ] || return 1
   [ "$rc" = 0 ] && SSH_CHANGED=yes
@@ -632,6 +641,70 @@ do_pgclient() {
   fi
 }
 
+# The malware scan (ADR-0064). The step installs the script
+# packaging/clamav/clamav-install and its unit
+# hostashi-clamav-install@.service; the panel starts the unit when an admin
+# switches the scan on or off. With --malware-scan it installs ClamAV now.
+# A server the script set up earlier is checked (and repaired) on every
+# run; the scan units themselves come with step units.
+CLAMAV_SRC=${HOSTASHI_CLAMAV_SRC:-$HERE/clamav}/clamav-install
+CLAMAV_BIN=/usr/local/lib/hostashi/clamav-install
+CLAMAV_UNIT=hostashi-clamav-install@.service
+# Daily `clamav-install upgrade`: the ClamAV packages from all of the
+# distribution's sources, which unattended-upgrades does not take.
+CLAMAV_TIMER=hostashi-clamav-upgrade.timer
+CLAMAV_STATE=/var/lib/hostashi-agent/clamav-install
+SCAN_LOGS=/var/log/hostashi/scan
+
+clamav_state() { cat "$CLAMAV_STATE/state" 2>/dev/null || echo off; }
+
+chk_malwarescan() {
+  local why
+  dir_ok "$CLAMAV_STATE" 700 root:root || { echo "$CLAMAV_STATE"; return 1; }
+  dir_ok "$SCAN_LOGS" 700 root:root || { echo "$SCAN_LOGS"; return 1; }
+  file_matches "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC" || { echo "clamav-install differs"; return 1; }
+  file_matches "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT" || { echo "$CLAMAV_UNIT differs"; return 1; }
+  file_matches "/etc/systemd/system/$CLAMAV_TIMER" 0644 root:root <"$UNIT_DIR/$CLAMAV_TIMER" || { echo "$CLAMAV_TIMER differs"; return 1; }
+  [ "$(systemctl is-enabled "$CLAMAV_TIMER" 2>/dev/null)" = enabled ] || { echo "$CLAMAV_TIMER not enabled"; return 1; }
+  [ "$MALWARE_SCAN" = no ] || [ "$(clamav_state)" = on ] || { echo "ClamAV not installed"; return 1; }
+  why=$(HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_SRC" check) || { echo "$why"; return 1; }
+}
+do_malwarescan() {
+  local rc
+  install -d -m 0755 -o root -g root "${CLAMAV_BIN%/*}" || return 1
+  install -d -m 0700 -o root -g root "$CLAMAV_STATE" || return 1
+  install -d -m 0755 -o root -g root "${SCAN_LOGS%/*}" || return 1
+  install -d -m 0700 -o root -g root "$SCAN_LOGS" || return 1
+  write_file "$CLAMAV_BIN" 0755 root:root <"$CLAMAV_SRC"; [ $? -le 1 ] || return 1
+  local reload=no
+  write_file "/etc/systemd/system/$CLAMAV_UNIT" 0644 root:root <"$UNIT_DIR/$CLAMAV_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  write_file "/etc/systemd/system/$CLAMAV_TIMER" 0644 root:root <"$UNIT_DIR/$CLAMAV_TIMER"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  if [ "$reload" = yes ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  systemctl enable --now "$CLAMAV_TIMER" >>"$LOG" 2>&1 || return 1
+  local need=no why
+  if [ "$(clamav_state)" = on ]; then
+    HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check >/dev/null || need=yes
+    # Most gaps (a new AppArmor block, a drop-in, a disabled unit) need no
+    # package: repair them without apt first, since an upgrade from the
+    # hostashi package runs with --no-apt while dpkg holds the lock.
+    if [ "$need" = yes ]; then
+      HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" repair >>"$LOG" 2>&1 || true
+      why=$(HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" check) && need=no
+    fi
+  elif [ "$MALWARE_SCAN" = yes ]; then
+    need=yes why="ClamAV is not installed"
+  fi
+  if [ "$need" = yes ]; then
+    [ "$NO_APT" = no ] || { log "ClamAV needs packages ($why) and --no-apt is set: install them with apt-get, then run the installer again"; return 1; }
+    HOSTASHI_CLAMAV_STATE_DIR=$CLAMAV_STATE "$CLAMAV_BIN" install 2>&1 | tee -a "$LOG" | grep -E 'cannot' >&2
+    [ "${PIPESTATUS[0]}" = 0 ] || return 1
+  fi
+}
+
 # Node.js from the official nodejs.org builds (ADR-0054). The step only
 # sets up the unit hostashi-node-install@.service, its log directory and
 # /opt/hostashi/node; the panel starts the unit when an admin installs a
@@ -643,12 +716,16 @@ NODE_LOGS=/var/lib/hostashi-agent/node-install
 # hostashi-node@<site>, hostashi-app@<site> (ADR-0054) and hostashi-python@<site>
 # (ADR-0061); venv.log of hostashi-python-venv@<site>.
 APP_LOGS=/var/log/hostashi/app
+# The pinned WP-CLI phar (ADR-0069): hostashi-wpcli-install.service writes
+# /opt/hostashi/wp-cli/<version>/wp-cli.phar when a site installs WordPress.
+WPCLI_DIR=/opt/hostashi/wp-cli
 
 chk_node() {
   dir_ok "${NODE_DIR%/*}" 755 root:root || { echo "${NODE_DIR%/*}"; return 1; }
   dir_ok "$NODE_DIR" 755 root:root || { echo "$NODE_DIR"; return 1; }
   dir_ok "$NODE_LOGS" 700 root:root || { echo "$NODE_LOGS"; return 1; }
   dir_ok "$APP_LOGS" 750 root:root || { echo "$APP_LOGS"; return 1; }
+  dir_ok "$WPCLI_DIR" 755 root:root || { echo "$WPCLI_DIR"; return 1; }
   file_matches "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT" || { echo "$NODE_UNIT differs"; return 1; }
 }
 do_node() {
@@ -657,6 +734,7 @@ do_node() {
   install -d -m 0700 -o root -g root "$NODE_LOGS" || return 1
   install -d -m 0755 -o root -g root "${APP_LOGS%/*}" || return 1
   install -d -m 0750 -o root -g root "$APP_LOGS" || return 1
+  install -d -m 0755 -o root -g root "$WPCLI_DIR" || return 1
   write_file "/etc/systemd/system/$NODE_UNIT" 0644 root:root <"$UNIT_DIR/$NODE_UNIT"; rc=$?
   [ "$rc" -le 1 ] || return 1
   if [ "$rc" = 0 ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
@@ -872,7 +950,8 @@ do_backup() { apt_install "${BACKUP_PKGS[@]}"; }
 
 # fail2ban from the distribution, on by default (ADR-0021): jails sshd,
 # hostashi-panel (the panel's auth.failed lines) and recidive, all reading
-# the journal, banning through nftables. python3-systemd is its journal
+# the journal, and hostashi-site-auth (failed site passwords, ADR-0066)
+# reading nginx's server error log, banning through nftables. python3-systemd is its journal
 # backend, nftables its ban action; neither is pulled in without recommends.
 F2B_SRC=${HOSTASHI_F2B_SRC:-$HERE/fail2ban}
 F2B_PKGS=(fail2ban python3-systemd nftables)
@@ -881,7 +960,7 @@ F2B_FILES=(
   "hostashi.conf:/etc/fail2ban/jail.d/hostashi.conf"
   "hostashi-panel.conf:/etc/fail2ban/filter.d/hostashi-panel.conf"
 )
-F2B_JAILS=(sshd hostashi-panel recidive)
+F2B_JAILS=(sshd hostashi-panel hostashi-site-auth recidive)
 F2B_CHANGED=no
 
 chk_fail2ban() {
@@ -906,6 +985,10 @@ do_fail2ban() {
     [ "$rc" -le 1 ] || return 1
     [ "$rc" = 0 ] && F2B_CHANGED=yes
   done
+  # hostashi-site-auth needs its log before nginx first writes to it.
+  if [ ! -e /var/log/nginx/hostashi/error.log ]; then
+    install -d -m 0750 -o root -g root /var/log/nginx/hostashi && install -m 0640 -o root -g root /dev/null /var/log/nginx/hostashi/error.log || return 1
+  fi
   # A broken file must not take down a running fail2ban.
   fail2ban-client -t >>"$LOG" 2>&1 || { log "fail2ban configuration test failed"; return 1; }
   systemctl enable fail2ban.service >>"$LOG" 2>&1 || return 1
@@ -1076,6 +1159,16 @@ UU_FILE=/etc/apt/apt.conf.d/52hostashi-unattended-upgrades
 PHP_HOOK_FILE=/etc/apt/apt.conf.d/80hostashi-php-restart
 PHP_HOOK_BIN=/usr/local/lib/hostashi/php-restart
 UU_TIMERS=(apt-daily.timer apt-daily-upgrade.timer)
+# AUTO_FILE adds the suite stable of the Hostashi repository to the origins
+# (internal/updates.AutoFile). The pin lets this repository provide the
+# hostashi package only; the package's postinst keeps a database copy, sets
+# up and waits for the panel.
+AUTO_FILE=/etc/apt/apt.conf.d/53hostashi-auto-update
+
+# auto_wanted: --auto-update, or a server set up before the panel's switch
+# whose UU_FILE still names the suite stable; do_updates moves it to
+# AUTO_FILE.
+auto_wanted() { [ "$AUTO_UPDATE" = yes ] || grep -F '"origin=Hostashi,codename=stable"' "$UU_FILE" >/dev/null 2>&1; }
 
 # uu_origins prints the security origins of the running distribution.
 # shellcheck disable=SC2016 # ${distro_codename} is for unattended-upgrades
@@ -1095,10 +1188,11 @@ uu_origins() {
   # The PostgreSQL client tools from apt.postgresql.org (ADR-0051): the same,
   # and the pin keeps everything but the client packages away.
   printf '\t"origin=apt.postgresql.org,archive=${distro_codename}-pgdg";\n'
-  # New Hostashi versions only with --auto-update (ADR-0050). The pin lets
-  # this repository provide the hostashi package only; the package's
-  # postinst keeps a database copy, sets up and waits for the panel.
-  [ "$AUTO_UPDATE" = no ] || printf '\t"origin=Hostashi,codename=stable";\n'
+  # The pinned Node.js and CPython releases (ADR-0077): data only, signed
+  # with their own key, always on. Without the source it matches nothing.
+  printf '\t"origin=Hostashi,codename=runtimes";\n'
+  # New Hostashi versions come from AUTO_FILE, which --auto-update writes
+  # and the panel's switch writes or removes (ADR-0050).
 }
 uu_render() {
   local origins
@@ -1110,6 +1204,7 @@ chk_updates() {
   local t
   pkg_installed unattended-upgrades || { echo "unattended-upgrades not installed"; return 1; }
   uu_render | file_matches "$UU_FILE" 0644 root:root || { echo "unattended-upgrades settings differ"; return 1; }
+  [ "$AUTO_UPDATE" = no ] || file_matches "$AUTO_FILE" 0644 root:root <"$APT_SRC/53hostashi-auto-update" || { echo "automatic Hostashi updates are off"; return 1; }
   file_matches "$PHP_HOOK_FILE" 0644 root:root <"$APT_SRC/80hostashi-php-restart" || { echo "PHP restart hook differs"; return 1; }
   local d=${PHP_HOOK_BIN%/*}
   dir_ok "$d" 755 root:root || { echo "$d"; return 1; }
@@ -1121,6 +1216,10 @@ chk_updates() {
 do_updates() {
   local t
   apt_install unattended-upgrades || return 1
+  if auto_wanted; then
+    write_file "$AUTO_FILE" 0644 root:root <"$APT_SRC/53hostashi-auto-update"
+    [ $? -le 1 ] || return 1
+  fi
   uu_render | write_file "$UU_FILE" 0644 root:root
   [ $? -le 1 ] || return 1
   install -d -m 0755 -o root -g root "${PHP_HOOK_BIN%/*}" || return 1
@@ -1131,11 +1230,81 @@ do_updates() {
   for t in "${UU_TIMERS[@]}"; do systemctl enable --now "$t" >>"$LOG" 2>&1 || return 1; done
 }
 
+# The apt suite runtimes (ADR-0077): the package hostashi-runtimes brings
+# newer patch releases of the pinned Node.js and CPython lines as signed
+# data, /usr/share/hostashi/runtimes.json. Only on servers set up from the
+# hostashi package (HOSTASHI_SOURCES, written by packaging/get/install.sh):
+# the source uses the same address with the suite runtimes and the key the
+# package ships; the pin lets the suite provide hostashi-runtimes only.
+# unattended-upgrades upgrades it (uu_origins). An upgrade from the package
+# runs with --no-apt and cannot install it: runtimes_later starts
+# RUNTIMES_UNIT, which installs it once dpkg is done, and the daily
+# RUNTIMES_TIMER tries again where that failed.
+HOSTASHI_SOURCES=/etc/apt/sources.list.d/hostashi.sources
+RUNTIMES_SOURCES=/etc/apt/sources.list.d/hostashi-runtimes.sources
+RUNTIMES_PIN=/etc/apt/preferences.d/00hostashi-runtimes
+RUNTIMES_KEYRING=/usr/share/keyrings/hostashi-runtimes-keyring.asc
+RUNTIMES_UNIT=hostashi-runtimes-install.service
+RUNTIMES_TIMER=hostashi-runtimes-install.timer
+
+runtimes_uri() { awk '$1 == "URIs:" { print $2; exit }' "$HOSTASHI_SOURCES" 2>/dev/null; }
+runtimes_sources() {
+  local uri
+  uri=$(runtimes_uri)
+  [ -n "$uri" ] || return 1
+  printf '# Hostashi runtime pins (ADR-0077), signed with their own key.\nTypes: deb\nURIs: %s\nSuites: runtimes\nComponents: main\nSigned-By: %s\n' "$uri" "$RUNTIMES_KEYRING"
+}
+
+chk_runtimes() {
+  [ -f "$HOSTASHI_SOURCES" ] || return 0
+  [ -f "$RUNTIMES_KEYRING" ] || { echo "$RUNTIMES_KEYRING missing (upgrade the hostashi package)"; return 1; }
+  runtimes_sources | file_matches "$RUNTIMES_SOURCES" 0644 root:root || { echo "runtimes source differs"; return 1; }
+  file_matches "$RUNTIMES_PIN" 0644 root:root <"$APT_SRC/00hostashi-runtimes" || { echo "runtimes pin differs"; return 1; }
+  file_matches "/etc/systemd/system/$RUNTIMES_UNIT" 0644 root:root <"$UNIT_DIR/$RUNTIMES_UNIT" || { echo "$RUNTIMES_UNIT differs"; return 1; }
+  file_matches "/etc/systemd/system/$RUNTIMES_TIMER" 0644 root:root <"$UNIT_DIR/$RUNTIMES_TIMER" || { echo "$RUNTIMES_TIMER differs"; return 1; }
+  [ "$(systemctl is-enabled "$RUNTIMES_TIMER" 2>/dev/null)" = enabled ] || { echo "$RUNTIMES_TIMER not enabled"; return 1; }
+  # With --no-apt the timer installs the package later.
+  [ "$NO_APT" = yes ] || pkg_installed hostashi-runtimes || { echo "hostashi-runtimes not installed"; return 1; }
+}
+
+# runtimes_later starts RUNTIMES_UNIT without waiting for it when apt was
+# not allowed (an upgrade of the hostashi package) and hostashi-runtimes is
+# missing. The unit fetches the suite's list, and its apt-get waits for
+# the lock that dpkg holds, so the package arrives right after the upgrade
+# instead of at the next run of RUNTIMES_TIMER. The step itself passes with
+# --no-apt, so this runs after the steps, on every upgrade until it is there.
+runtimes_later() {
+  [ "$NO_APT" = yes ] && [ -f "$RUNTIMES_SOURCES" ] && [ -f "/etc/systemd/system/$RUNTIMES_UNIT" ] || return 0
+  ! pkg_installed hostashi-runtimes || return 0
+  if systemctl start --no-block "$RUNTIMES_UNIT" >>"$LOG" 2>&1; then
+    echo "hostashi-runtimes: installing it in the background (journalctl -u $RUNTIMES_UNIT)"
+  else
+    log "WARNING: could not start $RUNTIMES_UNIT; $RUNTIMES_TIMER installs hostashi-runtimes later"
+  fi
+}
+do_runtimes() {
+  local rc reload=no
+  [ -f "$RUNTIMES_KEYRING" ] || { log "$RUNTIMES_KEYRING is missing: upgrade the hostashi package first"; return 1; }
+  runtimes_sources | write_file "$RUNTIMES_SOURCES" 0644 root:root
+  [ $? -le 1 ] || return 1
+  write_file "$RUNTIMES_PIN" 0644 root:root <"$APT_SRC/00hostashi-runtimes"
+  [ $? -le 1 ] || return 1
+  write_file "/etc/systemd/system/$RUNTIMES_UNIT" 0644 root:root <"$UNIT_DIR/$RUNTIMES_UNIT"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  write_file "/etc/systemd/system/$RUNTIMES_TIMER" 0644 root:root <"$UNIT_DIR/$RUNTIMES_TIMER"; rc=$?
+  [ "$rc" -le 1 ] || return 1
+  [ "$rc" = 1 ] || reload=yes
+  if [ "$reload" = yes ]; then systemctl daemon-reload >>"$LOG" 2>&1 || return 1; fi
+  systemctl enable --now "$RUNTIMES_TIMER" >>"$LOG" 2>&1 || return 1
+  [ "$NO_APT" = yes ] || apt_install hostashi-runtimes
+}
+
 php_unit() { sed "s/@VERSION@/$1/g" "$UNIT_DIR/hostashi-php@.service"; }
 
 chk_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-build@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket hostashi-wpcli-install.service hostashi-wp@.service; do
     file_matches "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u" || { echo "$u differs"; return 1; }
   done
   dir_ok "$(dirname "$NGINX_DROPIN")" 755 root:root || { echo "nginx drop-in directory"; return 1; }
@@ -1149,7 +1318,7 @@ chk_units() {
 }
 do_units() {
   local u
-  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-files@.service hostashi-files@.socket; do
+  for u in hostashi-agent.service hostashi.service hostashi-panel.socket hostashi-backup.service hostashi-backup.timer hostashi-restore@.service hostashi-import@.service hostashi-dbjob@.service hostashi-valkey@.service hostashi-node@.service hostashi-app@.service hostashi-python@.service hostashi-python-venv@.service hostashi-deploy@.service hostashi-build@.service hostashi-scan@.service hostashi-scan.slice hostashi-files@.service hostashi-files@.socket hostashi-wpcli-install.service hostashi-wp@.service; do
     write_file "/etc/systemd/system/$u" 0644 root:root <"$UNIT_DIR/$u"
     [ $? -le 1 ] || return 1
   done
@@ -1627,8 +1796,9 @@ parse_args() {
       --no-db-tool) NO_DB_TOOL=yes;;
       --no-apt) NO_APT=yes;;
       --auto-update) AUTO_UPDATE=yes;;
+      --malware-scan) MALWARE_SCAN=yes;;
       --php-versions) shift; PHP_REQUEST=${1:-}; PHP_REQUEST_SET=yes;;
-      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST] [--auto-update]" >&2; exit 64;;
+      *) echo "usage: $0 [plan | apply --yes | upgrade] --binary PATH [--no-apt] [--panel-domain NAME] [--panel-port PORT] [--listen ADDR] [--allow-untested] [--no-quota] [--firewall-allow PORT/PROTO]... [--no-firewall] [--no-db-tool] [--php-versions LIST] [--auto-update] [--malware-scan]" >&2; exit 64;;
     esac
     shift
   done
@@ -1650,7 +1820,6 @@ saved_options() {
   for a in "${FW_ALLOW[@]}"; do echo "--firewall-allow $a"; done
   [ "$NO_DB_TOOL" = no ] || echo "--no-db-tool"
   [ "$PHP_REQUEST_SET" = no ] || echo "--php-versions $PHP_REQUEST"
-  [ "$AUTO_UPDATE" = no ] || echo "--auto-update"
 }
 
 # load_options reads OPTIONS_FILE into SAVED_ARGS. It refuses a file that
@@ -1671,9 +1840,12 @@ load_options() {
     val=""
     [ "$opt" = "$line" ] || val=${line#* }
     case "$opt" in
-      --allow-untested|--no-quota|--no-firewall|--no-db-tool|--auto-update)
+      --allow-untested|--no-quota|--no-firewall|--no-db-tool)
         [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; }
         SAVED_ARGS+=("$opt");;
+      # Saved before the panel's switch (ADR-0050): the server keeps the
+      # setting in AUTO_FILE now, so an upgrade does not turn it on again.
+      --auto-update) [ -z "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' takes no value"; exit 2; };;
       --listen|--panel-port|--panel-domain|--firewall-allow|--php-versions)
         [ -n "$val" ] && [ "${val#* }" = "$val" ] || { log "REFUSED: $OPTIONS_FILE: '$opt' needs one value"; exit 2; }
         SAVED_ARGS+=("$opt" "$val");;
@@ -1718,6 +1890,7 @@ main() {
   fi
 
   if [ $CHANGES -eq 0 ]; then echo "Nothing to do. (changes=0)"; else echo "Done. changes=$CHANGES"; fi
+  runtimes_later
   quota_detect
   case "$QUOTA" in
     pending) echo "REBOOT REQUIRED: disk quota is prepared and becomes active after one reboot. Re-run the installer afterwards to check it.";;

@@ -8,7 +8,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0003](0003-language-and-stack.md) | Language and stack | Accepted |
 | [0005](0005-web-server.md) | Web server | Accepted |
 | [0008](0008-backups-with-restic.md) | Backups with restic | Accepted |
-| [0010](0010-target-audience-and-v1-scope.md) | Target audience and v1 scope | Proposed |
+| [0010](0010-target-audience-and-v1-scope.md) | Target audience and v1 scope | Accepted |
 | [0013](0013-business-model-and-governance.md) | Business model and governance | Proposed |
 | [0015](0015-per-site-resource-limits.md) | Per-site resource limits | Accepted |
 | [0016](0016-per-site-storage-location.md) | Per-site storage location (storage pools) | Accepted |
@@ -56,6 +56,23 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0059](0059-real-client-ip-behind-proxies.md) | Real client IP behind CDNs and proxies | Accepted |
 | [0060](0060-time-zone-hostname-and-reboot.md) | Time zone, hostname and reboot from the panel | Accepted |
 | [0061](0061-site-type-python.md) | Site type Python | Accepted |
+| [0062](0062-git-deploy-per-site.md) | Git deploy per site | Accepted |
+| [0063](0063-resource-usage-per-site.md) | Resource usage per site | Accepted |
+| [0064](0064-optional-malware-scan.md) | Optional malware scan per site | Accepted |
+| [0065](0065-www-redirect-per-site.md) | www/non-www redirect per site | Accepted |
+| [0066](0066-basic-auth-and-ip-rules-per-site.md) | Password protection and IP rules per site | Accepted |
+| [0067](0067-reset-site-permissions.md) | Reset the file permissions of a site | Accepted |
+| [0068](0068-change-the-domain-of-a-site.md) | Change the domain of a site | Accepted |
+| [0069](0069-application-profiles-and-wordpress-install.md) | Application profiles (vhost templates) and WordPress quick install | Accepted |
+| [0070](0070-staging-and-cloning-a-site.md) | Staging and cloning a site | Accepted |
+| [0071](0071-panel-ui-in-english-and-german.md) | Panel UI in English and German | Accepted |
+| [0072](0072-rename-a-site.md) | Rename a site | Accepted |
+| [0073](0073-mcp-server.md) | MCP server for AI assistants | Accepted |
+| [0074](0074-backups-of-deleted-sites.md) | Backups of deleted sites | Accepted |
+| [0075](0075-wildcard-domains-for-proxy-and-redirect-sites.md) | Wildcard domains for reverse proxy and redirect sites | Accepted |
+| [0076](0076-dns-01-certificates-via-dns-provider-apis.md) | DNS-01 certificates via DNS provider APIs | Accepted |
+| [0077](0077-automatic-security-updates-for-pinned-runtimes.md) | Automatic security updates for pinned runtimes | Accepted |
+| [0078](0078-fail2ban-bans-in-the-panel.md) | fail2ban bans in the panel | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 

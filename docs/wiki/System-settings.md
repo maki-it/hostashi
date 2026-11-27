@@ -1,6 +1,6 @@
 # System settings
 
-Hostashi shows the server's hostname, time zone, clock and uptime, changes the hostname and the time zone, and reboots the server ([ADR-0060](https://github.com/maki-it/hostashi/blob/main/docs/adr/0060-time-zone-hostname-and-reboot.md)).
+Hostashi shows the server's hostname, time zone, clock and uptime, changes the hostname and the time zone, and reboots the server ([ADR-0060](https://github.com/maki-it/hostashi/blob/main/docs/adr/0060-time-zone-hostname-and-reboot.md)). The page also holds the panel's own certificate and its real visitor address.
 
 **For:** admins. Managers and users do not see the page.
 
@@ -26,6 +26,35 @@ Type to search the list of zones the server knows. Before you save, the hint sho
 - The sites' cron jobs follow the new time zone at once.
 - MariaDB uses it after its next restart (**Services**, MariaDB, restart).
 - PHP keeps its own `date.timezone` (see [PHP settings](PHP-settings.md)).
+
+## Updates
+
+Shown on servers set up from the `hostashi` package. The card shows the installed Hostashi version and the newest one apt saw in the Hostashi repository (apt fetches the list once a day). The versions link to their release notes.
+
+**Node.js and Python patches** shows the package `hostashi-runtimes`: newer patch releases of the pinned Node.js and Python lines, published as signed data in the suite `runtimes` of the Hostashi repository and installed by unattended-upgrades every day, independent of the switch below ([ADR-0077](https://github.com/maki-it/hostashi/blob/main/docs/adr/0077-automatic-security-updates-for-pinned-runtimes.md)). The agent then installs the new release with its checksum check. **Not set up** means the installer has not run since the package came; the Health page says so too.
+
+The switch **Automatic updates** applies at once and is recorded in the audit log:
+
+- **On**: unattended-upgrades installs new Hostashi versions together with the daily security updates. Each update keeps a copy of the panel database first. Hostashi writes `/etc/apt/apt.conf.d/53hostashi-auto-update` for it, the same file as the installer option `--auto-update`.
+- **Off**: new versions wait for `sudo apt upgrade`. The **Health** page and an email say when one is out.
+
+A later run of the installer without `--auto-update` leaves the switch as it is.
+
+![The installed version and automatic updates on the System page](images/system-updates.png)
+
+## Panel certificate
+
+Shown when the panel has its own host name (see [Install](Install.md)). It works like a site's certificate (see [Domains and HTTPS](Domains-and-HTTPS.md)): Let's Encrypt renews it by itself, or you upload an own certificate or create a CSR. The panel's certificate cannot be deleted.
+
+![The panel certificate and the real visitor address on the System page](images/system-panel.png)
+
+The **Health** page warns about the certificate as **Panel certificate**: 21 days before it expires, as a failure 7 days before, and when getting or renewing it failed. The row links back to this page. Admins also get an email (see [Email notifications](Email-notifications.md)).
+
+![A warning about the panel certificate on the Health page](images/health-panel-tls.png)
+
+## Real visitor address of the panel
+
+Only for a panel address behind a CDN or load balancer. See [Real visitor address](Real-visitor-address.md).
 
 ## Reboot
 

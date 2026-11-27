@@ -41,6 +41,14 @@ const backups = (ok: boolean): BackupInfo =>
   }) as unknown as BackupInfo;
 
 describe("attention", () => {
+  it("warns when no backup finished within the interval", () => {
+    const late = { ...backups(true), overdue: true, settings: { intervalHours: 1 } } as unknown as BackupInfo;
+    const items = attention({ backups: late });
+    expect(items.map((i) => [i.key, i.tone])).toEqual([["backups-overdue", "warn"]]);
+    expect(items[0]!.detail).toBe("No backup has finished in the last 3 hours.");
+    expect(attention({ backups: backups(true) })).toEqual([]);
+  });
+
   it("takes the doctor's problems, failures first, and a failed backup", () => {
     const items = attention({ sites: [broken], doctor, backups: backups(false) });
     expect(items.map((i) => i.word)).toEqual(["Failed", "Failed", "Warning"]);
@@ -90,6 +98,14 @@ describe("Overview", () => {
       "GET /api/v1/doctor": { body: doctor },
       "GET /api/v1/backups": { body: backups(true) },
       "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 2, available: true, quota: "enforced", freeBytes: 10 * 2 ** 30, totalBytes: 40 * 2 ** 30, default: true },
+            { name: "vol1", path: "/srv/vol1", sites: 1, available: false, default: false },
+          ],
+        },
+      },
     });
     render(<Overview user={{ username: "kim", role: "admin", secondFactor: true } as never} />);
     const list = within(await screen.findByRole("region", { name: "Needs attention" }));
@@ -99,13 +115,33 @@ describe("Overview", () => {
     expect(sites.getByText("3")).toBeInTheDocument();
     expect(sites.getByText("1 disabled")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Backups" })).getByText("OK")).toBeInTheDocument();
+    const pools = within(screen.getByRole("region", { name: "Storage pools" }));
+    expect(pools.getByRole("meter", { name: "default (default)" })).toHaveAttribute("aria-valuenow", "75");
+    expect(pools.getByText("Not available")).toBeInTheDocument();
+    expect(pools.getByRole("link", { name: "Open storage pools" })).toHaveAttribute("href", "#/pools");
   });
 
   it("asks only for what a user may see", async () => {
-    const calls = mockFetch({ "GET /api/v1/sites": { body: { sites: [site("shop")] } } });
+    const calls = mockFetch({
+      "GET /api/v1/sites": { body: { sites: [site("shop")] } },
+      "GET /api/v1/sites/shop/cron": { body: { statusKnown: true, jobs: [] } },
+    });
     render(<Overview user={{ username: "uma", role: "user", secondFactor: true } as never} />);
     expect(await screen.findByText("Nothing needs attention.")).toBeInTheDocument();
-    expect(calls.map((c) => c.path)).toEqual(["/api/v1/sites"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/sites", "/api/v1/sites/shop/cron"]);
     expect(screen.queryByRole("region", { name: "Health" })).not.toBeInTheDocument();
+  });
+
+  it("shows a user the virus finds and failing cron jobs of their sites", async () => {
+    mockFetch({
+      "GET /api/v1/sites": { body: { sites: [site("shop")], marks: { shop: { openFindings: 2, cloneOf: "", staging: false } } } },
+      "GET /api/v1/sites/shop/cron": {
+        body: { statusKnown: true, jobs: [{ id: 1, schedule: "@daily", command: "./x.sh", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", exitStatus: 1, lastStart: 1795600000 } }] },
+      },
+    });
+    render(<Overview user={{ username: "uma", role: "user", secondFactor: true } as never} />);
+    expect(await screen.findByText("2 files flagged by the virus scan on site shop")).toBeInTheDocument();
+    expect(screen.getByText("1 cron job of site shop fails")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open cron jobs" })).toHaveAttribute("href", "#/sites/shop/cron");
   });
 });

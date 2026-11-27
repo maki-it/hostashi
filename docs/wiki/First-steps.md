@@ -13,7 +13,7 @@ Lost the token? On the server, `sudo hostashi setup-token` prints it again. It i
 Admins and managers must have a second factor. Until you add one, the panel lets you do nothing else.
 
 - **Authenticator app (TOTP):** scan the QR code with an app such as Aegis, 2FAS or your password manager, and enter the current code. The panel then shows **recovery codes**. Each one works once, in place of a code from the app. Store them outside the server, for example in your password manager.
-- **Passkey:** add one under your account. A passkey replaces the password and the code: you log in with your device's fingerprint, face or PIN. Passkeys need the panel to run under its host name (`--panel-domain`).
+- **Passkey:** add one under **Your account → Sign-in and security**. A passkey replaces the password and the code: you log in with your device's fingerprint, face or PIN. Passkeys need the panel to run under its host name (`--panel-domain`).
 
 If you ever lose both, see [Recovery](Recovery.md).
 
@@ -23,7 +23,7 @@ Open **Server → Health**. It runs the same checks as `hostashi doctor` and sho
 
 ## 4. Set up backups
 
-Open **Server → Backups** and enter where backups go, for example a Hetzner Storage Box. Then print the backup keys once on the server and store them outside it:
+Open **Server → Backups** and enter where backups go: any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server. Then print the backup keys once on the server and store them outside it:
 
 ```sh
 sudo hostashi backup key show

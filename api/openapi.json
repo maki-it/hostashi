@@ -1,6 +1,197 @@
 {
   "components": {
     "schemas": {
+      "Access": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "clientAddress": {
+            "type": "string"
+          },
+          "ipMode": {
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AccessLimits"
+          },
+          "password": {
+            "type": "boolean"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bypass",
+          "clientAddress",
+          "ipMode",
+          "ips",
+          "limits",
+          "password",
+          "paths",
+          "users"
+        ],
+        "type": "object"
+      },
+      "AccessLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "type": "integer"
+          },
+          "ips": {
+            "type": "integer"
+          },
+          "maxPassword": {
+            "type": "integer"
+          },
+          "minPassword": {
+            "type": "integer"
+          },
+          "paths": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bypass",
+          "ips",
+          "maxPassword",
+          "minPassword",
+          "paths",
+          "users"
+        ],
+        "type": "object"
+      },
+      "AccessPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "AccessSettingsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "bypass": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ipMode": {
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "password": {
+            "type": "boolean"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AccessUser": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "name",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AccessUserInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Account": {
         "additionalProperties": false,
         "properties": {
@@ -386,6 +577,9 @@
           "hostKey": {
             "type": "string"
           },
+          "overdue": {
+            "type": "boolean"
+          },
           "publicKey": {
             "type": "string"
           },
@@ -401,10 +595,32 @@
         },
         "required": [
           "hostKey",
+          "overdue",
           "publicKey",
           "ready",
           "settings",
           "status"
+        ],
+        "type": "object"
+      },
+      "BackupForgetMark": {
+        "additionalProperties": false,
+        "properties": {
+          "before": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requested": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested",
+          "site"
         ],
         "type": "object"
       },
@@ -444,6 +660,25 @@
           "dataAdded",
           "files",
           "kind"
+        ],
+        "type": "object"
+      },
+      "BackupRemoved": {
+        "additionalProperties": false,
+        "properties": {
+          "expired": {
+            "type": "boolean"
+          },
+          "site": {
+            "type": "string"
+          },
+          "snapshots": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "site",
+          "snapshots"
         ],
         "type": "object"
       },
@@ -491,6 +726,9 @@
           "snapshot": {
             "type": "string"
           },
+          "source": {
+            "type": "string"
+          },
           "started": {
             "format": "date-time",
             "type": "string"
@@ -518,17 +756,25 @@
           "daily": {
             "type": "integer"
           },
+          "hourly": {
+            "type": "integer"
+          },
           "monthly": {
             "type": "integer"
           },
           "weekly": {
             "type": "integer"
+          },
+          "yearly": {
+            "type": "integer"
           }
         },
         "required": [
           "daily",
+          "hourly",
           "monthly",
-          "weekly"
+          "weekly",
+          "yearly"
         ],
         "type": "object"
       },
@@ -538,10 +784,16 @@
           "daily": {
             "type": "integer"
           },
+          "hourly": {
+            "type": "integer"
+          },
           "monthly": {
             "type": "integer"
           },
           "weekly": {
+            "type": "integer"
+          },
+          "yearly": {
             "type": "integer"
           }
         },
@@ -550,6 +802,12 @@
       "BackupSettings": {
         "additionalProperties": false,
         "properties": {
+          "deletedSiteDays": {
+            "type": "integer"
+          },
+          "intervalHours": {
+            "type": "integer"
+          },
           "readParts": {
             "type": "integer"
           },
@@ -577,6 +835,8 @@
           }
         },
         "required": [
+          "deletedSiteDays",
+          "intervalHours",
           "readParts",
           "retention",
           "version",
@@ -588,6 +848,12 @@
       "BackupSettingsInput": {
         "additionalProperties": false,
         "properties": {
+          "deletedSiteDays": {
+            "type": "integer"
+          },
+          "intervalHours": {
+            "type": "integer"
+          },
           "readParts": {
             "type": "integer"
           },
@@ -703,6 +969,18 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "removeError": {
+            "type": "string"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/BackupRemoved"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "running": {
             "type": "boolean"
@@ -869,6 +1147,199 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "Clone": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/CloneDatabase"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloneHome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filesDone": {
+            "type": "boolean"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refresh": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "databases",
+          "filesDone",
+          "refresh",
+          "source",
+          "staging",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "CloneAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "user"
+        ],
+        "type": "object"
+      },
+      "CloneDatabase": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "done",
+          "source",
+          "target"
+        ],
+        "type": "object"
+      },
+      "CloneHome": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "dirs": {
+            "type": "integer"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "links": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionsSkip"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bytes",
+          "dirs",
+          "files",
+          "links",
+          "skipped",
+          "skippedPaths"
+        ],
+        "type": "object"
+      },
+      "CloneInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "maintenance": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CloneRefreshInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "maintenance": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CloneStart": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloneAccess"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "site": {
+            "$ref": "#/components/schemas/Site"
+          }
+        },
+        "required": [
+          "site"
+        ],
         "type": "object"
       },
       "CloudPanelActivated": {
@@ -1179,6 +1650,25 @@
         ],
         "type": "object"
       },
+      "Cron": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "schedule"
+        ],
+        "type": "object"
+      },
       "CronInput": {
         "additionalProperties": false,
         "properties": {
@@ -1406,6 +1896,9 @@
             "type": "string"
           },
           "path": {
+            "type": "string"
+          },
+          "source": {
             "type": "string"
           },
           "started": {
@@ -1887,6 +2380,152 @@
         ],
         "type": "object"
       },
+      "DeleteBackupsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeletedRestoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeletedSite": {
+        "additionalProperties": false,
+        "properties": {
+          "earlier": {
+            "type": "boolean"
+          },
+          "markedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "newest": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "oldest": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "snapshots": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "earlier",
+          "markedAt",
+          "name",
+          "newest",
+          "oldest",
+          "snapshots"
+        ],
+        "type": "object"
+      },
+      "DeletedSiteList": {
+        "additionalProperties": false,
+        "properties": {
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedSite"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sites"
+        ],
+        "type": "object"
+      },
+      "Deploy": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "commit",
+          "createdAt",
+          "error",
+          "finishedAt",
+          "id",
+          "kind",
+          "message",
+          "release",
+          "source",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DeployLog": {
+        "additionalProperties": false,
+        "properties": {
+          "log": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "log",
+          "truncated"
+        ],
+        "type": "object"
+      },
       "DeviceApproveRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2213,6 +2852,113 @@
         ],
         "type": "object"
       },
+      "Fail2ban": {
+        "additionalProperties": false,
+        "properties": {
+          "jails": {
+            "items": {
+              "$ref": "#/components/schemas/Fail2banJail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "jails"
+        ],
+        "type": "object"
+      },
+      "Fail2banBan": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "since",
+          "until"
+        ],
+        "type": "object"
+      },
+      "Fail2banJail": {
+        "additionalProperties": false,
+        "properties": {
+          "bans": {
+            "items": {
+              "$ref": "#/components/schemas/Fail2banBan"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "currentlyBanned": {
+            "type": "integer"
+          },
+          "currentlyFailed": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "totalBanned": {
+            "type": "integer"
+          },
+          "totalFailed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bans",
+          "currentlyBanned",
+          "currentlyFailed",
+          "name",
+          "running",
+          "totalBanned",
+          "totalFailed"
+        ],
+        "type": "object"
+      },
+      "Fail2banUnban": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "jails": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "jails"
+        ],
+        "type": "object"
+      },
       "FileOpRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2469,6 +3215,167 @@
               "array",
               "null"
             ]
+          }
+        },
+        "type": "object"
+      },
+      "ForgetMarks": {
+        "additionalProperties": false,
+        "properties": {
+          "marks": {
+            "items": {
+              "$ref": "#/components/schemas/BackupForgetMark"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "marks"
+        ],
+        "type": "object"
+      },
+      "Git": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "hasToken": {
+            "type": "boolean"
+          },
+          "hostKey": {
+            "type": "string"
+          },
+          "hostKeyFingerprint": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "webhook": {
+            "type": "boolean"
+          },
+          "webhookPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth",
+          "branch",
+          "buildTimeoutMinutes",
+          "commands",
+          "configured",
+          "deployDir",
+          "hasToken",
+          "hostKey",
+          "hostKeyFingerprint",
+          "keep",
+          "publicKey",
+          "shared",
+          "submodules",
+          "tokenUser",
+          "updatedAt",
+          "url",
+          "webhook",
+          "webhookPath"
+        ],
+        "type": "object"
+      },
+      "GitInput": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "buildTimeoutMinutes": {
+            "type": "integer"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deployDir": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "integer"
+          },
+          "shared": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "submodules": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "tokenUser": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -3217,6 +4124,9 @@
           "theme": {
             "type": "string"
           },
+          "totp": {
+            "type": "boolean"
+          },
           "username": {
             "type": "string"
           }
@@ -3227,6 +4137,7 @@
           "secondFactor",
           "secondFactorRequired",
           "theme",
+          "totp",
           "username"
         ],
         "type": "object"
@@ -4190,6 +5101,109 @@
         },
         "type": "object"
       },
+      "PasswordChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PendingDomains": {
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domains",
+          "error",
+          "failedAt",
+          "redirectDomains",
+          "requestedAt"
+        ],
+        "type": "object"
+      },
+      "PermissionsReset": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "integer"
+          },
+          "checked": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "skippedPaths": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionsSkip"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "changed",
+          "checked",
+          "skipped",
+          "skippedPaths"
+        ],
+        "type": "object"
+      },
+      "PermissionsSkip": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "type": "object"
+      },
       "PgClient": {
         "additionalProperties": false,
         "properties": {
@@ -4530,6 +5544,9 @@
           "phpSettingsOn": {
             "type": "boolean"
           },
+          "profile": {
+            "type": "string"
+          },
           "proxy": {
             "type": "string"
           },
@@ -4539,6 +5556,15 @@
           "reasons": {
             "items": {
               "$ref": "#/components/schemas/Reason"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
             },
             "type": [
               "array",
@@ -4567,6 +5593,9 @@
             "type": "string"
           },
           "type": {
+            "type": "string"
+          },
+          "wwwRedirect": {
             "type": "string"
           }
         },
@@ -4599,6 +5628,9 @@
           "available": {
             "type": "boolean"
           },
+          "default": {
+            "type": "boolean"
+          },
           "freeBytes": {
             "minimum": 0,
             "type": "integer"
@@ -4622,6 +5654,7 @@
         },
         "required": [
           "available",
+          "default",
           "name",
           "path",
           "sites"
@@ -4644,6 +5677,15 @@
         "required": [
           "pools"
         ],
+        "type": "object"
+      },
+      "PoolRenameInput": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Preferences": {
@@ -4771,6 +5813,187 @@
         "required": [
           "cpus",
           "presets"
+        ],
+        "type": "object"
+      },
+      "PreviewLink": {
+        "additionalProperties": false,
+        "properties": {
+          "expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires",
+          "url"
+        ],
+        "type": "object"
+      },
+      "Profile": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "type": "boolean"
+          },
+          "checklist": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cron": {
+            "items": {
+              "$ref": "#/components/schemas/Cron"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hardening": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "minPhp": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pageCache": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "webDir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "builtin",
+          "hardening",
+          "name",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      },
+      "ProfileCronInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProfileImportInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "yaml": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProfileInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "checklist": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cron": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileCronInInput"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hardening": {
+            "$ref": "#/components/schemas/WebHardeningInput"
+          },
+          "minPhp": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pageCache": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "webDir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Profiles": {
+        "additionalProperties": false,
+        "properties": {
+          "configFileSuffixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitBurst": {
+            "type": "integer"
+          },
+          "limitPerMinute": {
+            "type": "integer"
+          },
+          "maxPaths": {
+            "type": "integer"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configFileSuffixes",
+          "limitBurst",
+          "limitPerMinute",
+          "maxPaths",
+          "profiles"
         ],
         "type": "object"
       },
@@ -5274,6 +6497,187 @@
         ],
         "type": "object"
       },
+      "ScanEngine": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "memTotal": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "realtime": {
+            "type": "string"
+          },
+          "realtimeActive": {
+            "type": "boolean"
+          },
+          "signatures": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "memTotal",
+          "realtime",
+          "realtimeActive",
+          "signatures",
+          "state",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ScanEngineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "realtime": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ScanFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "decidedAt": {
+            "type": "string"
+          },
+          "firstSeen": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "lastSeen": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decidedAt",
+          "firstSeen",
+          "id",
+          "lastSeen",
+          "path",
+          "sha256",
+          "signature",
+          "size",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanRun": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "dropped": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "found": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "newFound": {
+            "type": "integer"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "dropped",
+          "error",
+          "finishedAt",
+          "found",
+          "id",
+          "newFound",
+          "paths",
+          "source",
+          "startedAt",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ScanScheduleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ScopeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -5613,6 +7017,16 @@
               }
             ]
           },
+          "pendingDomains": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingDomains"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "php": {
             "type": "string"
           },
@@ -5652,7 +7066,19 @@
               }
             ]
           },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "state": {
+            "type": "string"
+          },
+          "title": {
             "type": "string"
           },
           "tls": {
@@ -5667,6 +7093,9 @@
           },
           "web": {
             "$ref": "#/components/schemas/Web"
+          },
+          "www": {
+            "$ref": "#/components/schemas/Www"
           }
         },
         "required": [
@@ -5679,17 +7108,21 @@
           "maintenance",
           "name",
           "node",
+          "pendingDomains",
           "php",
           "phpPrograms",
           "pool",
           "proxy",
           "python",
           "redirect",
+          "redirectDomains",
           "state",
+          "title",
           "tls",
           "type",
           "updatedAt",
-          "web"
+          "web",
+          "www"
         ],
         "type": "object"
       },
@@ -5763,6 +7196,9 @@
           "pool": {
             "type": "string"
           },
+          "profile": {
+            "type": "string"
+          },
           "proxy": {
             "anyOf": [
               {
@@ -5792,6 +7228,9 @@
                 "type": "null"
               }
             ]
+          },
+          "title": {
+            "type": "string"
           },
           "tls": {
             "type": "boolean"
@@ -5826,6 +7265,21 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          },
+          "redirectDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "waitForCertificate": {
+            "type": [
+              "boolean",
               "null"
             ]
           }
@@ -5906,6 +7360,15 @@
       "SiteList": {
         "additionalProperties": false,
         "properties": {
+          "marks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SiteMarks"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "sites": {
             "items": {
               "$ref": "#/components/schemas/Site"
@@ -5917,6 +7380,7 @@
           }
         },
         "required": [
+          "marks",
           "sites"
         ],
         "type": "object"
@@ -5948,6 +7412,26 @@
           "lines",
           "more",
           "rotated"
+        ],
+        "type": "object"
+      },
+      "SiteMarks": {
+        "additionalProperties": false,
+        "properties": {
+          "cloneOf": {
+            "type": "string"
+          },
+          "openFindings": {
+            "type": "integer"
+          },
+          "staging": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cloneOf",
+          "openFindings",
+          "staging"
         ],
         "type": "object"
       },
@@ -5988,6 +7472,183 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SiteProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "type": "boolean"
+          },
+          "choices": {
+            "$ref": "#/components/schemas/Profiles"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "hardening": {
+            "$ref": "#/components/schemas/WebHardening"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "changed",
+          "choices",
+          "defaults",
+          "hardening",
+          "profile"
+        ],
+        "type": "object"
+      },
+      "SiteProfileInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hardening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebHardeningInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SiteProfilePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config"
+        ],
+        "type": "object"
+      },
+      "SiteProfilePreviewInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "hardening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebHardeningInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SiteSample": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "cache": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cpu": {
+            "type": "number"
+          },
+          "httpIn": {
+            "type": "number"
+          },
+          "httpOut": {
+            "type": "number"
+          },
+          "httpReq": {
+            "type": "number"
+          },
+          "ioRead": {
+            "type": "number"
+          },
+          "ioWrite": {
+            "type": "number"
+          },
+          "mem": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tasks": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "cache",
+          "cpu",
+          "httpIn",
+          "httpOut",
+          "httpReq",
+          "ioRead",
+          "ioWrite",
+          "mem",
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "SiteScan": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanFinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "nextScheduled": {
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ScanRun"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "findings",
+          "nextScheduled",
+          "runs",
+          "schedule"
+        ],
         "type": "object"
       },
       "SiteTypeRequest": {
@@ -6050,6 +7711,44 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "SiteUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpus": {
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SiteSample"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "range": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "step": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cores",
+          "cpus",
+          "points",
+          "range",
+          "site",
+          "step"
+        ],
         "type": "object"
       },
       "SiteWebRequest": {
@@ -6322,6 +8021,15 @@
         ],
         "type": "object"
       },
+      "SystemAutoUpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "SystemHostnameInput": {
         "additionalProperties": false,
         "properties": {
@@ -6363,6 +8071,16 @@
           },
           "transientHostname": {
             "type": "string"
+          },
+          "updates": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemUpdates"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "uptimeSeconds": {
             "type": "number"
@@ -6426,6 +8144,51 @@
         "required": [
           "zones"
         ],
+        "type": "object"
+      },
+      "SystemUpdates": {
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "string"
+          },
+          "listedAt": {
+            "type": "string"
+          },
+          "runtimes": {
+            "type": "string"
+          },
+          "runtimesAuto": {
+            "type": "boolean"
+          },
+          "update": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto",
+          "installed",
+          "runtimesAuto",
+          "update"
+        ],
+        "type": "object"
+      },
+      "TitleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "Tls": {
@@ -6824,6 +8587,90 @@
         ],
         "type": "object"
       },
+      "UsageRanking": {
+        "additionalProperties": false,
+        "properties": {
+          "cpus": {
+            "type": "integer"
+          },
+          "range": {
+            "type": "string"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/UsageRow"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sort": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cpus",
+          "range",
+          "sites",
+          "sort"
+        ],
+        "type": "object"
+      },
+      "UsageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "cores": {
+            "type": "number"
+          },
+          "cpuAvg": {
+            "type": "number"
+          },
+          "cpuMax": {
+            "type": "number"
+          },
+          "httpInBytes": {
+            "type": "number"
+          },
+          "httpOutBytes": {
+            "type": "number"
+          },
+          "httpRequests": {
+            "type": "number"
+          },
+          "ioReadBytes": {
+            "type": "number"
+          },
+          "ioWriteBytes": {
+            "type": "number"
+          },
+          "memAvg": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memMax": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "site": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cores",
+          "cpuAvg",
+          "cpuMax",
+          "httpInBytes",
+          "httpOutBytes",
+          "httpRequests",
+          "ioReadBytes",
+          "ioWriteBytes",
+          "memAvg",
+          "memMax",
+          "site"
+        ],
+        "type": "object"
+      },
       "User": {
         "additionalProperties": false,
         "properties": {
@@ -6928,6 +8775,96 @@
         ],
         "type": "object"
       },
+      "WebHardening": {
+        "additionalProperties": false,
+        "properties": {
+          "configFiles": {
+            "type": "boolean"
+          },
+          "denyDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "denyFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "noPhpDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "WebHardeningInput": {
+        "additionalProperties": false,
+        "properties": {
+          "configFiles": {
+            "type": "boolean"
+          },
+          "denyDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "denyFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limitFiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "noPhpDirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "WebHeaders": {
         "additionalProperties": false,
         "properties": {
@@ -6939,6 +8876,9 @@
           },
           "frameOptions": {
             "type": "string"
+          },
+          "noIndex": {
+            "type": "boolean"
           },
           "noSniff": {
             "type": "boolean"
@@ -6963,6 +8903,9 @@
           },
           "frameOptions": {
             "type": "string"
+          },
+          "noIndex": {
+            "type": "boolean"
           },
           "noSniff": {
             "type": "boolean"
@@ -7012,6 +8955,206 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Webhook": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "WebhookResult": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
+      },
+      "WordPress": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "log": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "empty",
+          "installed",
+          "state"
+        ],
+        "type": "object"
+      },
+      "WordPressInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "adminEmail": {
+            "type": "string"
+          },
+          "adminPassword": {
+            "type": "string"
+          },
+          "adminUser": {
+            "type": "string"
+          },
+          "discourage": {
+            "type": "boolean"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WordPressReinstallInInput": {
+        "additionalProperties": false,
+        "properties": {
+          "adminEmail": {
+            "type": "string"
+          },
+          "adminPassword": {
+            "type": "string"
+          },
+          "adminUser": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "discourage": {
+            "type": "boolean"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WordPressStart": {
+        "additionalProperties": false,
+        "properties": {
+          "adminPassword": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "droppedDatabase": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "state"
+        ],
+        "type": "object"
+      },
+      "Www": {
+        "additionalProperties": false,
+        "properties": {
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": "string"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/WwwPair"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "missing",
+          "mode",
+          "pairs"
+        ],
+        "type": "object"
+      },
+      "WwwPair": {
+        "additionalProperties": false,
+        "properties": {
+          "bare": {
+            "type": "string"
+          },
+          "www": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bare",
+          "www"
+        ],
+        "type": "object"
+      },
+      "WwwRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": [
+              "string",
               "null"
             ]
           }
@@ -8073,6 +10216,46 @@
         "x-hostashi-access": "session"
       }
     },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Change the caller's password; ends the other sessions",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
     "/api/v1/auth/totp/confirm": {
       "post": {
         "operationId": "confirmTOTP",
@@ -8197,6 +10380,100 @@
         "x-hostashi-access": "session"
       }
     },
+    "/api/v1/auth/totp/replace": {
+      "post": {
+        "operationId": "replaceTOTP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnroll"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Start moving TOTP to a new device with password and a current code; returns the new secret",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/auth/totp/replace/confirm": {
+      "post": {
+        "operationId": "confirmTOTPReplace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Confirm the new device with a first code; returns new recovery codes once",
+        "tags": [
+          "auth"
+        ],
+        "x-hostashi-access": "session"
+      }
+    },
     "/api/v1/backups": {
       "get": {
         "operationId": "getBackups",
@@ -8238,6 +10515,287 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted": {
+      "get": {
+        "operationId": "listDeletedSiteBackups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedSiteList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:read"
+            ]
+          }
+        ],
+        "summary": "List deleted sites that still have snapshots",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted/{name}": {
+      "get": {
+        "operationId": "listDeletedSiteSnapshots",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:read"
+            ]
+          }
+        ],
+        "summary": "List the snapshots of a deleted site, or of an earlier site of that name",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:read"
+      }
+    },
+    "/api/v1/backups/deleted/{name}/removal": {
+      "delete": {
+        "operationId": "keepDeletedSiteBackups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgetMarks"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:delete"
+            ]
+          }
+        ],
+        "summary": "Keep the backups of a deleted site that were marked for deletion",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:delete"
+      },
+      "put": {
+        "operationId": "deleteDeletedSiteBackups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteBackupsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgetMarks"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:delete"
+            ]
+          }
+        ],
+        "summary": "Delete the backups of a deleted site with the next backup run",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:delete"
+      }
+    },
+    "/api/v1/backups/deleted/{name}/{snapshot}/restore": {
+      "post": {
+        "operationId": "restoreDeletedSiteBackup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snapshot",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletedRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRestore"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "backups:restore"
+            ]
+          }
+        ],
+        "summary": "Restore a snapshot of a deleted site into a new directory of another site",
+        "tags": [
+          "backups"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "backups.server:restore"
       }
     },
     "/api/v1/backups/hostkey": {
@@ -9950,6 +12508,102 @@
         "x-hostashi-action": "firewall:write"
       }
     },
+    "/api/v1/firewall/bans": {
+      "get": {
+        "operationId": "getFirewallBans",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fail2ban"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "firewall:read"
+            ]
+          }
+        ],
+        "summary": "fail2ban's Hostashi jails and the addresses they block",
+        "tags": [
+          "firewall"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "firewall:read"
+      }
+    },
+    "/api/v1/firewall/bans/{address}": {
+      "delete": {
+        "operationId": "deleteFirewallBan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fail2banUnban"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "firewall:write"
+            ]
+          }
+        ],
+        "summary": "Unblock an address in every Hostashi jail",
+        "tags": [
+          "firewall"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "firewall:write"
+      }
+    },
     "/api/v1/firewall/confirm": {
       "post": {
         "operationId": "confirmFirewall",
@@ -10032,6 +12686,59 @@
         "summary": "Liveness of the panel, its agent and its database",
         "tags": [
           "system"
+        ],
+        "x-hostashi-access": "public"
+      }
+    },
+    "/api/v1/hooks/deploy/{id}": {
+      "post": {
+        "operationId": "callDeployWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResult"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Deploy a site's branch on a push (called by the Git host, with a signature or token instead of a login)",
+        "tags": [
+          "git"
         ],
         "x-hostashi-access": "public"
       }
@@ -10372,6 +13079,100 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "limits.presets:write"
+      }
+    },
+    "/api/v1/malware-scan": {
+      "get": {
+        "operationId": "getMalwareScan",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "ClamAV on the server: installed or not, its version and how fresh its signatures are",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:read"
+      },
+      "put": {
+        "operationId": "setMalwareScan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanEngineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanEngine"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware.engine:write"
+            ]
+          }
+        ],
+        "summary": "Install or remove ClamAV for the malware scan, or switch its real-time mode; the result follows in getMalwareScan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "malware.engine:write"
       }
     },
     "/api/v1/me": {
@@ -12739,6 +15540,427 @@
         "x-hostashi-action": "pools:read"
       }
     },
+    "/api/v1/pools/{name}/default": {
+      "post": {
+        "operationId": "setDefaultPool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Make a storage pool the default for new sites",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
+      }
+    },
+    "/api/v1/pools/{name}/rename": {
+      "post": {
+        "operationId": "renamePool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolRenameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Give a storage pool a new name; its path and sites stay",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pools:write"
+      }
+    },
+    "/api/v1/profiles": {
+      "get": {
+        "operationId": "listProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profiles"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "List the built-in and own application profiles",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:read"
+      },
+      "post": {
+        "operationId": "createProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:write"
+            ]
+          }
+        ],
+        "summary": "Create an own application profile",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:write"
+      }
+    },
+    "/api/v1/profiles/import": {
+      "post": {
+        "operationId": "importProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileImportInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:write"
+            ]
+          }
+        ],
+        "summary": "Import an own application profile from YAML",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:write"
+      }
+    },
+    "/api/v1/profiles/{name}": {
+      "delete": {
+        "operationId": "deleteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:write"
+            ]
+          }
+        ],
+        "summary": "Delete an own application profile that no site uses",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:write"
+      },
+      "put": {
+        "operationId": "updateProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:write"
+            ]
+          }
+        ],
+        "summary": "Change an own application profile",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:write"
+      }
+    },
+    "/api/v1/profiles/{name}/yaml": {
+      "get": {
+        "operationId": "exportProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/yaml": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Export an application profile as YAML",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "profiles:read"
+      }
+    },
     "/api/v1/python": {
       "get": {
         "operationId": "getPython",
@@ -13187,7 +16409,7 @@
             "session": []
           }
         ],
-        "summary": "Set the addresses API tokens may be used from; empty: anywhere",
+        "summary": "Set the addresses API tokens may be used from; empty: anywhere. 127.0.0.1 and ::1 are always allowed",
         "tags": [
           "settings"
         ],
@@ -13873,6 +17095,306 @@
         "x-hostashi-action": "sites:read"
       }
     },
+    "/api/v1/sites/{name}/access": {
+      "get": {
+        "operationId": "getSiteAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Access"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Get the site's IP rule, password protection and users",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessSettingsInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Access"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the site's IP rule and password protection",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
+    "/api/v1/sites/{name}/access/users": {
+      "post": {
+        "operationId": "addSiteAccessUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessUserInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPassword"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Add a password protection user; without a password the panel generates one and returns it once",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
+    "/api/v1/sites/{name}/access/users/{user}": {
+      "delete": {
+        "operationId": "deleteSiteAccessUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Remove a password protection user",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      },
+      "put": {
+        "operationId": "setSiteAccessUserPassword",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessUserInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPassword"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set a new password for a password protection user; without one the panel generates it",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.access:write"
+      }
+    },
     "/api/v1/sites/{name}/account": {
       "delete": {
         "operationId": "removeSiteAccount",
@@ -14480,6 +18002,183 @@
         "x-hostashi-action": "backups:restore"
       }
     },
+    "/api/v1/sites/{name}/clone": {
+      "get": {
+        "operationId": "getSiteClone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clone"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Where the site was copied from and how far the copy is",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "post": {
+        "operationId": "cloneSite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneStart"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Create a new site as a copy of this one (files, local databases, settings)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:clone"
+      }
+    },
+    "/api/v1/sites/{name}/clone/refresh": {
+      "post": {
+        "operationId": "refreshSiteClone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneRefreshInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clone"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Copy the source's files and databases into this staging clone again",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.clone:refresh"
+      }
+    },
     "/api/v1/sites/{name}/cron": {
       "get": {
         "operationId": "listCronJobs",
@@ -14944,6 +18643,238 @@
         "x-hostashi-action": "databases:write"
       }
     },
+    "/api/v1/sites/{name}/deploys": {
+      "get": {
+        "operationId": "listSiteDeploys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Deploy"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The newest deploy runs and rollbacks of a site, newest first",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "post": {
+        "operationId": "startSiteDeploy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deploy"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:deploy"
+            ]
+          }
+        ],
+        "summary": "Deploy the head of the site's branch: fetch, build, then go live",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.deploy"
+      }
+    },
+    "/api/v1/sites/{name}/deploys/{id}/log": {
+      "get": {
+        "operationId": "getSiteDeployLog",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployLog"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:deploy"
+            ]
+          }
+        ],
+        "summary": "The output of a deploy run's fetch and build commands",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.deploy"
+      }
+    },
+    "/api/v1/sites/{name}/deploys/{id}/rollback": {
+      "post": {
+        "operationId": "rollbackSiteDeploy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deploy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:deploy"
+            ]
+          }
+        ],
+        "summary": "Make the release of an earlier successful deploy live again, without a build",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.deploy"
+      }
+    },
     "/api/v1/sites/{name}/disabled": {
       "put": {
         "operationId": "setSiteDisabled",
@@ -15041,6 +18972,16 @@
             },
             "description": "OK"
           },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
           "default": {
             "content": {
               "application/json": {
@@ -15062,7 +19003,60 @@
             ]
           }
         ],
-        "summary": "Set the site's domains",
+        "summary": "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.domains:write"
+      }
+    },
+    "/api/v1/sites/{name}/domains/pending": {
+      "delete": {
+        "operationId": "cancelSiteDomainChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Cancel the site's domain change that waits for its certificate (ADR-0068)",
         "tags": [
           "sites"
         ],
@@ -16135,6 +20129,430 @@
         "x-hostashi-action": "files:read"
       }
     },
+    "/api/v1/sites/{name}/git": {
+      "delete": {
+        "operationId": "deleteSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Remove the Git setting of a site with its token, deploy key and webhook; the files stay",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      },
+      "get": {
+        "operationId": "getSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The Git deploy setting of a site, without its token and private key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteGit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Set the repository, branch, shared paths and build commands of a site; SSH gets a deploy key",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/hostkey": {
+      "put": {
+        "operationId": "setSiteGitHostKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Trust a confirmed host key of the SSH repository's server",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/hostkey/scan": {
+      "post": {
+        "operationId": "scanSiteGitHostKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Read the host key the SSH repository's server presents",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/key": {
+      "post": {
+        "operationId": "newSiteGitKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Git"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Replace the deploy key of a site that deploys over SSH",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
+    "/api/v1/sites/{name}/git/webhook": {
+      "delete": {
+        "operationId": "deleteSiteGitWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Turn the deploy webhook of a site off",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      },
+      "post": {
+        "operationId": "setSiteGitWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "git:write"
+            ]
+          }
+        ],
+        "summary": "Turn the deploy webhook of a site on, or give it a new secret; the secret is shown only here",
+        "tags": [
+          "git"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.git:write"
+      }
+    },
     "/api/v1/sites/{name}/headers": {
       "get": {
         "operationId": "getSiteHeaders",
@@ -16566,6 +20984,420 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.maintenance:write"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/ignore": {
+      "post": {
+        "operationId": "ignoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Mark a flagged file as a false positive: the same content with the same signature is not reported again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/quarantine": {
+      "post": {
+        "operationId": "quarantineSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Move a flagged file into the quarantine, only if it is unchanged since the scan",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/reopen": {
+      "post": {
+        "operationId": "reopenSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Report an ignored file again",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-findings/{id}/restore": {
+      "post": {
+        "operationId": "restoreSiteMalwareFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanFinding"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Put a quarantined file back where it was",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scan": {
+      "get": {
+        "operationId": "getSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteScan"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:read"
+            ]
+          }
+        ],
+        "summary": "The malware scan of a site: schedule, newest runs and flagged files",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:read"
+      },
+      "put": {
+        "operationId": "setSiteMalwareSchedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site daily, weekly or only on request",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:manage"
+      }
+    },
+    "/api/v1/sites/{name}/malware-scans": {
+      "post": {
+        "operationId": "startSiteMalwareScan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanRun"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "malware:write"
+            ]
+          }
+        ],
+        "summary": "Scan a site, or some of its files and folders, now; it waits while another site is scanned",
+        "tags": [
+          "malware"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.malware:scan"
       }
     },
     "/api/v1/sites/{name}/node": {
@@ -17140,6 +21972,59 @@
         "x-hostashi-action": "sites:park"
       }
     },
+    "/api/v1/sites/{name}/permissions/reset": {
+      "post": {
+        "operationId": "resetSitePermissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionsReset"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Give all files of the site back to its user and reset their modes",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.permissions:reset"
+      }
+    },
     "/api/v1/sites/{name}/php": {
       "put": {
         "operationId": "setSitePHP",
@@ -17388,6 +22273,183 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.php:write"
+      }
+    },
+    "/api/v1/sites/{name}/profile": {
+      "get": {
+        "operationId": "getSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Get the site's application profile and hardening",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "put": {
+        "operationId": "setSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteProfileInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfile"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the site's application profile and hardening",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.profile:write"
+      }
+    },
+    "/api/v1/sites/{name}/profile/preview": {
+      "post": {
+        "operationId": "previewSiteProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteProfilePreviewInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfilePreview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "Render the site's server block for a profile and hardening (read only)",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
       }
     },
     "/api/v1/sites/{name}/proxy": {
@@ -18308,6 +23370,69 @@
         "x-hostashi-action": "ssh:write"
       }
     },
+    "/api/v1/sites/{name}/title": {
+      "put": {
+        "operationId": "setSiteTitle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TitleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the display name of a site (empty clears it); the system name stays",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.title:write"
+      }
+    },
     "/api/v1/sites/{name}/tls": {
       "put": {
         "operationId": "setSiteTLS",
@@ -18778,6 +23903,68 @@
         "x-hostashi-action": "sites.type:write"
       }
     },
+    "/api/v1/sites/{name}/usage": {
+      "get": {
+        "operationId": "getSiteUsage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "1h, 24h, 7d or 30d; default 1h",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteUsage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "CPU, memory, disk I/O and web traffic of a site over a range",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.usage:read"
+      }
+    },
     "/api/v1/sites/{name}/web": {
       "put": {
         "operationId": "setSiteWeb",
@@ -18839,6 +24026,246 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.web:write"
+      }
+    },
+    "/api/v1/sites/{name}/wordpress": {
+      "get": {
+        "operationId": "getSiteWordPress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordPress"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:read"
+            ]
+          }
+        ],
+        "summary": "The state of the site's WordPress quick install",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites:read"
+      },
+      "post": {
+        "operationId": "installSiteWordPress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WordPressInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordPressStart"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Start the WordPress quick install",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.wordpress:install"
+      }
+    },
+    "/api/v1/sites/{name}/wordpress/reinstall": {
+      "post": {
+        "operationId": "reinstallSiteWordPress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WordPressReinstallInInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordPressStart"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Replace the site's files with a new WordPress",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.wordpress:install"
+      }
+    },
+    "/api/v1/sites/{name}/www": {
+      "put": {
+        "operationId": "setSiteWWWRedirect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WwwRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Set the redirect between example.com and www.example.com",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.www:write"
       }
     },
     "/api/v1/ssh/host-keys": {
@@ -19136,6 +24563,59 @@
         "x-hostashi-action": "pages:write"
       }
     },
+    "/api/v1/status-pages/{id}/preview": {
+      "post": {
+        "operationId": "previewStatusPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "pages:read"
+            ]
+          }
+        ],
+        "summary": "Get a short-lived link that shows a maintenance or parking page",
+        "tags": [
+          "pages"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "pages:read"
+      }
+    },
     "/api/v1/system": {
       "get": {
         "operationId": "getSystem",
@@ -19177,6 +24657,59 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "system:read"
+      }
+    },
+    "/api/v1/system/auto-update": {
+      "put": {
+        "operationId": "setAutoUpdate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemAutoUpdateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "system:write"
+            ]
+          }
+        ],
+        "summary": "Turn the automatic installation of new Hostashi versions on or off",
+        "tags": [
+          "system"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "system:write"
       }
     },
     "/api/v1/system/hostname": {
@@ -19501,6 +25034,69 @@
           "tokens"
         ],
         "x-hostashi-access": "session"
+      }
+    },
+    "/api/v1/usage/sites": {
+      "get": {
+        "operationId": "rankSiteUsage",
+        "parameters": [
+          {
+            "description": "1h, 24h, 7d or 30d; default 1h",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "cpu, memory, traffic or io; default cpu",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRanking"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "services:read"
+            ]
+          }
+        ],
+        "summary": "All sites by their usage over a range, the biggest first",
+        "tags": [
+          "services"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "usage:read"
       }
     },
     "/api/v1/users": {

@@ -113,7 +113,10 @@ type Manager struct {
 	Hidden func() []string
 	// Installed lists the installed PHP versions; nil allows all (tests).
 	Installed func() []string
-	Log       *slog.Logger
+	// VersionDir holds <user> with the version of each pool, for the site
+	// users' wp command (ADR-0069); empty writes none (tests).
+	VersionDir string
+	Log        *slog.Logger
 
 	mu sync.Mutex
 }
@@ -313,11 +316,21 @@ func (m *Manager) saveState(st map[string]Pool) error {
 
 // writeAtomic replaces name with data (mode 0600) through a synced
 // temporary file in the same directory.
-func writeAtomic(name string, data []byte) error {
+func writeAtomic(name string, data []byte) error { return writeAtomicMode(name, data, 0o600) }
+
+// writeAtomicMode is writeAtomic with the file mode mode.
+func writeAtomicMode(name string, data []byte, mode os.FileMode) error {
 	tmp := name + ".tmp"
 
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
+		return fmt.Errorf("php: %w", err)
+	}
+
+	// Chmod on the file: the umask does not cut it.
+	if err := f.Chmod(mode); err != nil {
+		_ = f.Close()
+
 		return fmt.Errorf("php: %w", err)
 	}
 
@@ -402,6 +415,8 @@ func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error 
 	// see equal values).
 	if had && cur.Version == p.Version {
 		if old, err := os.ReadFile(m.conf(p.User)); err == nil && bytes.Equal(old, content) {
+			m.writeVersion(ctx, p)
+
 			return m.moveIntoSlice(ctx, p)
 		}
 	}
@@ -466,6 +481,7 @@ func (m *Manager) ensure(ctx context.Context, st map[string]Pool, p Pool) error 
 	}
 
 	if err == nil {
+		m.writeVersion(ctx, p)
 		m.log().InfoContext(ctx, "php pool ready", "site", p.User, "version", p.Version)
 
 		return nil
@@ -496,6 +512,7 @@ func (m *Manager) undo(ctx context.Context, st map[string]Pool, p, cur Pool, had
 	if !had {
 		delete(st, p.User)
 		_ = os.Remove(m.conf(p.User))
+		m.removeVersion(ctx, p.User)
 
 		if err := m.saveState(st); err != nil {
 			m.log().ErrorContext(ctx, "php state after failed start", "site", p.User, "err", err)
@@ -519,6 +536,7 @@ func (m *Manager) undo(ctx context.Context, st map[string]Pool, p, cur Pool, had
 	}
 
 	if err == nil {
+		m.writeVersion(undo, cur)
 		err = m.Ctl.Start(undo, Unit(cur.Version, p.User))
 	}
 
@@ -556,6 +574,7 @@ func (m *Manager) Prune(ctx context.Context, keep map[string]bool) error {
 		}
 
 		m.removeDropIn(ctx, st[u].Version, u)
+		m.removeVersion(ctx, u)
 		delete(st, u)
 
 		if err := m.saveState(st); err != nil {
@@ -583,6 +602,8 @@ func (m *Manager) Recover(ctx context.Context) error {
 	var errs []error
 
 	for u, p := range st {
+		m.writeVersion(ctx, p)
+
 		// A unit from before ADR-0015 gets its slice drop-in and a restart.
 		changed, err := m.writeDropIn(ctx, p)
 		if err != nil {
@@ -603,6 +624,85 @@ func (m *Manager) Recover(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// VersionDir holds one file per site, <user>, with the PHP version of its
+// pool and a newline. The site users' wp command (packaging/ssh/wp,
+// ADR-0069) reads it to run WP-CLI with the site's PHP. Root owns the
+// directory (0711: a site user reads its own file by name but cannot list
+// the sites) and the files (0644).
+const VersionDir = "/etc/hostashi-php"
+
+const (
+	versionDirMode  = 0o711
+	versionFileMode = 0o644
+)
+
+// writeVersion writes the version file of p. Failures are only logged: the
+// pool runs without it, only the wp command misses it; the next Ensure or
+// Recover tries again.
+func (m *Manager) writeVersion(ctx context.Context, p Pool) {
+	if m.VersionDir == "" {
+		return
+	}
+
+	if err := m.ensureVersionFile(p); err != nil {
+		m.log().ErrorContext(ctx, "write php version file", "site", p.User, "err", err)
+	}
+}
+
+func (m *Manager) ensureVersionFile(p Pool) error {
+	if err := agentapi.ValidateSiteUser(p.User); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if err := agentapi.ValidatePHPVersion(p.Version); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if err := os.MkdirAll(m.VersionDir, versionDirMode); err != nil {
+		return fmt.Errorf("php: version directory: %w", err)
+	}
+
+	fi, err := os.Lstat(m.VersionDir)
+	if err != nil {
+		return fmt.Errorf("php: version directory: %w", err)
+	}
+
+	if !fi.IsDir() {
+		return fmt.Errorf("%w: %s is not a directory", ErrInvalid, m.VersionDir)
+	}
+
+	// The umask may have cut the mode; an older directory may be wider.
+	if fi.Mode().Perm() != versionDirMode {
+		if err := os.Chmod(m.VersionDir, versionDirMode); err != nil {
+			return fmt.Errorf("php: version directory: %w", err)
+		}
+	}
+
+	file := filepath.Join(m.VersionDir, p.User)
+	content := []byte(p.Version + "\n")
+
+	if fi, err := os.Lstat(file); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm() == versionFileMode {
+		if old, err := os.ReadFile(file); err == nil && bytes.Equal(old, content) {
+			return nil
+		}
+	}
+
+	// The rename replaces whatever is there, a symbolic link too, without
+	// following it.
+	return writeAtomicMode(file, content, versionFileMode)
+}
+
+// removeVersion deletes the version file of a site whose pool is gone.
+func (m *Manager) removeVersion(ctx context.Context, user string) {
+	if m.VersionDir == "" || agentapi.ValidateSiteUser(user) != nil {
+		return
+	}
+
+	if err := os.Remove(filepath.Join(m.VersionDir, user)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.log().ErrorContext(ctx, "remove php version file", "site", user, "err", err)
+	}
 }
 
 // DropInName is the file in a unit's drop-in directory that names the

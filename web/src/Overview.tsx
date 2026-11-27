@@ -5,20 +5,24 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { User } from "./auth";
 import { daysLeft } from "./certs";
 import { ServerDashboard } from "./Dashboard";
-import { getBackups, type BackupInfo } from "./backups";
+import { SitesByUsage } from "./Usage";
+import { getBackups, overdueHours, type BackupInfo } from "./backups";
 import { checkTitle, runDoctor, type DoctorReport } from "./doctor";
 import { canSee } from "./nav";
 import { listParked, type ParkedDomain } from "./parked";
 import { formatHash } from "./routes";
-import { listSites, type Site } from "./sites";
-import { Badge, Card, Notice, PageHead, RelTime, type Tone } from "./ui";
+import { bytes } from "./services";
+import { cronFailing, listCron } from "./cron";
+import { groupsForSite } from "./SiteNav";
+import { listPools, listSitesMarked, poolUsed, type Pool, type Site, type SiteMarks } from "./sites";
+import { Badge, Card, Meter, Notice, PageHead, RelTime, type Tone } from "./ui";
 
 // Item is one thing that needs someone to act, with a link to where they can.
 type Item = { key: string; tone: Tone; word: string; title: string; detail?: string; href: string; link: string };
 
 // What the overview could load; a part the role may not see, or that
 // failed to load, stays undefined and is left out.
-type Data = { sites?: Site[]; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[] };
+type Data = { sites?: Site[]; marks?: Record<string, SiteMarks>; cron?: Record<string, number>; doctor?: DoctorReport; backups?: BackupInfo; parked?: ParkedDomain[]; pools?: Pool[] };
 
 const ignore = () => undefined;
 
@@ -31,6 +35,16 @@ export function attention(d: Data): Item[] {
     const st = d.backups.status;
     if (!d.backups.ready) {
       items.push({ key: "backups-setup", tone: "warn", word: "Warning", title: "Backups are not set up", href: formatHash({ page: "backups" }), link: "Set up backups" });
+    } else if (d.backups.overdue) {
+      items.push({
+        key: "backups-overdue",
+        tone: "warn",
+        word: "Warning",
+        title: "No recent backup",
+        detail: `No backup has finished in the last ${overdueHours(d.backups.settings.intervalHours)} hours.`,
+        href: formatHash({ page: "backups" }),
+        link: "Open backups",
+      });
     } else if (st.started && !st.running && !st.ok) {
       items.push({
         key: "backups",
@@ -90,6 +104,31 @@ export function attention(d: Data): Item[] {
       });
     }
   }
+  // Virus finds are no doctor check: they come from the sites list.
+  for (const s of d.sites ?? []) {
+    const n = d.marks?.[s.name]?.openFindings ?? 0;
+    if (n === 0) continue;
+    items.push({
+      key: "malware-" + s.name,
+      tone: "err",
+      word: "Failed",
+      title: n === 1 ? `1 file flagged by the virus scan on site ${s.name}` : `${n} files flagged by the virus scan on site ${s.name}`,
+      href: formatHash({ page: "sites", site: { name: s.name, tab: "malware" } }),
+      link: "Open virus scan",
+    });
+  }
+  // Without Health, failing cron jobs of the own sites stand in for it.
+  for (const [site, n] of Object.entries(d.cron ?? {})) {
+    if (n === 0) continue;
+    items.push({
+      key: "cron-" + site,
+      tone: "warn",
+      word: "Warning",
+      title: n === 1 ? `1 cron job of site ${site} fails` : `${n} cron jobs of site ${site} fail`,
+      href: formatHash({ page: "sites", site: { name: site, tab: "cron" } }),
+      link: "Open cron jobs",
+    });
+  }
   for (const p of d.parked ?? []) {
     const left = p.tls.certSource === "custom" ? daysLeft(p.tls.notAfter) : null;
     if (left === null || left >= 30) continue;
@@ -129,17 +168,36 @@ export function Overview({ user }: { user: User }) {
     let live = true;
     const opt = <T,>(ok: boolean, f: () => Promise<T>) => (ok ? f().catch(ignore) : Promise.resolve(undefined));
     void Promise.all([
-      opt(true, listSites),
+      opt(true, listSitesMarked),
       opt(canSee(user.role, "health"), runDoctor),
       opt(canSee(user.role, "backups"), getBackups),
       opt(canSee(user.role, "parked"), listParked),
-    ]).then(([sites, doctor, backups, parked]) => {
+      opt(canSee(user.role, "pools"), listPools),
+    ]).then(async ([list, doctor, backups, parked, pools]) => {
+      const sites = list?.sites;
+      // Without Health, look at the cron jobs of the (few) own sites.
+      const cron: Record<string, number> = {};
+      if (!canSee(user.role, "health") && sites) {
+        await Promise.all(
+          sites
+            .filter((s) => s.state === "active" && groupsForSite(s).some((g) => g.tabs.some((t) => t.id === "cron")))
+            .slice(0, 20)
+            .map((s) =>
+              listCron(s.name)
+                .then((l) => {
+                  cron[s.name] = l.jobs.filter((j) => !j.paused && cronFailing(j.status)).length;
+                })
+                .catch(ignore),
+            ),
+        );
+      }
       if (!live) return;
       setData({
-        ...(sites ? { sites } : {}),
+        ...(sites ? { sites, marks: list.marks, cron } : {}),
         ...(doctor ? { doctor } : {}),
         ...(backups ? { backups } : {}),
         ...(parked ? { parked } : {}),
+        ...(pools ? { pools } : {}),
       });
     });
     return () => {
@@ -166,7 +224,18 @@ export function Overview({ user }: { user: User }) {
   return (
     <>
       {head}
-      <Card title="Needs attention" padded={items.length === 0}>
+      <Card
+        title="Needs attention"
+        padded={items.length === 0}
+        actions={
+          may("health") &&
+          data.doctor && (
+            <span className="ui-hint">
+              Checks run <RelTime iso={data.doctor.checkedAt} /> · <a href={formatHash({ page: "health" })}>All checks</a>
+            </span>
+          )
+        }
+      >
         {items.length === 0 ? (
           <p className="ui-flush">Nothing needs attention.</p>
         ) : (
@@ -194,21 +263,13 @@ export function Overview({ user }: { user: User }) {
             {siteNote && <p className="ui-hint ui-flush">{siteNote}</p>}
           </Stat>
         )}
-        {may("health") && data.doctor && (
-          <Stat title="Health" href={formatHash({ page: "health" })} link="Open health">
-            <Badge tone={data.doctor.status === "ok" ? "ok" : data.doctor.status === "warn" ? "warn" : "err"}>
-              {data.doctor.status === "ok" ? "OK" : data.doctor.status === "warn" ? "Warnings" : "Problems"}
-            </Badge>
-            <p className="ui-hint ui-flush">
-              Checked <RelTime iso={data.doctor.checkedAt} />
-            </p>
-          </Stat>
-        )}
         {may("backups") && data.backups && (
           <Stat title="Backups" href={formatHash({ page: "backups" })} link="Open backups">
             {data.backups.status.finished ? (
               <>
-                <Badge tone={data.backups.status.ok ? "ok" : "err"}>{data.backups.status.ok ? "OK" : "Failed"}</Badge>
+                <Badge tone={data.backups.overdue ? "warn" : data.backups.status.ok ? "ok" : "err"}>
+                  {data.backups.overdue ? "Overdue" : data.backups.status.ok ? "OK" : "Failed"}
+                </Badge>
                 <p className="ui-hint ui-flush">
                   Last backup <RelTime iso={data.backups.status.finished} />
                 </p>
@@ -219,7 +280,9 @@ export function Overview({ user }: { user: User }) {
           </Stat>
         )}
       </div>
+      {may("pools") && data.pools && data.pools.length > 0 && <PoolUsage pools={data.pools} />}
       {may("services") && <ServerDashboard />}
+      {may("services") && <SitesByUsage />}
       {!data.sites && <Notice tone="err" title="The sites could not be loaded. Reload the page." />}
     </>
   );
@@ -234,6 +297,50 @@ function Stat({ title, href, link, children }: { title: string; href: string; li
           {link}
           <ArrowRight size={14} aria-hidden="true" />
         </a>
+      </div>
+    </Card>
+  );
+}
+
+// PoolUsage shows how full each storage pool is (ADR-0016 addendum 2).
+function PoolUsage({ pools }: { pools: Pool[] }) {
+  return (
+    <Card
+      title="Storage pools"
+      actions={
+        <a className="ui-stat-link" href={formatHash({ page: "pools" })}>
+          Open storage pools
+          <ArrowRight size={14} aria-hidden="true" />
+        </a>
+      }
+    >
+      <div className="ui-stack">
+        {pools.map((p) => {
+          const used = poolUsed(p);
+          const label = `${p.name}${p.default ? " (default)" : ""}`;
+          const sites = p.sites === 1 ? "1 site" : `${p.sites} sites`;
+          if (used === null || !p.totalBytes) {
+            return (
+              <div className="ui-meter" key={p.name}>
+                <div className="ui-meter-head">
+                  <strong>{label}</strong>
+                  <span>
+                    <Badge tone="err">Not available</Badge> {sites}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <Meter
+              key={p.name}
+              label={label}
+              value={used}
+              max={p.totalBytes}
+              detail={`${bytes(used)} of ${bytes(p.totalBytes)} used, ${bytes(p.freeBytes ?? 0)} free · ${sites}`}
+            />
+          );
+        })}
       </div>
     </Card>
   );

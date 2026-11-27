@@ -14,13 +14,13 @@ Every site has one type. It decides what serves the site's domains. Domains, HTT
 | **Reverse proxy** | another web server, by passing every request on | no |
 | **Redirect** | nothing: every address goes to another one | no |
 
-You choose the type when you create a site ([Sites](Sites.md)) and can change it later on the site's **Web** tab.
+You choose the type when you create a site ([Sites](Sites.md)) and can change it later on the site's **App › Web** tab.
 
 ## Static and PHP
 
 The site serves the files in `/home/<name>/htdocs`, or in a folder below it that you set under **Web root**. For a single-page app, turn on **Single-page app**: addresses without a file then get `index.html`.
 
-A PHP site runs its own PHP pool as the site's user. The version is chosen on the **PHP** tab; install versions under **Server → PHP versions**. See [PHP settings](PHP-settings.md).
+A PHP site runs its own PHP pool as the site's user. The version is chosen on the **App › PHP** tab; install versions under **Server → Runtimes › PHP**. See [PHP settings](PHP-settings.md).
 
 ## Node.js
 
@@ -28,7 +28,7 @@ A PHP site runs its own PHP pool as the site's user. The version is chosen on th
 
 A Node.js site runs one app as the site's user. nginx passes every request to it.
 
-- **Node.js version.** Hostashi installs the official long-term support releases from nodejs.org under **Server → Node.js versions**. Install one there before you create the site. Updates of a version arrive with Hostashi updates; the apps of that version restart by themselves.
+- **Node.js version.** Hostashi installs the official long-term support releases from nodejs.org under **Server → Runtimes › Node.js**. Install one there before you create the site. Updates of a version arrive with Hostashi updates; the apps of that version restart by themselves.
 - **Working directory.** The folder the app starts in, below the home, `htdocs` by default. Usually the folder with `package.json`.
 - **Start command.** Either a **start file** (`node server.js`) or an **npm script** (`npm run start`). Until one is set, the app stays stopped.
 - **Port.** The panel gives each app its own port and passes it in the variable `PORT`, with `HOST=127.0.0.1` and `NODE_ENV=production`. Your app must listen on `PORT`. Only nginx and the site's own user can reach the port.
@@ -41,7 +41,7 @@ cd ~/htdocs
 PATH=/opt/hostashi/node/24/bin:$PATH npm ci
 ```
 
-Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, until you start it again. After a crash it restarts by itself. Its output is in the **app** log on the **Logs** tab ([Site logs](Site-logs.md)). The site's [limits](Limits.md) apply to the app.
+Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, until you start it again. After a crash it restarts by itself. Its output is in the **app** log on the **Operations › Logs** tab ([Site logs](Site-logs.md)). The site's [limits](Limits.md) apply to the app.
 
 ## Python
 
@@ -49,7 +49,7 @@ Then choose **Restart**. **Stop** keeps the app stopped, also after a reboot, un
 
 A Python site runs one app as the site's user, from its own environment `~/.venv`. nginx passes every request to it. It works like a Node.js site, with these differences:
 
-- **Python version.** Hostashi installs the supported lines of Python from the CPython builds of [python-build-standalone](https://github.com/astral-sh/python-build-standalone) under **Server → Python versions**, each download checked against a pinned checksum. Install one there before you create the site. A newer release or build of a line arrives with a Hostashi update; the environments stay and the apps restart by themselves. A line can be removed once no site uses it.
+- **Python version.** Hostashi installs the supported lines of Python from the CPython builds of [python-build-standalone](https://github.com/astral-sh/python-build-standalone) under **Server → Runtimes › Python**, each download checked against a pinned checksum. Install one there before you create the site. A newer release or build of a line arrives with a Hostashi update; the environments stay and the apps restart by themselves. A line can be removed once no site uses it.
 - **Start command.** **WSGI with gunicorn** (`mysite.wsgi:application`, Django, Flask), **ASGI with uvicorn** (`main:app`, FastAPI) or a **Python file** (`app.py`). Until one is set, the app stays stopped. Under **Extra arguments**, one per line, you add options such as `--workers` and `3`. The address is Hostashi's: for gunicorn and uvicorn, `--bind`, `--host` and `--port` are refused. A Python file listens on `HOST` and `PORT` itself.
 - **Environment.** Hostashi creates `~/.venv` with the chosen version when the site is created. It does not install packages. Install them in the site's SSH shell, gunicorn or uvicorn included, for example:
 
@@ -79,7 +79,7 @@ An app site runs a program of your own instead of Node.js, for example a Go, Rus
 
 A reverse proxy site passes every request to another web server, for example an app on another machine in your network. It has no Linux user, files, databases, cron jobs or SSH access.
 
-- **Pass requests to:** `http://` or `https://`, a host or IP address, an optional port and path, for example `http://10.0.0.5:8080`. Private networks are fine. This server's own addresses, loopback (`127.0.0.1`) and link-local addresses are refused, so a site cannot reach the panel or other local services.
+- **Pass requests to:** `http://` or `https://`, a host or IP address, an optional port and path, for example `http://10.0.0.5:8080`. Private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7`) are fine, but only admins and managers may set such a target; an account with the role user gets "private_target". This server's own addresses, loopback (`127.0.0.1`) and link-local addresses are refused, so a site cannot reach the panel or other local services.
 - **Send the target's host name:** off by default, so the other server sees the visitor's domain, as most apps expect.
 - **Do not verify the target's certificate:** only for an `https` target with a self-signed certificate in a network you trust.
 

@@ -62,7 +62,7 @@ if [ -n "$deb" ]; then
   case "$deb" in /*) ;; *) deb=./$deb;; esac
   target=$deb
 else
-  apt-cache madison hostashi 2>/dev/null | awk -F'|' '{gsub(/ /, "", $2); print $2}' | grep -qxF "$ver" ||
+  apt-cache madison hostashi 2>/dev/null | awk -F'|' '{gsub(/ /, "", $2); print $2}' | grep -xF "$ver" >/dev/null ||
     die "apt does not offer hostashi $ver (apt-cache madison hostashi); pass --deb FILE"
   target=hostashi=$ver
 fi

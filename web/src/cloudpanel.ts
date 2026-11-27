@@ -14,6 +14,8 @@ export type PlanSite = {
   type: string;
   domains: string[];
   redirectFrom: string[];
+  // The www redirect the new site gets for the old www host (ADR-0065).
+  wwwRedirect?: "to-www" | "to-non-www";
   docRoot: string;
   php: string;
   proxy?: string; // target of a reverse proxy site, which gets no account
@@ -24,6 +26,7 @@ export type PlanSite = {
   cronJobs: number;
   cronImport: number; // of cronJobs, created paused with the site
   pageCache?: string; // page cache preset proposed for a site that had a cache in front
+  profile?: string; // application profile the new site gets, missing for the default (ADR-0069)
   homeBytes?: number; // what the old home uses, missing if not measured
   action: PlanAction;
   reasons: PlanReason[];

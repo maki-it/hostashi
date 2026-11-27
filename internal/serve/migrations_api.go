@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -416,6 +417,34 @@ func migrationTarget(sites *hosting.Service) cpmigrate.TargetFunc {
 	}
 }
 
+// setWWW takes over the old site's redirect hosts as redirect domains
+// (ADR-0068) and its www redirect (ADR-0065). The site stands without
+// them; the admin can set them on the site's page.
+func setWWW(ctx context.Context, sites *hosting.Service, log *slog.Logger, actor int64, s cpmigrate.NewSite) {
+	if len(s.RedirectDomains) > 0 {
+		served := make([]string, 0, len(s.Domains))
+
+		for _, d := range s.Domains {
+			if !slices.Contains(s.RedirectDomains, d) {
+				served = append(served, d)
+			}
+		}
+
+		// The new site has no certificate yet, so this goes live at once.
+		if _, _, err := sites.ChangeDomains(ctx, actor, s.Name, hosting.DomainsRequest{Domains: served, RedirectDomains: s.RedirectDomains}); err != nil {
+			log.WarnContext(ctx, "imported redirect domains not set", "site", s.Name, "domains", s.RedirectDomains, "err", err)
+		}
+	}
+
+	if s.WWWRedirect == "" {
+		return
+	}
+
+	if _, err := sites.SetWWWRedirect(ctx, actor, s.Name, s.WWWRedirect); err != nil {
+		log.WarnContext(ctx, "imported www redirect not set", "site", s.Name, "mode", s.WWWRedirect, "err", err)
+	}
+}
+
 // siteCreator creates a migrated site through the site service: no
 // certificate yet, DNS still points to the old server.
 func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator {
@@ -426,13 +455,17 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 	return func(ctx context.Context, actor int64, s cpmigrate.NewSite) (cpmigrate.Created, error) {
 		// The old site may call programs from PHP; it keeps that until the
 		// admin turns it off in the site's settings (ADR-0033).
-		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != ""}
+		req := hosting.CreateRequest{Name: s.Name, Pool: s.Pool, PHP: s.PHP, Domains: s.Domains, PHPPrograms: s.PHP != "", Profile: s.Profile}
 
 		// A reverse proxy site has no account: nothing else comes with it.
 		if s.Proxy != "" {
-			_, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, Domains: s.Domains, Proxy: &store.SiteProxy{Target: s.Proxy}})
+			if _, err := sites.Create(ctx, actor, hosting.CreateRequest{Name: s.Name, Domains: s.Domains, Proxy: &store.SiteProxy{Target: s.Proxy}}); err != nil {
+				return cpmigrate.Created{}, err
+			}
 
-			return cpmigrate.Created{}, err
+			setWWW(ctx, sites, log, actor, s)
+
+			return cpmigrate.Created{}, nil
 		}
 
 		// A Node.js site's app stays stopped until its start command is set
@@ -455,6 +488,8 @@ func siteCreator(sites *hosting.Service, log *slog.Logger) cpmigrate.SiteCreator
 		if _, err := sites.Create(ctx, actor, req); err != nil {
 			return cpmigrate.Created{}, err
 		}
+
+		setWWW(ctx, sites, log, actor, s)
 
 		var n cpmigrate.Created
 

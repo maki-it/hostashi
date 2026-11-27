@@ -85,6 +85,11 @@ func TestSiteLogsOverHTTP(t *testing.T) {
 		t.Fatalf("lines: %d %+v", rec.Code, e.logs.last())
 	}
 
+	// The WordPress install log (ADR-0069) is read like the others.
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/alpha/logs/wordpress", cookie: c}); rec.Code != http.StatusOK || e.logs.last().Kind != agentapi.LogWordPress {
+		t.Fatalf("wordpress: %d %+v", rec.Code, e.logs.last())
+	}
+
 	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/sites/alpha/logs/error?cursor=42.99", cookie: c})
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"rotated":true`) {
 		t.Fatalf("cursor: %d %s", rec.Code, rec.Body)

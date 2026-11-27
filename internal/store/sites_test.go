@@ -236,3 +236,38 @@ func TestSiteCertificateSource(t *testing.T) {
 		t.Fatalf("cleared %+v", got)
 	}
 }
+
+func TestSiteWWWRedirect(t *testing.T) {
+	s := open(t, dbPath(t))
+	ctx := t.Context()
+	now := time.Unix(2_000_000, 0)
+
+	if _, err := s.CreateSite(ctx, "blog", "default", "", []string{"blog.example.com", "www.blog.example.com"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if site, err := s.SiteByName(ctx, "blog"); err != nil || site.WWWRedirect != "" {
+		t.Fatalf("default: %q %v", site.WWWRedirect, err)
+	}
+
+	if old, err := s.SetSiteWWWRedirect(ctx, "blog", "to-www", now); err != nil || old != "" {
+		t.Fatalf("set: %q %v", old, err)
+	}
+
+	if old, err := s.SetSiteWWWRedirect(ctx, "blog", "to-non-www", now); err != nil || old != "to-www" {
+		t.Fatalf("change: %q %v", old, err)
+	}
+
+	if site, err := s.SiteByName(ctx, "blog"); err != nil || site.WWWRedirect != "to-non-www" {
+		t.Fatalf("read back: %q %v", site.WWWRedirect, err)
+	}
+
+	// The column refuses anything else.
+	if _, err := s.SetSiteWWWRedirect(ctx, "blog", "both", now); err == nil {
+		t.Error("unknown mode stored")
+	}
+
+	if _, err := s.SetSiteWWWRedirect(ctx, "nope", "to-www", now); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown site: %v", err)
+	}
+}

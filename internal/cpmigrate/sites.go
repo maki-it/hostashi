@@ -68,12 +68,21 @@ type NewSite struct {
 	// Proxy makes the site a reverse proxy to this target, without a
 	// Linux account (ADR-0054); everything of the home above is empty.
 	Proxy string
+	// WWWRedirect is the www redirect set after the site is created
+	// (ADR-0065), "" for none; both names are in Domains.
+	WWWRedirect string
+	// RedirectDomains are names of Domains that become redirect domains
+	// after the site is created (ADR-0068).
+	RedirectDomains []string
 	// Node makes the site a Node.js site of this line; its app stays
 	// stopped until a start command is set (ADR-0054).
 	Node string
 	// Python makes the site a Python site of this line; its app stays
 	// stopped until a start command is set (ADR-0061).
 	Python string
+	// Profile is the application profile of the site (ADR-0069), "" for
+	// the default of its type.
+	Profile string
 }
 
 // Created counts what came with a new site.
@@ -207,13 +216,19 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		cache = ""
 	}
 
+	// The PHP version may differ from the plan's, so the profile follows it.
+	prof := plan.ProfileFor(site.Type, php)
+
 	n, err := s.create(ctx, actor, NewSite{
 		Name: ps.Name, Pool: o.Pool, PHP: php, Domains: domains, Cron: plan.CronJobs(site), Usage: site.Usage, SSHKeys: plan.SSHKeys(site),
-		PageCache:   cache,
-		ObjectCache: ps.ObjectCache && php != "",
-		PHPSettings: phpSettings(site, php),
-		Node:        node,
-		Python:      python,
+		PageCache:       cache,
+		ObjectCache:     ps.ObjectCache && php != "",
+		PHPSettings:     phpSettings(site, php),
+		Node:            node,
+		Python:          python,
+		WWWRedirect:     ps.WWWRedirect,
+		RedirectDomains: ps.RedirectDomains,
+		Profile:         prof,
 	})
 	if err != nil {
 		return ps, err
@@ -226,9 +241,11 @@ func (s *Service) CreateSite(ctx context.Context, actor int64, reportID, name st
 		"phpSettings": strconv.FormatBool(n.PHPSettings),
 		"node":        node,
 		"python":      python,
+		"profile":     prof,
 	})
 
-	ps.PHP, ps.Node, ps.Python, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, python, n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
+	ps.PHP, ps.Node, ps.Python, ps.Profile, ps.CronImport, ps.SSHImport, ps.ObjectCacheOn, ps.PHPSettingsOn = php, node, python, prof,
+		n.Cron, n.SSHKeys, n.ObjectCache, n.PHPSettings
 	if !n.PageCache {
 		ps.PageCache = ""
 	}
@@ -245,7 +262,7 @@ func (s *Service) createProxy(ctx context.Context, actor int64, reportID string,
 
 	domains := append(slices.Clone(ps.Domains), ps.RedirectFrom...)
 
-	if _, err := s.create(ctx, actor, NewSite{Name: ps.Name, Domains: domains, Proxy: ps.Proxy}); err != nil {
+	if _, err := s.create(ctx, actor, NewSite{Name: ps.Name, Domains: domains, Proxy: ps.Proxy, WWWRedirect: ps.WWWRedirect, RedirectDomains: ps.RedirectDomains}); err != nil {
 		return ps, err
 	}
 

@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { ArrowSquareOut } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CertificateCard } from "./Certificate";
+import { canClone, CloneBadge, CloneCard, CloneStatusCard, useClone } from "./Clone";
+import type { Clone } from "./clones";
 import { siteCertBase } from "./certs";
 import { CronSettings } from "./Cron";
+import { cardId, CloseButton, QuickActions, SiteActions, siteUrl, StatusTiles, type OverviewCard } from "./SiteStatus";
+import { cronFailing, listCron } from "./cron";
+import { getSiteScan } from "./scan";
 import { FileManager } from "./Files";
+import { GitSettings } from "./Git";
 import { LimitSettings } from "./Limits";
+import { SiteMalware } from "./Malware";
 import { SiteLogs } from "./Logs";
 import { ObjectCacheSettings } from "./ObjectCache";
 import { allowIpsProblem, clientIp, listPages, pageMessage, parseAllowIps, setMaintenance, type StatusPage } from "./pages";
@@ -14,21 +22,22 @@ import { PHPOptions, useSites } from "./Sites";
 import {
   deleteAndPark,
   deleteSite,
-  domainsProblem,
   hasAccount,
   httpsLabel,
   httpsTone,
-  parseDomains,
   setDisabled,
-  setDomains,
   setHSTS,
   setPHP,
   setPHPPrograms,
   setTLS,
   siteMessage,
   siteStatus,
+  runtimeWord,
   siteType,
   siteTypeLabel,
+  maxTitleLength,
+  setTitle,
+  siteLabel,
   type PHPVersions,
   type Site,
 } from "./sites";
@@ -40,25 +49,18 @@ import { pythonCommand } from "./python";
 import { SiteWebSettings } from "./SiteWeb";
 import { RemoveAccountCard } from "./SiteType";
 import { SnippetSettings } from "./Snippets";
+import { SiteAccess } from "./SiteAccess";
 import { RealIPCard } from "./RealIP";
 import { SecurityHeadersCard } from "./SecurityHeaders";
+import { HardeningCard } from "./Hardening";
 import { SSHSettings } from "./SSH";
-import { Badge, Button, Card, Field, Notice, tabPanelProps, Tabs } from "./ui";
-
-// The tabs that exist today (ADR-0037). Databases and backups per site
-// come with their features; their addresses show the overview.
-const tabs: { id: SiteTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "domains", label: "Domains & HTTPS" },
-  { id: "web", label: "Web" },
-  { id: "files", label: "Files" },
-  { id: "php", label: "PHP" },
-  { id: "cron", label: "Cron" },
-  { id: "ssh", label: "SSH & SFTP" },
-  { id: "limits", label: "Limits" },
-  { id: "logs", label: "Logs" },
-  { id: "nginx", label: "nginx" },
-];
+import { PermissionsResetCard } from "./PermissionsReset";
+import { AppliesAtOnce, Badge, Button, Card, Field, Notice, Switch } from "./ui";
+import { groupsForSite, SiteNav, type SiteGroup } from "./SiteNav";
+import { useUnsaved } from "./Unsaved";
+import { SiteUsageCard } from "./Usage";
+import { WWWCard } from "./WWW";
+import { DomainsCard, PendingDomainsNotice } from "./Domains";
 
 type Props = {
   name: string;
@@ -73,10 +75,58 @@ type Props = {
   onPath?: (path: string) => void;
 };
 
+/**
+ * SiteAlerts shows, beside the site's name, what needs a look: open virus
+ * finds and cron jobs whose last run failed. Each badge opens its tab.
+ */
+function SiteAlerts({ site, groups, tab }: { site: string; groups: SiteGroup[]; tab: SiteTab }) {
+  const [finds, setFinds] = useState(0);
+  const [failing, setFailing] = useState(0);
+  const has = (id: SiteTab) => groups.some((g) => g.tabs.some((t) => t.id === id));
+  const malware = has("malware");
+  const cron = has("cron");
+
+  useEffect(() => {
+    let live = true;
+    if (malware) {
+      getSiteScan(site)
+        .then((s) => live && setFinds(s.findings.filter((f) => f.state === "open").length))
+        .catch(() => undefined);
+    }
+    if (cron) {
+      listCron(site)
+        .then((l) => live && setFailing(l.jobs.filter((j) => !j.paused && cronFailing(j.status)).length))
+        .catch(() => undefined);
+    }
+    return () => {
+      live = false;
+    };
+  }, [site, tab, malware, cron]);
+
+  return (
+    <>
+      {finds > 0 && (
+        <a href={formatHash({ page: "sites", site: { name: site, tab: "malware" } })}>
+          <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+        </a>
+      )}
+      {failing > 0 && (
+        <a href={formatHash({ page: "sites", site: { name: site, tab: "cron" } })}>
+          <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
+        </a>
+      )}
+    </>
+  );
+}
+
 // SitePage shows one site with its settings in tabs (#/sites/<name>/<tab>).
 export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = () => undefined }: Props) {
   const { sites, php, error, load } = useSites();
   const site = sites?.find((s) => s.name === name);
+  const { clone, reload: reloadClone } = useClone(name);
+  // card is the overview card the Actions menu opened (C1 of the UX review).
+  const [card, setCard] = useState<OverviewCard | null>(null);
+  useEffect(() => setCard(null), [name]);
 
   if (!sites) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>;
   if (!site) {
@@ -89,34 +139,88 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
 
   const status = siteStatus(site);
   const ready = site.state === "active";
-  // The PHP tab only for sites with PHP; the type is changed on the Web tab.
-  // A redirect or reverse proxy that kept its account after a type change
-  // keeps these tabs.
-  // A site without an account (redirect, reverse proxy) has no files,
-  // cron, SSH or limits, and redirect and reverse proxy no snippets
-  // (ADR-0054).
-  const noAccount = ["files", "php", "cron", "ssh", "limits"];
-  const shown = tabs.filter(
-    (t) =>
-      (t.id !== "php" || site.php !== "") &&
-      (hasAccount(site) || !noAccount.includes(t.id)) &&
-      (!["redirect", "proxy"].includes(siteType(site)) || t.id !== "nginx"),
+  const staff = role === "admin" || role === "manager";
+  const groups = groupsForSite(site);
+  const active: SiteTab = ready && groups.some((g) => g.tabs.some((t) => t.id === tab)) ? tab : "overview";
+
+  const panel = (
+    <>
+      {active === "overview" && (
+        <Overview site={site} groups={groups} onChange={load} staff={staff} admin={role === "admin"} clone={clone ?? null} onCloneChange={reloadClone} card={card} onCard={setCard} />
+      )}
+      {active === "domains" && (
+        <ReadOnly when={!staff}>
+          <DomainsTab site={site} onChange={load} />
+        </ReadOnly>
+      )}
+      {active === "https" && <HTTPSTab site={site} onChange={load} staff={staff} />}
+      {active === "headers" && <SecurityHeadersCard site={site} />}
+      {active === "hardening" && <HardeningCard site={site} />}
+      {active === "realip" && <RealIPCard site={site} admin={role === "admin"} />}
+      {active === "access" && <SiteAccess site={site} />}
+      {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={staff} />}
+      {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
+      {active === "files" && site.state === "active" && <PermissionsResetCard site={site} />}
+      {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
+      {active === "php" && (
+        <>
+          <PHPTab site={site} php={php} onChange={load} staff={staff} />
+          {site.php && <PHPSettingsCard site={site} />}
+        </>
+      )}
+      {active === "cache" && (
+        <>
+          <PageCacheSettings site={site} canSize={staff} />
+          <ObjectCacheSettings site={site} canSize={staff} />
+        </>
+      )}
+      {active === "git" && <GitSettings site={site} canEdit={staff} />}
+      {active === "malware" && <SiteMalware site={site} canManage={staff} admin={role === "admin"} />}
+      {active === "cron" && <CronSettings site={site} />}
+      {active === "ssh" && <SSHSettings site={site} />}
+      {active === "limits" && (
+        <ReadOnly when={!staff}>
+          <LimitSettings site={site} />
+        </ReadOnly>
+      )}
+      {active === "usage" && <SiteUsageCard site={site.name} />}
+      {active === "nginx" && (
+        <ReadOnly when={role !== "admin"} who="An administrator">
+          <SnippetSettings site={site} />
+        </ReadOnly>
+      )}
+    </>
   );
-  const active = ready && shown.some((t) => t.id === tab) ? tab : "overview";
-  const prefix = `site-${site.name}`;
 
   return (
     <>
       <div className="ui-page-head">
         <div>
-          <h1>{site.name}</h1>
+          <h1>{siteLabel(site)}</h1>
           <p className="ui-row">
-            <span className="ui-mono">{site.domains[0]}</span>
+            {site.title && (
+              <span title="Linux user, home folder and SSH login">
+                System name <code>{site.name}</code>
+              </span>
+            )}
+            {site.domains[0] && (
+              <a className="ui-mono ui-ext" href={siteUrl(site)} target="_blank" rel="noopener noreferrer" title="Open the site in a new tab">
+                {site.domains[0]}
+                <ArrowSquareOut size={14} aria-hidden="true" />
+              </a>
+            )}
             <Badge tone={status.tone}>{status.word}</Badge>
             <Badge tone={httpsTone(site.tls)}>{httpsLabel(site.tls)}</Badge>
             <Badge tone="off">{siteTypeLabel(site)}</Badge>
+            <CloneBadge clone={clone} />
+            {ready && <SiteAlerts site={site.name} groups={groups} tab={active} />}
           </p>
         </div>
+        {ready && (
+          <div className="ui-page-actions">
+            <SiteActions site={site} groups={groups} staff={staff} admin={role === "admin"} onTab={onTab} onCard={setCard} />
+          </div>
+        )}
       </div>
       {error && <Notice tone="err" title={error} />}
       {site.tls.enabled && !site.tls.active && site.tls.error && (
@@ -124,28 +228,27 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           Last attempt failed: {site.tls.error}. Hostashi tries again within an hour.
         </Notice>
       )}
-      {ready && <Tabs label={site.name} tabs={shown} active={active} onChange={(t) => onTab(t as SiteTab)} idPrefix={prefix} />}
-      <div {...(ready ? tabPanelProps(prefix, active) : {})} className="ui-stack">
-        {active === "overview" && <Overview site={site} onChange={load} staff={role === "admin" || role === "manager"} />}
-        {active === "overview" && role === "admin" && hasAccount(site) && <Services site={site.name} />}
-        {active === "domains" && <DomainsTab site={site} onChange={load} admin={role === "admin"} />}
-        {active === "web" && <SiteWebSettings site={site} php={php} onChange={load} admin={role === "admin"} staff={role === "admin" || role === "manager"} />}
-        {active === "files" && <FileManager site={site} path={path} onPath={onPath} />}
-        {active === "logs" && <SiteLogs site={site} admin={role === "admin"} />}
-        {active === "php" && (
-          <>
-            <PHPTab site={site} php={php} onChange={load} />
-            {site.php && <PHPSettingsCard site={site} />}
-            {site.php && <ObjectCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
-            {site.php && <PageCacheSettings site={site} canSize={role === "admin" || role === "manager"} />}
-          </>
-        )}
-        {active === "cron" && <CronSettings site={site} />}
-        {active === "ssh" && <SSHSettings site={site} />}
-        {active === "limits" && <LimitSettings site={site} />}
-        {active === "nginx" && <SnippetSettings site={site} />}
-      </div>
+      {ready ? (
+        <SitePanel site={site.name} groups={groups} active={active} onTab={onTab}>
+          {panel}
+        </SitePanel>
+      ) : (
+        <div className="ui-stack">{panel}</div>
+      )}
     </>
+  );
+}
+
+// SitePanel is the tab navigation with the unsaved-changes guard around it.
+function SitePanel({ site, groups, active, onTab, children }: { site: string; groups: SiteGroup[]; active: SiteTab; onTab: (t: SiteTab) => void; children: ReactNode }) {
+  const u = useUnsaved(site + "/" + active);
+  return (
+    <SiteNav site={site} groups={groups} active={active} onTab={(t) => u.guard(() => onTab(t))}>
+      <div className="ui-stack" {...u.watch}>
+        {children}
+      </div>
+      {u.bar}
+    </SiteNav>
   );
 }
 
@@ -181,111 +284,197 @@ function useAction(onChange: () => Promise<void>) {
 
 type TabProps = { site: Site; onChange: () => Promise<void> };
 
-function Overview({ site, onChange, staff }: TabProps & { staff: boolean }) {
+function Overview({
+  site,
+  groups,
+  onChange,
+  staff,
+  admin,
+  clone,
+  onCloneChange,
+  card,
+  onCard,
+}: TabProps & { groups: SiteGroup[]; staff: boolean; admin: boolean; clone: Clone | null; onCloneChange: () => void; card: OverviewCard | null; onCard: (c: OverviewCard | null) => void }) {
   const [primary, ...aliases] = site.domains;
+  const close = () => onCard(null);
   return (
     <>
-      <Card title="Details">
-        <dl className="ui-facts" aria-label={"Details of " + site.name}>
-          <dt>State</dt>
-          <dd>
-            {site.state === "deleting"
-              ? "Being deleted"
-              : site.state !== "active"
-                ? "Being created"
-                : site.disabled
-                  ? "Disabled: everybody gets the chosen maintenance page, PHP is stopped"
-                  : site.maintenance.enabled
-                    ? "Maintenance: visitors get the maintenance page" +
-                      (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
-                    : "Active"}
-          </dd>
-          <dt>Primary domain</dt>
-          <dd className="ui-mono">{primary}</dd>
-          {aliases.length > 0 && (
-            <>
-              <dt>Other domains</dt>
-              <dd className="ui-mono">{aliases.join(", ")}</dd>
-            </>
-          )}
-          {site.node && (
-            <>
-              <dt>Node.js app</dt>
-              <dd>
-                {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
-                {" on Node.js "}
-                {site.node.version}
-                {site.node.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.python && (
-            <>
-              <dt>Python app</dt>
-              <dd>
-                {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
-                {" on Python "}
-                {site.python.version}
-                {site.python.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.app && (
-            <>
-              <dt>App</dt>
-              <dd>
-                {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
-                {site.app.stopped ? ", stopped" : ""}
-              </dd>
-            </>
-          )}
-          {site.proxy ? (
-            <>
-              <dt>Reverse proxy</dt>
-              <dd>
-                <span className="ui-mono">{site.proxy.target}</span>
-                {site.proxy.insecure ? " (certificate not verified)" : ""}
-              </dd>
-            </>
-          ) : site.redirect ? (
-            <>
-              <dt>Redirect</dt>
-              <dd>
-                <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
-                {site.redirect.keepPath ? ", keeps the path" : ""})
-              </dd>
-            </>
-          ) : (
-            <>
-              <dt>PHP</dt>
-              <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
-            </>
-          )}
-          <dt>HTTPS</dt>
-          <dd>
-            {httpsLabel(site.tls)}
-            {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
-            {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
-          </dd>
-          {hasAccount(site) && (
-            <>
-              <dt>Storage pool</dt>
-              <dd className="ui-mono">{site.pool}</dd>
-            </>
-          )}
-        </dl>
-      </Card>
+      {card === "rename" && site.state !== "deleting" && <RenameCard site={site} onChange={onChange} onClose={close} />}
+      {card === "clone" && staff && canClone(site) && clone?.state !== "copying" && <CloneCard site={site} onClose={close} />}
+      {card === "services" && admin && hasAccount(site) && <Services site={site.name} id={cardId(site.name, "services")} onClose={close} />}
       {site.state === "active" && (
         <>
-          <Card title="Maintenance">
-            <MaintenanceSettings site={site} onChange={onChange} />
-          </Card>
-          <Availability site={site} onChange={onChange} />
-          {staff && hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
-          <DeleteSite site={site} canPark={staff} />
+          <StatusTiles site={site} groups={groups} admin={admin} />
+          <QuickActions site={site} groups={groups} />
         </>
       )}
+      <div className="ui-two">
+        <Card title="Details">
+          <dl className="ui-facts" aria-label={"Details of " + site.name}>
+            <dt>System name</dt>
+            <dd>
+              <code>{site.name}</code>
+              {hasAccount(site) ? " (Linux user, home folder and SSH login)" : ""}
+            </dd>
+            {site.title && (
+              <>
+                <dt>Display name</dt>
+                <dd>{site.title}</dd>
+              </>
+            )}
+            <dt>State</dt>
+            <dd>
+              {site.state === "deleting"
+                ? "Being deleted"
+                : site.state !== "active"
+                  ? "Being created"
+                  : site.disabled
+                    ? "Disabled: everybody gets the chosen maintenance page" + (runtimeWord(site) ? `, ${runtimeWord(site) === "PHP" ? "PHP" : "the app"} is stopped` : "")
+                    : site.maintenance.enabled
+                      ? "Maintenance: visitors get the maintenance page" +
+                        (site.maintenance.allowIps.length > 0 ? ", except " + site.maintenance.allowIps.join(", ") : "")
+                      : "Active"}
+            </dd>
+            <dt>Primary domain</dt>
+            <dd className="ui-mono">{primary}</dd>
+            {aliases.length > 0 && (
+              <>
+                <dt>Other domains</dt>
+                <dd className="ui-mono">{aliases.join(", ")}</dd>
+              </>
+            )}
+            {site.node && (
+              <>
+                <dt>Node.js app</dt>
+                <dd>
+                  {site.node.startKind ? <span className="ui-mono">{startCommand(site.node)}</span> : "No start command yet"}
+                  {" on Node.js "}
+                  {site.node.version}
+                  {site.node.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.python && (
+              <>
+                <dt>Python app</dt>
+                <dd>
+                  {site.python.startKind ? <span className="ui-mono">{pythonCommand(site.python)}</span> : "No start command yet"}
+                  {" on Python "}
+                  {site.python.version}
+                  {site.python.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.app && (
+              <>
+                <dt>App</dt>
+                <dd>
+                  {site.app.program ? <span className="ui-mono">{programCommand(site.app)}</span> : "No program yet"}
+                  {site.app.stopped ? ", stopped" : ""}
+                </dd>
+              </>
+            )}
+            {site.proxy ? (
+              <>
+                <dt>Reverse proxy</dt>
+                <dd>
+                  <span className="ui-mono">{site.proxy.target}</span>
+                  {site.proxy.insecure ? " (certificate not verified)" : ""}
+                </dd>
+              </>
+            ) : site.redirect ? (
+              <>
+                <dt>Redirect</dt>
+                <dd>
+                  <span className="ui-mono">{site.redirect.target}</span> ({site.redirect.status}
+                  {site.redirect.keepPath ? ", keeps the path" : ""})
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt>PHP</dt>
+                <dd>{site.php ? "PHP " + site.php + (site.disabled ? " (stopped)" : "") : "No PHP"}</dd>
+              </>
+            )}
+            <dt>HTTPS</dt>
+            <dd>
+              {httpsLabel(site.tls)}
+              {site.tls.active && site.tls.hsts ? ", HSTS" : ""}
+              {site.tls.active && site.tls.notAfter ? ", valid until " + site.tls.notAfter.slice(0, 10) : ""}
+            </dd>
+            {hasAccount(site) && (
+              <>
+                <dt>Storage pool</dt>
+                <dd className="ui-mono">{site.pool}</dd>
+              </>
+            )}
+          </dl>
+        </Card>
+        {site.state === "active" && (
+          <Card title="Maintenance" actions={<AppliesAtOnce />}>
+            <MaintenanceSettings site={site} onChange={onChange} />
+          </Card>
+        )}
+      </div>
+      {clone && <CloneStatusCard site={site} clone={clone} staff={staff} onRefresh={onCloneChange} />}
+      {/* Disabling and deleting are for administrators and managers (ADR-0035). */}
+      {site.state === "active" && staff && (
+        <section className="ui-danger-zone" aria-labelledby={`danger-${site.name}`}>
+          <h2 id={`danger-${site.name}`}>Danger zone</h2>
+          <Availability site={site} onChange={onChange} />
+          {hasAccount(site) && ["redirect", "proxy"].includes(siteType(site)) && <RemoveAccountCard site={site} onChange={onChange} />}
+          <DeleteSite site={site} canPark />
+        </section>
+      )}
     </>
+  );
+}
+
+// RenameCard sets the display name (ADR-0072). The system name stays, and
+// the card says so with the name in code style.
+function RenameCard({ site, onChange, onClose }: TabProps & { onClose: () => void }) {
+  const [title, setTitleText] = useState(site.title ?? "");
+  const { busy, act, result } = useAction(onChange);
+  const current = site.title ?? "";
+  const next = title.trim();
+
+  useEffect(() => setTitleText(site.title ?? ""), [site.title]);
+
+  function save(e: FormEvent, value: string) {
+    e.preventDefault();
+    void act(async () => {
+      await setTitle(site.name, value);
+      return value ? `The site is now shown as ${value}.` : "The display name is removed.";
+    });
+  }
+
+  return (
+    <Card title="Rename" id={cardId(site.name, "rename")} actions={<CloseButton onClose={onClose} />}>
+      <form className="ui-stack" onSubmit={(e) => save(e, next)} noValidate>
+        <Field
+          label="Display name"
+          hint={
+            <>
+              Shown in the panel instead of the system name, up to {maxTitleLength} characters. The system name <code>{site.name}</code>
+              {hasAccount(site) ? " stays: Linux user, home folder, SSH login and API keep it." : " stays in the API."}
+            </>
+          }
+        >
+          <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} placeholder={site.name} autoComplete="off" />
+        </Field>
+        {result}
+        <div className="ui-row">
+          <Button type="submit" variant="primary" disabled={busy || next === current}>
+            Save display name
+          </Button>
+          {current && (
+            <Button type="button" variant="secondary" disabled={busy} onClick={(e) => save(e, "")}>
+              Remove display name
+            </Button>
+          )}
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -376,7 +565,9 @@ function Availability({ site, onChange }: TabProps) {
           </>
         ) : (
           <>
-            <p className="ui-hint">A disabled site shows a maintenance page to everybody and its PHP is stopped.</p>
+            <p className="ui-hint">
+              A disabled site shows a maintenance page to everybody{runtimeWord(site) ? ` and its ${runtimeWord(site)} is stopped` : ""}.
+            </p>
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => setConfirm(true)}>
                 Disable site
@@ -517,27 +708,21 @@ function DeleteSite({ site, canPark }: { site: Site; canPark: boolean }) {
   );
 }
 
-function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
-  const [domains, setDomainsText] = useState(site.domains.join("\n"));
-  const d = useAction(onChange);
-  const h = useAction(onChange);
+function DomainsTab({ site, onChange }: TabProps) {
+  return (
+    <>
+      <PendingDomainsNotice site={site} onChange={onChange} />
+      <DomainsCard site={site} onChange={onChange} />
+      {siteType(site) !== "redirect" && <WWWCard site={site} onChange={onChange} onDomains={() => undefined} />}
+    </>
+  );
+}
 
-  function saveDomains(e: FormEvent) {
-    e.preventDefault();
-    const list = parseDomains(domains);
-    const problem = domainsProblem(list);
-    if (problem) {
-      d.setError(problem);
-      d.setDone("");
-      return;
-    }
-    void d.act(async () => {
-      await setDomains(site.name, list);
-      return site.tls.enabled
-        ? "Domains saved. The site is served over HTTP until a certificate for the new domains is there."
-        : "Domains saved.";
-    });
-  }
+function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
+  const h = useAction(onChange);
+  // Turning HTTPS off and HSTS on are asked again: the first serves the
+  // site over plain HTTP, the second sticks in browsers for a long time.
+  const [ask, setAsk] = useState<"tls-off" | "hsts-on" | null>(null);
 
   const toggleTLS = (on: boolean) =>
     h.act(async () => {
@@ -554,41 +739,82 @@ function DomainsTab({ site, onChange, admin }: TabProps & { admin: boolean }) {
 
   return (
     <>
-      <Card title="Domains">
-        <form className="ui-stack" onSubmit={saveDomains} noValidate>
-          <Field label={`Domains of ${site.name}`} hint="One per line. The first one is the primary domain.">
-            <textarea className="ui-input ui-textarea" value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={4} autoComplete="off" spellCheck={false} />
-          </Field>
-          {d.result}
-          <div className="ui-row">
-            <Button type="submit" variant="primary" disabled={d.busy}>
-              Save domains
-            </Button>
-          </div>
-        </form>
-      </Card>
-      <Card title="HTTPS">
+      <Card title="HTTPS" actions={<AppliesAtOnce />}>
         <div className="ui-stack">
-          <label className="ui-check">
-            <input type="checkbox" checked={site.tls.enabled} disabled={h.busy} onChange={(e) => void toggleTLS(e.target.checked)} />
+          <Switch
+            checked={site.tls.enabled}
+            disabled={h.busy || ask !== null || !staff}
+            hint={staff ? "Turning it off asks first." : "An administrator or manager turns HTTPS on or off."}
+            onChange={(on) => (on ? void toggleTLS(true) : setAsk("tls-off"))}
+          >
             {site.tls.source === "custom" ? "HTTPS with the own certificate" : "HTTPS with a Let's Encrypt certificate"}
-          </label>
-          <label className="ui-check">
-            <input type="checkbox" checked={site.tls.hsts} disabled={h.busy} onChange={(e) => void toggleHSTS(e.target.checked)} />
+          </Switch>
+          <Switch
+            checked={site.tls.hsts}
+            disabled={h.busy || ask !== null}
+            hint="Turning it on asks first: browsers remember it for a year."
+            onChange={(on) => (on ? setAsk("hsts-on") : void toggleHSTS(false))}
+          >
             HSTS: browsers use only HTTPS for this site
-          </label>
+          </Switch>
+          {ask === "tls-off" && (
+            <Notice tone="warn" title="Turn HTTPS off?">
+              <p className="ui-flush">
+                The site is then served over plain HTTP: passwords and cookies travel unencrypted. Browsers that know HSTS for it refuse to open
+                it.
+              </p>
+              <div className="ui-row">
+                <Button variant="danger" disabled={h.busy} onClick={() => void toggleTLS(false).finally(() => setAsk(null))}>
+                  Turn HTTPS off
+                </Button>
+                <Button disabled={h.busy} onClick={() => setAsk(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </Notice>
+          )}
+          {ask === "hsts-on" && (
+            <Notice tone="warn" title="Turn HSTS on?">
+              <p className="ui-flush">
+                Browsers that visit the site remember for a year to use only HTTPS, even if HTTPS is turned off here later. Turn it on once the
+                certificate works for every domain of the site.
+              </p>
+              <div className="ui-row">
+                <Button variant="primary" disabled={h.busy} onClick={() => void toggleHSTS(true).finally(() => setAsk(null))}>
+                  Turn HSTS on
+                </Button>
+                <Button disabled={h.busy} onClick={() => setAsk(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </Notice>
+          )}
           {site.tls.hsts && !site.tls.active && <p className="ui-hint">HSTS is sent only while the site is served over HTTPS.</p>}
           {h.result}
         </div>
       </Card>
-      <SecurityHeadersCard site={site} />
-      <RealIPCard site={site} admin={admin} />
-      <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
+      <ReadOnly when={!staff}>
+        <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
+      </ReadOnly>
     </>
   );
 }
 
-function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null }) {
+// ReadOnly shows settings a role may see but not change: a note on top and
+// every control below it switched off. The server refuses the change anyway.
+function ReadOnly({ when, who = "An administrator or manager", children }: { when: boolean; who?: string; children: ReactNode }) {
+  if (!when) return <>{children}</>;
+  return (
+    <>
+      <Notice tone="info" title={`${who} changes these settings.`} />
+      <fieldset className="ui-fieldset ui-stack" disabled aria-label="Read only">
+        {children}
+      </fieldset>
+    </>
+  );
+}
+
+function PHPTab({ site, php, onChange, staff }: TabProps & { php: PHPVersions | null; staff: boolean }) {
   const [version, setVersion] = useState(site.php);
   const v = useAction(onChange);
   const p = useAction(onChange);
@@ -632,16 +858,16 @@ function PHPTab({ site, php, onChange }: TabProps & { php: PHPVersions | null })
         </form>
       </Card>
       {site.php && (
-        <Card title="Programs from PHP">
+        <Card title="Programs from PHP" actions={<AppliesAtOnce />}>
           <div className="ui-stack">
-            <label className="ui-check">
-              <input type="checkbox" checked={site.phpPrograms} disabled={p.busy} onChange={(e) => void togglePrograms(e.target.checked)} />
+            <Switch
+              checked={site.phpPrograms}
+              disabled={p.busy || !staff}
+              onChange={(on) => void togglePrograms(on)}
+              hint={(staff ? "" : "An administrator or manager changes this. ") + "Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected."}
+            >
               Allow PHP to start programs (exec, system, shell_exec, proc_open, popen)
-            </label>
-            <p className="ui-hint">
-              Off by default: a hacked plugin then cannot run commands on the server. Turn it on only for software that needs it, for
-              example image optimizers or PDF tools. WP-CLI, Composer and cron jobs are not affected.
-            </p>
+            </Switch>
             {p.result}
           </div>
         </Card>
@@ -660,6 +886,7 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [editing, setEditing] = useState(false);
 
   async function save(enabled: boolean, e?: FormEvent) {
     e?.preventDefault();
@@ -706,36 +933,49 @@ function MaintenanceSettings({ site, onChange }: { site: Site; onChange: () => P
     }
   }
 
+  const rt = runtimeWord(site);
+  const keeps = rt === "PHP" ? " PHP keeps running." : rt === "app" ? " The app keeps running." : "";
+
+  const pageName = choices.find((c) => c.id === m.page)?.name ?? m.page;
+  const allowed = m.allowIps.length === 0 ? "none" : m.allowIps.length <= 2 ? m.allowIps.join(", ") : `${m.allowIps.length} addresses`;
+
   return (
-    <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
-      <fieldset className="ui-fieldset ui-stack">
-        <legend className="ui-sr-only">Maintenance of {site.name}</legend>
+    <div className="ui-stack">
+      <Switch checked={m.enabled} disabled={busy} onChange={(on) => void save(on)} hint={(m.enabled ? "On: visitors get the page with “503 Service Unavailable”." : "Visitors get the page with “503 Service Unavailable”; the allowed addresses still see the site.") + keeps}>
+        Maintenance mode
+      </Switch>
+      {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
+      {!editing ? (
         <p className="ui-hint ui-flush">
-          {m.enabled
-            ? "Maintenance is on: visitors get the page with “503 Service Unavailable”. PHP keeps running."
-            : "While maintenance is on, visitors get the page with “503 Service Unavailable”. The allowed addresses see the site as usual, so you can work on it. PHP keeps running."}
+          Page: {pageName} · Allowed: {allowed} ·{" "}
+          <button type="button" className="ui-link-btn" onClick={() => setEditing(true)}>
+            Change…
+          </button>
         </p>
-        {site.disabled && <Notice tone="warn" title="The site is disabled. Disabled wins: everybody gets the page chosen under Availability until it is enabled." />}
-        <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
-        <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
-          <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
-        </Field>
-        <div className="ui-row">
-          <Button disabled={busy} onClick={() => void addMine()}>
-            Add my current IP
-          </Button>
-          {m.enabled && (
-            <Button variant="primary" type="submit" disabled={busy}>
-              Save maintenance
-            </Button>
-          )}
-          <Button variant={m.enabled ? "secondary" : "primary"} disabled={busy} onClick={() => void save(!m.enabled)}>
-            {m.enabled ? "End maintenance" : "Start maintenance"}
-          </Button>
-        </div>
-        {error && <Notice tone="err" title={error} />}
-        {done && <Notice tone="ok" title={done} />}
-      </fieldset>
-    </form>
+      ) : (
+        <form className="ui-stack" onSubmit={(e) => void save(m.enabled, e)} noValidate>
+          <fieldset className="ui-fieldset ui-stack">
+            <legend className="ui-sr-only">Maintenance of {site.name}</legend>
+            <PageSelect label="Maintenance page" value={page} choices={choices} onChange={setPage} />
+            <Field label="Allowed addresses" hint="IPv4 or IPv6 addresses or ranges like 10.0.0.0/8, one per line, at most 20.">
+              <textarea className="ui-input ui-textarea" value={allow} onChange={(e) => setAllow(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
+            </Field>
+            <div className="ui-row">
+              <Button disabled={busy} onClick={() => void addMine()}>
+                Add my current IP
+              </Button>
+              <Button variant="primary" type="submit" disabled={busy}>
+                Save maintenance
+              </Button>
+              <Button disabled={busy} onClick={() => setEditing(false)}>
+                Close
+              </Button>
+            </div>
+          </fieldset>
+        </form>
+      )}
+      {error && <Notice tone="err" title={error} />}
+      {done && <Notice tone="ok" title={done} />}
+    </div>
   );
 }

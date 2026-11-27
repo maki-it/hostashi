@@ -19,7 +19,10 @@ import (
 )
 
 type siteJSON struct {
-	Name  string `json:"name"`
+	Name string `json:"name"`
+	// Title is the display name (ADR-0072), "" for none; Name stays the
+	// system name (Linux user, home folder, API path).
+	Title string `json:"title"`
 	Pool  string `json:"pool"`
 	State string `json:"state"`
 	Type  string `json:"type"` // static, php, node, app, proxy, redirect (ADR-0054), python (ADR-0061)
@@ -47,7 +50,15 @@ type siteJSON struct {
 	// Maintenance: other addresses get the page with 503 (ADR-0027).
 	Maintenance maintenanceJSON `json:"maintenance"`
 	Domains     []string        `json:"domains"` // the first one is the primary domain
-	TLS         tlsJSON         `json:"tls"`
+	// RedirectDomains stay on the certificate and answer with 301 to the
+	// primary domain (ADR-0068).
+	RedirectDomains []string `json:"redirectDomains"`
+	// PendingDomains is a domain change waiting for its certificate, null
+	// for none (ADR-0068).
+	PendingDomains *pendingDomainsJSON `json:"pendingDomains"`
+	TLS            tlsJSON             `json:"tls"`
+	// WWW is the www redirect between d and www.d (ADR-0065).
+	WWW wwwJSON `json:"www"`
 	// PHPPrograms: the site's PHP may start programs (ADR-0033).
 	PHPPrograms bool      `json:"phpPrograms"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -164,6 +175,20 @@ func timeOrNil(t time.Time) *time.Time {
 
 type siteListJSON struct {
 	Sites []siteJSON `json:"sites"`
+	// Marks are shown beside a site in the list, by site name; a site
+	// with none is left out.
+	Marks map[string]siteMarksJSON `json:"marks"`
+}
+
+type siteMarksJSON struct {
+	// OpenFindings counts the files the virus scan flagged that nobody
+	// acted on yet (ADR-0064).
+	OpenFindings int `json:"openFindings"`
+	// CloneOf is the site this one was copied from (ADR-0070), "" for
+	// none or when that site is gone.
+	CloneOf string `json:"cloneOf"`
+	// Staging: the copy is a staging site of CloneOf.
+	Staging bool `json:"staging"`
 }
 
 // enabledRequest switches one setting of a site on or off.
@@ -183,7 +208,9 @@ type phpVersionsJSON struct {
 }
 
 type siteCreateRequest struct {
-	Name    string   `json:"name"`
+	Name string `json:"name"`
+	// Title is the display name (ADR-0072), optional.
+	Title   string   `json:"title"`
 	Pool    string   `json:"pool"`
 	PHP     string   `json:"php"`
 	Domains []string `json:"domains"`
@@ -201,10 +228,43 @@ type siteCreateRequest struct {
 	Node     *nodeAppJSON    `json:"node"`
 	App      *programAppJSON `json:"app"`
 	Python   *pythonAppJSON  `json:"python"`
+	// Profile is the application profile of a static or PHP site
+	// (ADR-0069, GET /api/v1/profiles); left out, the default of the type.
+	Profile string `json:"profile"`
 }
 
 type siteDomainsRequest struct {
+	// Domains are the served domains, the primary one first.
 	Domains []string `json:"domains"`
+	// RedirectDomains answer with 301 to the primary domain (ADR-0068);
+	// left out, the current ones stay except those now served.
+	RedirectDomains *[]string `json:"redirectDomains,omitempty"`
+	// WaitForCertificate (default true): on a site live on HTTPS with
+	// Let's Encrypt, new names wait as pending until their certificate is
+	// there (202). false changes at once; the site is served over HTTP
+	// until the new certificate is there.
+	WaitForCertificate *bool `json:"waitForCertificate,omitempty"`
+}
+
+// pendingDomainsJSON is a domain change that waits for its certificate
+// (ADR-0068).
+type pendingDomainsJSON struct {
+	Domains         []string   `json:"domains"`
+	RedirectDomains []string   `json:"redirectDomains"`
+	RequestedAt     time.Time  `json:"requestedAt"`
+	Error           string     `json:"error"`
+	FailedAt        *time.Time `json:"failedAt"`
+}
+
+func toPendingDomainsJSON(s store.Site) *pendingDomainsJSON {
+	c := s.PendingDomains
+	if c == nil {
+		return nil
+	}
+
+	return &pendingDomainsJSON{
+		Domains: c.Domains, RedirectDomains: c.Redirect, RequestedAt: c.RequestedAt, Error: c.Error, FailedAt: timeOrNil(c.FailedAt),
+	}
 }
 
 type sitePHPRequest struct {
@@ -234,10 +294,57 @@ type siteParkRequest struct {
 	Confirm string   `json:"confirm"`
 }
 
+// wwwJSON is the www redirect of a site (ADR-0065).
+type wwwJSON struct {
+	// Mode is "off", "to-www" or "to-non-www".
+	Mode string `json:"mode"`
+	// Pairs are the bare and www names that are both domains of the site;
+	// the mode acts on these only. A redirect site never uses the mode.
+	Pairs []wwwPairJSON `json:"pairs"`
+	// Missing are the names whose adding would make a further pair.
+	Missing []string `json:"missing"`
+}
+
+type wwwPairJSON struct {
+	Bare string `json:"bare"`
+	WWW  string `json:"www"`
+}
+
+// titleRequest sets the display name of a site (ADR-0072).
+type titleRequest struct {
+	Title *string `json:"title"` // at most 64 characters, "" clears it
+}
+
+type wwwRequest struct {
+	Mode *string `json:"mode"` // "off", "to-www" or "to-non-www"
+}
+
+func toWWWJSON(s store.Site) wwwJSON {
+	out := wwwJSON{Mode: "off", Pairs: []wwwPairJSON{}, Missing: agentapi.WWWMissing(s.Domains)}
+	if s.WWWRedirect != agentapi.WWWRedirectOff {
+		out.Mode = s.WWWRedirect
+	}
+
+	for _, p := range agentapi.WWWPairs(s.Domains) {
+		out.Pairs = append(out.Pairs, wwwPairJSON(p))
+	}
+
+	if out.Missing == nil {
+		out.Missing = []string{}
+	}
+
+	return out
+}
+
 func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	d := s.Domains
 	if d == nil {
 		d = []string{}
+	}
+
+	rd := s.RedirectDomains
+	if rd == nil {
+		rd = []string{}
 	}
 
 	td := s.TLSDomains
@@ -246,7 +353,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 	}
 
 	return siteJSON{
-		Name: s.Name, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, Maintenance: toMaintenanceJSON(s),
+		Name: s.Name, Title: s.Title, Pool: s.Pool, State: s.State, Type: s.Type, Web: toWebJSON(s), Account: s.Account, Redirect: toRedirectJSON(s), Proxy: toProxyJSON(s), Node: toNodeAppJSON(s), App: toProgramAppJSON(s), Python: toPythonAppJSON(s), PHP: s.PHP, Disabled: s.Disabled, DisabledPage: hosting.DisabledPageID(s), Domains: d, RedirectDomains: rd, PendingDomains: toPendingDomainsJSON(s), Maintenance: toMaintenanceJSON(s), WWW: toWWWJSON(s),
 		TLS: tlsJSON{
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
@@ -301,6 +408,8 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "app_env_unavailable", "environment variables are not available on this panel")
 	case errors.Is(err, hosting.ErrSiteType):
 		writeError(w, http.StatusConflict, "wrong_site_type", "not possible for this type of site")
+	case errors.Is(err, hosting.ErrProxyPrivate):
+		writeError(w, http.StatusForbidden, "private_target", "a target in a private network can only be set by an admin or manager")
 	case errors.As(err, &ae):
 		log.Warn(what+": agent refused", "code", ae.Code, "message", ae.Message)
 
@@ -342,14 +451,29 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
+		marks, err := svc.ListMarks(r.Context(), sites)
+		if err != nil {
+			siteFail(log, w, err, "list sites")
+
+			return
+		}
+
 		out := make([]siteJSON, 0, len(sites))
+		outMarks := map[string]siteMarksJSON{}
+
 		for _, s := range sites {
-			if sees == nil || sees(s.Name) {
-				out = append(out, toSiteJSON(svc, s))
+			if sees != nil && !sees(s.Name) {
+				continue
+			}
+
+			out = append(out, toSiteJSON(svc, s))
+
+			if m, ok := marks[s.ID]; ok {
+				outMarks[s.Name] = siteMarksJSON{OpenFindings: m.OpenFindings, CloneOf: m.CloneOf, Staging: m.Staging}
 			}
 		}
 
-		writeJSON(w, http.StatusOK, siteListJSON{Sites: out})
+		writeJSON(w, http.StatusOK, siteListJSON{Sites: out, Marks: outMarks})
 	}))
 
 	mux.Op("GET /api/v1/sites/{name}", openapi.Operation{
@@ -456,7 +580,8 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		defer cancel()
 
 		s, err := svc.Create(ctx, p.User.ID, hosting.CreateRequest{
-			Name: in.Name, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
+			Name: in.Name, Title: in.Title, Pool: in.Pool, PHP: in.PHP, Domains: in.Domains, TLS: in.TLS, HSTS: in.HSTS, Headers: in.Headers, Redirect: redirect, Proxy: proxy, App: app,
+			Profile: in.Profile,
 		})
 		if err != nil {
 			headersFail(log, w, err, "create site")
@@ -499,7 +624,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.SetProxy(ctx, p.User.ID, r.PathValue("name"), store.SiteProxy{Target: in.Target, TargetHost: in.TargetHost, Insecure: in.Insecure})
+		private := authz.Allowed(authz.Role(p.User.Role), "sites.proxy.private:write")
+
+		s, err := svc.SetProxy(ctx, p.User.ID, r.PathValue("name"), store.SiteProxy{Target: in.Target, TargetHost: in.TargetHost, Insecure: in.Insecure}, private)
 		if err != nil {
 			siteFail(log, w, err, "set proxy")
 
@@ -510,7 +637,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	}))
 
 	mux.Op("PUT /api/v1/sites/{name}/domains", openapi.Operation{
-		ID: "setSiteDomains", Tag: "sites", Summary: "Set the site's domains", In: siteDomainsRequest{}, Out: siteJSON{},
+		ID: "setSiteDomains", Tag: "sites",
+		Summary: "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068)",
+		In:      siteDomainsRequest{}, Out: siteJSON{}, AlsoStatus: []int{http.StatusAccepted},
 	}, a.allow("sites.domains:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in siteDomainsRequest
 		if !decodeJSON(w, r, &in) {
@@ -520,9 +649,52 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		s, err := svc.SetDomains(ctx, p.User.ID, r.PathValue("name"), in.Domains)
+		req := hosting.DomainsRequest{Domains: in.Domains, KeepRedirect: in.RedirectDomains == nil}
+		if in.RedirectDomains != nil {
+			req.RedirectDomains = *in.RedirectDomains
+		}
+
+		if in.WaitForCertificate != nil && !*in.WaitForCertificate {
+			req.Now = true
+		}
+
+		s, pending, err := svc.ChangeDomains(ctx, p.User.ID, r.PathValue("name"), req)
 		if err != nil {
 			siteFail(log, w, err, "set domains")
+
+			return
+		}
+
+		status := http.StatusOK
+		if pending != nil {
+			status = http.StatusAccepted
+		}
+
+		writeJSON(w, status, toSiteJSON(svc, s))
+	}))
+
+	mux.Op("DELETE /api/v1/sites/{name}/domains/pending", openapi.Operation{
+		ID: "cancelSiteDomainChange", Tag: "sites", Summary: "Cancel the site's domain change that waits for its certificate (ADR-0068)", Out: siteJSON{},
+	}, a.allow("sites.domains:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		name := r.PathValue("name")
+
+		if err := svc.CancelDomainChange(r.Context(), p.User.ID, name); err != nil {
+			if errors.Is(err, hosting.ErrNotFound) {
+				if _, gerr := svc.Get(r.Context(), name); gerr == nil {
+					writeError(w, http.StatusNotFound, "no_pending_change", "the site has no pending domain change")
+
+					return
+				}
+			}
+
+			siteFail(log, w, err, "cancel domain change")
+
+			return
+		}
+
+		s, err := svc.Get(r.Context(), name)
+		if err != nil {
+			siteFail(log, w, err, "get site")
 
 			return
 		}
@@ -619,6 +791,71 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		}
 
 		writeJSON(w, code, toSiteJSON(svc, s))
+	}))
+
+	// The www redirect sends one name of each pair of d and www.d to the
+	// other (ADR-0065).
+	mux.Op("PUT /api/v1/sites/{name}/www", openapi.Operation{
+		ID: "setSiteWWWRedirect", Tag: "sites", Summary: "Set the redirect between example.com and www.example.com", In: wwwRequest{}, Out: siteJSON{},
+	}, a.allow("sites.www:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in wwwRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Mode == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"mode" is required`)
+
+			return
+		}
+
+		mode := *in.Mode
+		switch mode {
+		case "off":
+			mode = agentapi.WWWRedirectOff
+		case agentapi.WWWRedirectToWWW, agentapi.WWWRedirectToNonWWW:
+		default:
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"mode" must be "off", "to-www" or "to-non-www"`)
+
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		s, err := svc.SetWWWRedirect(ctx, p.User.ID, r.PathValue("name"), mode)
+		if err != nil {
+			siteFail(log, w, err, "set www redirect")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+	}))
+
+	// The display name changes nothing on the server (ADR-0072).
+	mux.Op("PUT /api/v1/sites/{name}/title", openapi.Operation{
+		ID: "setSiteTitle", Tag: "sites", Summary: "Set the display name of a site (empty clears it); the system name stays", In: titleRequest{}, Out: siteJSON{},
+	}, a.allow("sites.title:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		var in titleRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if in.Title == nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", `"title" is required`)
+
+			return
+		}
+
+		s, err := svc.SetTitle(r.Context(), p.User.ID, r.PathValue("name"), *in.Title)
+		if err != nil {
+			siteFail(log, w, err, "set title")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
 	}))
 
 	// HSTS can be set before HTTPS is active; it is sent only over HTTPS.
@@ -755,15 +992,9 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 	mux.Op("POST /api/v1/sites/{name}/park", openapi.Operation{
 		ID: "deleteAndParkSite", Tag: "sites", Summary: "Delete a site and park its chosen domains", In: siteParkRequest{},
 	}, a.allow("sites:park", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-		if !p.Allows(authz.ScopeOf("parked:write")) {
-			writeError(w, http.StatusForbidden, "insufficient_scope", "the token lacks the scope "+authz.ScopeOf("parked:write"))
-
-			return
-		}
-
-		if !authz.Allowed(authz.Role(p.User.Role), "parked:write") {
-			writeError(w, http.StatusForbidden, "forbidden", "your role does not allow this")
-
+		// Parked domains are server-wide: a token limited to some sites
+		// may not make them.
+		if !alsoAllowed(w, p, "parked:write") {
 			return
 		}
 

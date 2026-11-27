@@ -80,6 +80,14 @@ type WebSite struct {
 	// HSTS adds Strict-Transport-Security to HTTPS responses. Without TLS
 	// it has no effect.
 	HSTS bool `json:"hsts,omitempty"`
+	// WWWRedirect sends one name of each www pair of Domains to the other
+	// with 301 (ADR-0065): WWWRedirectToWWW or WWWRedirectToNonWWW; empty
+	// serves every domain. A redirect site has none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
+	// RedirectDomains are names of Domains (never the first) that answer
+	// with 301 to the first name the site serves (ADR-0068). They stay on
+	// the certificate. A redirect site has none.
+	RedirectDomains []string `json:"redirectDomains,omitempty"`
 	// Disabled answers every request of the site with 503 instead of
 	// serving its files. ACME challenges and HTTPS stay; PHP must be empty.
 	Disabled bool `json:"disabled,omitempty"`
@@ -111,10 +119,17 @@ type WebSite struct {
 	AssetCacheExts    []string `json:"assetCacheExts,omitempty"`
 	// Headers are the site's security headers (ADR-0056); nil sends none.
 	Headers *WebHeaders `json:"headers,omitempty"`
+	// Hardening are the site's hardening rules (ADR-0017, ADR-0069); nil
+	// keeps only the fixed ones. Static and PHP sites only.
+	Hardening *WebHardening `json:"hardening,omitempty"`
 	// RealIP takes the client address from a header of trusted proxies
 	// (ADR-0059); nil trusts nobody. The agent also refuses ranges that
 	// contain one of its own addresses (CheckOwn).
 	RealIP *WebRealIP `json:"realIp,omitempty"`
+	// Access is the site's IP rule and password protection (ADR-0066);
+	// nil lets everybody in. The agent also refuses bypass addresses that
+	// contain one of its own addresses (CheckOwn).
+	Access *WebAccess `json:"access,omitempty"`
 	// Redirect makes the site a redirect (ADR-0054): it has no Linux
 	// account, and nothing that needs files or PHP may be set.
 	Redirect *WebRedirect `json:"redirect,omitempty"`
@@ -403,8 +418,24 @@ func (r WebApplyRequest) Validate() error {
 			}
 		}
 
+		if h := s.Hardening; h != nil {
+			if s.accountless() || s.App != nil {
+				return fmt.Errorf("site %q: hardening rules are for static and PHP sites", s.User)
+			}
+
+			if err := h.Validate(s.PHP != ""); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
 		if ri := s.RealIP; ri != nil {
 			if err := ri.Validate(); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
+		if ac := s.Access; ac != nil {
+			if err := ac.Validate(); err != nil {
 				return fmt.Errorf("site %q: %w", s.User, err)
 			}
 		}
@@ -417,6 +448,22 @@ func (r WebApplyRequest) Validate() error {
 
 		if err := ValidateWebDir(s.WebDir); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := ValidateWWWRedirect(s.WWWRedirect); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if s.WWWRedirect != WWWRedirectOff && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
+		}
+
+		if err := ValidateRedirectDomains(s.Domains, s.RedirectDomains); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if len(s.RedirectDomains) > 0 && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no redirect domains", s.User)
 		}
 
 		if err := ValidateAssetCache(s.AssetCacheSeconds, s.AssetCacheExts); err != nil {

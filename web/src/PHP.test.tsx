@@ -38,7 +38,10 @@ describe("PHPPage", () => {
     render(<PHPPage today={today} />);
 
     const row = (v: string) => within(screen.getByRole("row", { name: new RegExp("^PHP " + v.replace(".", "\\.") + "(\\D|$)") }));
-    expect(await screen.findByRole("heading", { name: "PHP versions" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Runtimes" })).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Runtimes" });
+    expect(within(tabs).getByRole("link", { name: "PHP" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Node.js" })).toHaveAttribute("href", "#/node");
     await screen.findByRole("columnheader", { name: "Sites" });
     expect(row("8.4").getByText("Installed")).toBeInTheDocument();
     expect(row("8.4").getByText("Distribution")).toBeInTheDocument();

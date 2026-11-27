@@ -62,6 +62,10 @@ type Config struct {
 	// DBToolPort is the HTTPS port of the web database tool (ADR-0038),
 	// served for the panel's host name; 0 turns the tool off.
 	DBToolPort int
+
+	// PagesDir is where the agent keeps the maintenance and parking pages,
+	// read for previews; empty means pages.DefaultDir.
+	PagesDir string
 }
 
 // DefaultChallengeDir is where nginx looks for HTTP-01 challenge files
@@ -127,9 +131,17 @@ type Deps struct {
 	// Firewall is the panel's part of the firewall (ADR-0034); nil
 	// disables its routes. Needs Auth and Settings.
 	Firewall Firewall
+	// Fail2ban shows and lifts fail2ban's bans (ADR-0078); nil disables
+	// its routes. Needs Auth and Settings.
+	Fail2ban Fail2ban
 	// Pools lists the storage pools (ADR-0016); nil disables its route.
 	// Needs Auth.
 	Pools Pools
+	// PoolAdmin and PoolSites rename pools and pick the default one
+	// (ADR-0016 addendum 2); nil disables those routes. Need Auth, Pools
+	// and Settings.
+	PoolAdmin PoolAdmin
+	PoolSites PoolSites
 	// PHP installs more PHP versions (ADR-0036); nil disables its routes.
 	// Needs Auth and Settings.
 	PHP PHPInstaller
@@ -168,6 +180,9 @@ type Deps struct {
 	// Monitor serves service management and the dashboard (ADR-0052); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
 	Monitor ServerMonitor
+	// Usage serves the resource usage per site (ADR-0063); nil disables
+	// its routes. Needs Sites.
+	Usage SiteUsage
 
 	// System serves the time zone, hostname and reboot (ADR-0060); nil
 	// disables their routes. Needs Auth and Settings (for the audit log).
@@ -244,14 +259,24 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPagePreview(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, newPreviews(cfg.PagesDir), log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerCron(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerGit(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDeploys(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerScans(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerWebhook(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSSH(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerSnippets(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPHPSettings(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerHeaders(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerProfiles(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerWordPress(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerClones(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerRealIP(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerAccess(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPageCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerPermissions(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerLimits(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerObjectCache(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 
@@ -266,15 +291,21 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Backups != nil {
 			var (
-				dbs  SiteDatabases
-				jobs DatabaseJobs
+				dbs   SiteDatabases
+				jobs  DatabaseJobs
+				sites PanelSites
+				aud   auditor
 			)
 
 			if deps.Sites != nil {
-				dbs, jobs = deps.Sites.Databases, deps.Sites
+				dbs, jobs, sites = deps.Sites.Databases, deps.Sites, deps.Sites.List
 			}
 
-			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, jobs, log)
+			if deps.Settings != nil {
+				aud = deps.Settings
+			}
+
+			registerBackups(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Backups, dbs, jobs, sites, aud, log)
 		}
 
 		if deps.CloudPanel != nil {
@@ -291,6 +322,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Firewall != nil && deps.Settings != nil {
 			registerFirewall(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Firewall, deps.Settings, log)
+		}
+
+		if deps.Fail2ban != nil && deps.Settings != nil {
+			registerFail2ban(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Fail2ban, deps.Settings, log)
 		}
 
 		if deps.PHP != nil && deps.Settings != nil {
@@ -328,12 +363,16 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Pools != nil {
 			registerPools(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, log)
+
+			if deps.PoolAdmin != nil && deps.PoolSites != nil && deps.Settings != nil {
+				registerPoolAdmin(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Pools, deps.PoolAdmin, deps.PoolSites, deps.Settings, log)
+			}
 		}
 
 		if deps.Doctor != nil {
 			var panel []PanelChecks
 			if deps.Sites != nil {
-				panel = append(panel, deps.Sites.DBServerDoctor, deps.Sites.DatabaseDoctor)
+				panel = append(panel, deps.Sites.DBServerDoctor, deps.Sites.DatabaseDoctor, deps.Sites.MalwareDoctor, deps.Sites.PanelTLSDoctor)
 
 				if deps.PGClient != nil {
 					panel = append(panel, pgClientCheck(deps.Sites.DBServerList, deps.PGClient))
@@ -349,6 +388,10 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 
 		if deps.Monitor != nil && deps.Settings != nil {
 			registerServices(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Monitor, deps.Settings, log)
+		}
+
+		if deps.Usage != nil && deps.Sites != nil {
+			registerUsage(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Usage, hostingSiteCPU(deps.Sites), log)
 		}
 
 		if deps.System != nil && deps.Settings != nil {
@@ -531,7 +574,10 @@ func Run(ctx context.Context, cfg Config) error {
 		Settings:    st,
 		Doctor:      RPCDoctor(client),
 		Pools:       RPCPools(client),
+		PoolAdmin:   RPCPoolAdmin{C: client},
+		PoolSites:   st,
 		Firewall:    RPCFirewall{C: client},
+		Fail2ban:    RPCFail2ban{C: client},
 		PHP:         RPCPHPInstaller{C: client},
 		PGClient:    RPCPGClient{C: client},
 		Node:        RPCNodeInstaller{C: client},
@@ -551,6 +597,11 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), cfg.Log)
 	deps.CloudPanel.Connect(siteCreator(deps.Sites, cfg.Log), RPCCloudPanelImports{C: client})
 	deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(deps.Pools))
+	deps.Sites.ResolveDefaultPool(func(ctx context.Context) (string, error) {
+		pools, err := deps.Pools(ctx)
+
+		return DefaultPoolOf(pools), err
+	})
 	deps.CloudPanel.EnableLoads(ctx, deps.Sites, 0)
 	deps.CloudPanel.EnableCutover(deps.Sites, resolvConf("/etc/resolv.conf"), serverAddrs(client))
 
@@ -578,9 +629,16 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableObjectCache(hosting.RPCAgent{C: client})
 	deps.Sites.EnableApps(hosting.RPCAgent{C: client})
 	deps.Sites.EnableAppEnv(box)
+	deps.Sites.EnableGit(box)
+	deps.Sites.EnableDeploys(hosting.RPCAgent{C: client})
+	deps.Sites.EnableWordPress(hosting.RPCAgent{C: client})
+	deps.Sites.EnableClones(hosting.RPCAgent{C: client})
+	deps.Sites.EnableScans(hosting.RPCAgent{C: client})
+
 	deps.Sites.ObserveApply(m.WebApplied)
 	m.RegisterCerts(certList(deps.Sites), cfg.Log)
 	m.RegisterSites(siteStats(client), cfg.Log)
+	m.RegisterSiteUsage(siteUsage(client), cfg.Log)
 	m.RegisterTokenExpiry(svc.MetricsTokenExpiry, cfg.Log)
 
 	// Operations emails (ADR-0044) for the accounts that switched them on.
@@ -589,23 +647,47 @@ func Run(ctx context.Context, cfg Config) error {
 		Link: func(f string) string { return panelLink(cfg.PublicURL, f) },
 	}
 	watcher := &notify.Watcher{
-		Notifier: notifier,
-		Backups:  deps.Backups.Status,
-		Certs:    notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
-		Doctor:   withDatabaseChecks(deps.Doctor, deps.Sites.DatabaseDoctor),
-		Now:      time.Now,
-		Log:      cfg.Log,
+		Notifier:   notifier,
+		Backups:    deps.Backups.Status,
+		BackupInfo: deps.Backups.Get,
+		Certs:      notifyCerts(st, deps.Sites, PanelDomain(cfg.PublicURL)),
+		Doctor:     withDatabaseChecks(deps.Doctor, deps.Sites.DatabaseDoctor),
+		Now:        time.Now,
+		Log:        cfg.Log,
 	}
 
 	go watcher.Run(ctx)
+
+	// A failed Git deploy is emailed (ADR-0062). Deploy runs are followed
+	// in the panel; a restart picks them up.
+	deps.Sites.ObserveFailedDeploys(func(ctx context.Context, site string, d store.SiteDeploy) {
+		if _, err := notifier.Notify(ctx, notify.DeployFailed(site, d)); err != nil {
+			cfg.Log.WarnContext(ctx, "notify failed deploy", "site", site, "err", err)
+		}
+	})
+
+	go deps.Sites.RunDeploys(ctx)
+	go deps.Sites.RunClones(ctx)
+
+	// Malware scans run one at a time; new findings are emailed
+	// (ADR-0064).
+	deps.Sites.ObserveMalware(func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding) {
+		if _, err := notifier.Notify(ctx, notify.MalwareFound(site, run, found)); err != nil {
+			cfg.Log.WarnContext(ctx, "notify malware", "site", site, "err", err)
+		}
+	})
+
+	go deps.Sites.RunScans(ctx)
 
 	// Service management and the dashboard (ADR-0052).
 	// Service outages are emailed too (ADR-0055).
 	mon := &servermon.Monitor{
 		Agent: RPCServerAgent{C: client}, Store: st, Log: cfg.Log,
-		Alerts: &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		Alerts:    &notify.ServiceAlerts{Notifier: notifier, Log: cfg.Log},
+		SiteAgent: RPCServerAgent{C: client}, SiteStore: st,
 	}
 	deps.Monitor = mon
+	deps.Usage = mon
 	deps.System = RPCSystemAgent{C: client}
 
 	go mon.Run(ctx)
@@ -780,6 +862,27 @@ func siteStats(c *agentrpc.Client) func(context.Context) ([]metrics.Site, error)
 				PHPMemoryBytes: s.PHPMemoryBytes, PHPMemoryKnown: s.PHPMemoryKnown,
 				DiskUsedBytes: s.DiskUsedBytes, DiskMeasuredAt: s.DiskMeasuredAt,
 				CacheMB: s.CacheMB, CacheUp: s.CacheUp, CacheMemoryBytes: s.CacheMemoryBytes, CacheMemoryKnown: s.CacheMemoryKnown,
+			})
+		}
+
+		return out, nil
+	}
+}
+
+// siteUsage reads the sites' usage counters for /metrics (ADR-0063).
+func siteUsage(c *agentrpc.Client) func(context.Context) ([]metrics.SiteUsage, error) {
+	return func(ctx context.Context) ([]metrics.SiteUsage, error) {
+		res, err := agentapi.SitesStats.Call(ctx, c, agentapi.SitesStatsRequest{})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]metrics.SiteUsage, 0, len(res.Sites))
+		for _, s := range res.Sites {
+			out = append(out, metrics.SiteUsage{
+				Name: s.Name, CPUUsec: s.CPUUsec, MemoryBytes: s.MemoryBytes, MemoryKnown: s.MemoryKnown, Tasks: s.Tasks,
+				IOReadBytes: s.IOReadBytes, IOWriteBytes: s.IOWriteBytes, IOKnown: s.IOKnown,
+				HTTPRequests: s.HTTPRequests, HTTPBytesIn: s.HTTPBytesIn, HTTPBytesOut: s.HTTPBytesOut,
 			})
 		}
 

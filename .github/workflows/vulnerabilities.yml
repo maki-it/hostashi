@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks the latest stable release twice a day for known vulnerabilities
+# (ADR-0077 part 3): govulncheck on the Go code with the Go version of the
+# release, and npm audit on the bundled web dependencies. A finding opens
+# one issue per release, or updates it; when nothing is found any more, the
+# issue is closed. It changes no code: the fix goes through a normal pull
+# request and a release.
+name: Vulnerabilities
+
+on:
+  schedule:
+    # Twice a day, 06:13 and 18:13 UTC.
+    - cron: "13 6,18 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/vulnerabilities.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vulnerabilities-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOVULNCHECK_VERSION: "v1.10.0"
+
+jobs:
+  check:
+    name: Check the latest release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Latest stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tag=$(gh release view --repo "$REPO" --json tagName --jq .tagName)
+          [ -n "$tag" ] || { echo "::error::no stable release found"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Checking $tag" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          persist-credentials: false
+      # The Go version of go.mod at the tag is the one the release was built
+      # with, so standard library findings match the shipped binary.
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: govulncheck
+        id: go
+        run: |
+          set +e
+          go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./... > "$RUNNER_TEMP/go.txt" 2>&1
+          rc=$?
+          set -e
+          cat "$RUNNER_TEMP/go.txt"
+          # 0: nothing reachable; 3: vulnerabilities found; anything else is
+          # a failure of the check itself.
+          case $rc in
+            0) echo "found=no" >> "$GITHUB_OUTPUT";;
+            3) echo "found=yes" >> "$GITHUB_OUTPUT";;
+            *) echo "::error::govulncheck failed ($rc)"; exit 1;;
+          esac
+      - name: npm audit
+        id: npm
+        working-directory: web
+        run: |
+          # npm audit exits non-zero for findings and for errors alike, so
+          # the decision is made on the JSON report.
+          npm audit --omit=dev --json > "$RUNNER_TEMP/npm.json" || true
+          n=$(jq -e '.metadata.vulnerabilities | (.high // 0) + (.critical // 0)' "$RUNNER_TEMP/npm.json") ||
+            { cat "$RUNNER_TEMP/npm.json"; echo "::error::npm audit gave no report"; exit 1; }
+          if [ "$n" = 0 ]; then
+            echo "found=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=yes" >> "$GITHUB_OUTPUT"
+            npm audit --omit=dev --audit-level=high > "$RUNNER_TEMP/npm.txt" 2>&1 || true
+            cat "$RUNNER_TEMP/npm.txt"
+          fi
+      - name: Open, update or close the issue
+        # Pull requests only report.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          GO_FOUND: ${{ steps.go.outputs.found }}
+          NPM_FOUND: ${{ steps.npm.outputs.found }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="security: vulnerable dependency in $TAG"
+          issue=$(gh issue list --repo "$REPO" --state open --limit 100 --search "\"$title\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ "$GO_FOUND" = no ] && [ "$NPM_FOUND" = no ]; then
+            echo "Nothing found in $TAG." >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --repo "$REPO" --reason completed \
+                --comment "The check found nothing in $TAG any more ($RUN_URL)."
+            fi
+            exit 0
+          fi
+          {
+            echo "The check (ADR-0077) found known vulnerabilities in the release $TAG. Fix them in a pull request and make a release; servers with \`--auto-update\` install it by themselves."
+            echo
+            echo "Checked $(date -u +%F) in $RUN_URL."
+            if [ "$GO_FOUND" = yes ]; then
+              echo
+              echo "## govulncheck"
+              echo
+              echo '```text'
+              head -c 40000 "$RUNNER_TEMP/go.txt"
+              echo '```'
+            fi
+            if [ "$NPM_FOUND" = yes ]; then
+              echo
+              echo "## npm audit (web, production dependencies, high and critical)"
+              echo
+              echo '```text'
+              head -c 20000 "$RUNNER_TEMP/npm.txt"
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/body.md"
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md" \
+              --label Kind/Security --assignee kimdre
+          fi

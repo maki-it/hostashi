@@ -202,7 +202,7 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
       cell: (a) =>
         a.username === me ? null : (
           <RowActions>
-            <IconLink label={`Manage ${a.username}`} icon={<GearSix size={16} />} href={usersHash({ user: a.username })} />
+            <IconLink label={`Manage ${a.username}`} text="Manage" icon={<GearSix size={16} />} href={usersHash({ user: a.username })} />
           </RowActions>
         ),
     },

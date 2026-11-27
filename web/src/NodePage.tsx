@@ -3,12 +3,13 @@
 // The Node.js LTS lines Hostashi installs from the official nodejs.org
 // builds, each checked against its pinned checksum (ADR-0054).
 
+import { RuntimesHead } from "./Runtimes";
 import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { getNode, installNode, nodeMessage, removeNode, type NodeRelease, type NodeStatus } from "./node";
 import { daysUntil, todayUTC } from "./php";
 import { listSites, type Site } from "./sites";
-import { Badge, Button, Card, IconButton, JobCard, Notice, PageHead, Table, useJobCard, type Column } from "./ui";
+import { Badge, Button, Card, IconButton, JobCard, Notice, Table, useJobCard, type Column } from "./ui";
 
 type Row = NodeRelease & { installed: string; sites: number | null };
 
@@ -68,12 +69,7 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
     }
   };
 
-  const head = (
-    <PageHead
-      title="Node.js versions"
-      description="The long-term support lines of Node.js, from the official nodejs.org builds. Hostashi checks every download against its pinned checksum; a Hostashi update brings newer releases."
-    />
-  );
+  const head = <RuntimesHead active="node" description={"The long-term support lines of Node.js, from the official nodejs.org builds. Hostashi checks every download against its pinned checksum; a Hostashi update brings newer releases."} />;
 
   if (!status) {
     return (
@@ -143,7 +139,7 @@ export function NodePage({ today = todayUTC(), poll = 3000 }: { today?: string; 
             </Button>
           )}
           {r.installed && r.sites === 0 && (
-            <IconButton label={"Remove Node.js " + r.major} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.major)} />
+            <IconButton label={"Remove Node.js " + r.major} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.major)} />
           )}
         </span>
       ),

@@ -63,9 +63,10 @@ var (
 )
 
 var (
-	// The repository is either SFTP (user, host, port and a path relative to
-	// the login directory, as on a Storage Box) or an absolute local path.
-	sftpRepoRe  = regexp.MustCompile(`^sftp://[a-z0-9][a-z0-9-]{0,31}@[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?:([0-9]{1,5})/[A-Za-z0-9._-][A-Za-z0-9._/-]{0,199}$`)
+	// The repository is either SFTP (user, host or bracketed IPv6 address,
+	// port, and a path relative to the login directory or, after a second
+	// slash, absolute) or an absolute local path.
+	sftpRepoRe  = regexp.MustCompile(`^sftp://[A-Za-z0-9_][A-Za-z0-9._-]{0,63}@(?:[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?|\[[0-9a-f:.]{2,45}\]):([0-9]{1,5})//?[A-Za-z0-9._-][A-Za-z0-9._/-]{0,199}$`)
 	localPathRe = regexp.MustCompile(`^/[A-Za-z0-9._/-]{1,1000}$`)
 	tagRe       = regexp.MustCompile(`^[a-z]{1,16}:[a-z0-9_-]{1,64}$`)
 	hostRe      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
@@ -129,12 +130,13 @@ type SnapshotSummary struct {
 // Keep is a retention policy for forget. Every group (host and tag set) is
 // kept by these counts.
 type Keep struct {
-	Daily, Weekly, Monthly int
+	Hourly, Daily, Weekly, Monthly, Yearly int
 }
 
 // Validate requires at least one daily snapshot and bounded counts.
 func (k Keep) Validate() error {
-	if k.Daily < 1 || k.Daily > 366 || k.Weekly < 0 || k.Weekly > 520 || k.Monthly < 0 || k.Monthly > 1200 {
+	if k.Hourly < 0 || k.Hourly > 8784 || k.Daily < 1 || k.Daily > 366 || k.Weekly < 0 || k.Weekly > 520 ||
+		k.Monthly < 0 || k.Monthly > 1200 || k.Yearly < 0 || k.Yearly > 100 {
 		return fmt.Errorf("%w: retention counts out of range", ErrInvalid)
 	}
 
@@ -180,7 +182,7 @@ func checkPort(repo string) error {
 		return fmt.Errorf("%w: repository", ErrInvalid)
 	}
 
-	if port, err := strconv.Atoi(m[2]); err != nil || port < 1 || port > 65535 {
+	if port, err := strconv.Atoi(m[1]); err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("%w: port", ErrInvalid)
 	}
 
@@ -486,9 +488,42 @@ func (r *Repo) Forget(ctx context.Context, k Keep) error {
 	}
 
 	_, err := r.run(ctx, "forget", "--group-by", "host,tags",
+		"--keep-hourly", strconv.Itoa(k.Hourly),
 		"--keep-daily", strconv.Itoa(k.Daily),
 		"--keep-weekly", strconv.Itoa(k.Weekly),
-		"--keep-monthly", strconv.Itoa(k.Monthly))
+		"--keep-monthly", strconv.Itoa(k.Monthly),
+		"--keep-yearly", strconv.Itoa(k.Yearly))
+
+	return err
+}
+
+// MaxForgetIDs bounds the snapshot ids of one ForgetIDs call, which keeps
+// the argument list short; callers split longer lists.
+const MaxForgetIDs = 100
+
+// ForgetIDs removes the snapshots with these full ids from the list
+// (ADR-0074, backups of deleted sites). Like Forget it does not delete
+// data; Prune does.
+func (r *Repo) ForgetIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	if len(ids) > MaxForgetIDs {
+		return fmt.Errorf("%w: more than %d snapshot ids", ErrInvalid, MaxForgetIDs)
+	}
+
+	args := []string{"forget", "--"}
+
+	for _, id := range ids {
+		if !snapshotRe.MatchString(id) {
+			return fmt.Errorf("%w: snapshot id", ErrInvalid)
+		}
+
+		args = append(args, id)
+	}
+
+	_, err := r.run(ctx, args...)
 
 	return err
 }

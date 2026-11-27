@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -27,6 +27,17 @@ describe("App start", () => {
     expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
   });
 
+  it("shows neither the login brand nor text while the session check runs", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } });
+    const { container } = render(<App />);
+    const boot = container.querySelector("main.ui-boot");
+    expect(boot).toHaveAttribute("aria-busy", "true");
+    expect(boot).toHaveTextContent("");
+    expect(container.querySelector(".ui-auth-brand")).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
+    expect(container.querySelector("main.ui-boot")).toBeNull();
+  });
+
   it("opens the backup page from the navigation", async () => {
     const user = userEvent.setup();
     mockFetch({
@@ -34,7 +45,7 @@ describe("App start", () => {
       "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } },
       "GET /api/v1/backups": {
         body: {
-          settings: { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 },
+          settings: { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12 },
           publicKey: "",
           hostKey: "",
           ready: false,
@@ -187,6 +198,22 @@ describe("Login", () => {
     expect(calls.find((c) => c.path === "/api/v1/auth/login")?.body).toEqual({ username: "kim", password: "correct horse", totp: "" });
     await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+  });
+
+  it("draws a line under the brand once the nav scrolls", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...noSetup, ...loggedOut, "POST /api/v1/auth/login": { body: admin } });
+    render(<App />);
+    await fillLogin(user);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const side = nav.closest("aside");
+    expect(side).toHaveAttribute("data-scrolled", "false");
+    nav.scrollTop = 40;
+    fireEvent.scroll(nav);
+    expect(side).toHaveAttribute("data-scrolled", "true");
+    nav.scrollTop = 0;
+    fireEvent.scroll(nav);
+    expect(side).toHaveAttribute("data-scrolled", "false");
   });
 
   it("shows wrong credentials", async () => {
@@ -424,7 +451,11 @@ describe("Shell", () => {
     });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Main" });
-    expect(await screen.findByText("Hostashi v0.4.0")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Hostashi, overview" })).toHaveAttribute("href", "#/");
+    const version = await screen.findByRole("link", { name: "Hostashi v0.4.0" });
+    expect(version).toHaveAttribute("href", "https://github.com/maki-it/hostashi/releases/tag/v0.4.0");
+    expect(version).toHaveAttribute("target", "_blank");
+    expect(version).toHaveAttribute("rel", "noopener noreferrer");
     expect(await within(nav).findByRole("link", { name: "Health, 2 problems" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Services, 1 problem" })).toBeInTheDocument();
     expect(within(nav).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Hosting", "Server", "Administration"]);
@@ -432,6 +463,25 @@ describe("Shell", () => {
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByText("Administration")).toBeInTheDocument();
     expect(within(crumbs).getByText("Users")).toHaveAttribute("aria-current", "page");
+    window.location.hash = "";
+  });
+
+  it("opens the search from the top bar and with Ctrl K", async () => {
+    window.location.hash = "#/users";
+    mockFetch({
+      ...session,
+      "GET /api/v1/users": { body: { users: [] } },
+      "GET /api/v1/invitations": { body: { invitations: [] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+    });
+    render(<App />);
+    const top = await screen.findByRole("banner");
+    await userEvent.click(within(top).getByRole("button", { name: /Search/ }));
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
     window.location.hash = "";
   });
 

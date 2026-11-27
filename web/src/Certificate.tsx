@@ -20,7 +20,7 @@ import {
   type CertUpload,
 } from "./certs";
 import { siteMessage } from "./sites";
-import { Badge, Button, Card, Field, IconButton, Notice } from "./ui";
+import { Badge, Button, Card, CopyValue, Field, IconButton, Notice } from "./ui";
 
 type Props = {
   /** The API path of the certificate routes, from certs.ts. */
@@ -111,6 +111,7 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
           {canRenew && (
             <IconButton
               label="Renew now"
+              text="Renew now"
               icon={<ArrowClockwise />}
               disabled={busy}
               onClick={() =>
@@ -121,11 +122,12 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint = "
               }
             />
           )}
-          <IconButton label="Upload certificate" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
-          <IconButton label="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
+          <IconButton label="Upload certificate" text="Upload" icon={<UploadSimple />} disabled={busy} onClick={() => open("upload")} />
+          <IconButton label="Create CSR" text="Create CSR" icon={<FileText />} disabled={busy} onClick={() => open("csr")} />
           {deletable && (
             <IconButton
               label={canDelete ? "Delete certificate" : `Delete certificate (${offHint})`}
+              text="Delete"
               icon={<Trash />}
               danger
               disabled={busy || !canDelete}
@@ -229,7 +231,9 @@ function CertFacts({ own, cert }: { own: boolean; cert: NonNullable<CertInfo["ce
         {left !== null && own && <span className="ui-hint"> Not renewed automatically.</span>}
       </dd>
       <dt>SHA-256</dt>
-      <dd className="ui-mono ui-break">{fingerprintText(cert.fingerprint)}</dd>
+      <dd className="ui-mono ui-break">
+        <CopyValue value={fingerprintText(cert.fingerprint)} label="Copy the SHA-256 fingerprint" />
+      </dd>
     </dl>
   );
 }
@@ -351,7 +355,7 @@ function CSRPanel({ name, csr, busy, onCreate, onUpload }: CSRPanelProps) {
 }
 
 // PanelCertificate is the certificate of the panel's own address, on the
-// Health page (ADR-0039). Without an address of its own there is none.
+// System page (ADR-0039). Without an address of its own there is none.
 export function PanelCertificate() {
   const [tls, setTLS] = useState<PanelTLS | null>(null);
 

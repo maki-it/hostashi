@@ -100,7 +100,7 @@ Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estim
 None left.
 
 1. ~~Node.js from the official nodejs.org builds (option C), LTS lines only?~~ Decided (Kim, 2026-11-22): yes.
-2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too.
+2. ~~Reverse proxy: allow private networks, refuse loopback and link-local, as recommended?~~ Decided (Kim, 2026-11-22): yes; public addresses and host names are allowed too. Addendum (Kim, 2026-11-26, second own security review): a target that is or resolves to a private network (also `100.64.0.0/10`) needs the action `sites.proxy.private:write` (admins and managers); an account with the role user may set public targets only (403 `private_target`). [A] A name that resolves to a public address when saved and to a private one later is not caught, the same gap as the DNS change after save above.
 3. ~~Proxy and redirect sites without a Linux account (no SSH, files, cron, backups)?~~ Decided (Kim, 2026-11-22): yes.
 
 ## Addendum 1: static sites as a first-class type (Accepted, Kim, 2026-11-22)
@@ -162,6 +162,21 @@ None left.
 - nginx: one `map $uri` per site plus `expires` in the server block; PHP answers reach nginx through `index.php` and never match the map. WordPress and similar software change asset addresses with `?ver=` when a file changes, so a long time is safe there [A].
 - Not taken over, on purpose: `Access-Control-Allow-Origin: *` on all assets (lets every other site embed the files; maybe later as its own switch for fonts) and turning the access log off for assets (statistics and fail2ban need the log).
 - The settings are kept while the switch is off or the type has no asset cache, so turning it on again restores them.
+
+## Addendum 5: the Git deploy link in the document root (Accepted, 2026-11-24, by Kim)
+
+**Context.** Addendum 1 lets the document root be a folder below `htdocs` and the agent refuses it when any part of the path is a symbolic link: `sites.CheckWebDir` opens it with `openat2` and `RESOLVE_NO_SYMLINKS` on every `web.apply` [V: `internal/sites/webdir.go`]. ADR-0062 (Accepted) makes the deploy directory, `htdocs` by default, a link to the live release `<home>/.deploy/releases/<n>`. With the rule as it is, the first deploy would make `web.apply` fail, and as one apply covers all sites, no site's web settings could change any more until the link is gone [V: the installer test of PR 438 applies the web settings with the link in place].
+
+**Options.**
+
+| Option | For | Against |
+|---|---|---|
+| **A. Allow exactly the link a deploy makes: a relative link of the form `[../]*.deploy/releases/<release>` that points from its own place to a release of the same site, at most one such link on the path, and the path through the release again real folders below the home without links or other file systems** | The rule stays as strict for everything else; works after the Git setting is deleted too, so a leftover link never blocks the server | A second form of path the check knows |
+| B. Allow any link that stays inside the home (`RESOLVE_BENEATH` without `RESOLVE_NO_SYMLINKS`) | Simple | Relaxes the rule for every site and every link, not only deploys |
+| C. Pass the site's deploy directory from the panel and allow the link only there | Narrow | A deleted Git setting leaves a link that blocks every `web.apply`; more state in the request |
+| D. No link: copy or rename the release into place | No change to the rule | Not atomic, which ADR-0062 decided against (1B) |
+
+**Decision: A** (Kim, 2026-11-24). The link's target is read without following it, must match the pattern exactly (no `./`, no extra `..`, a valid release name) and must lead to a real folder below `.deploy/releases`, which itself must not be a link out of the home. Every other link, inside or outside the home, stays refused as before. nginx already serves through `$realpath_root`, so PHP sees the release path [V: ADR-0062]. Tests: `internal/sites/webdir_test.go` (accepted link, nested deploy directory, refused targets, link inside the release, releases outside the home).
 
 ## Implementation notes: reverse proxy (2026-11-22)
 

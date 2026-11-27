@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Managed by Hostashi (ADR-0069); the installer overwrites changes.
+# The wp command of the site users: WP-CLI from the phar Hostashi pins,
+# run with the PHP version of the calling user's site. It runs as that
+# user and changes nothing that user could not change anyway. The agent
+# writes the version to /etc/hostashi-php/<site> (root, 0644); the phar
+# sits in /opt/hostashi/wp-cli/<version>/wp-cli.phar (root, 0644).
+set -eu
+
+die() {
+  printf 'wp: %s\n' "$*" >&2
+  exit 1
+}
+
+# WP-CLI runs the site's own code; as root it would run it with every right.
+[ "$(id -u)" != 0 ] || die "do not run WP-CLI as root; log in as the site user over SSH, or use: runuser -u <site> -- wp ..."
+
+user=$(id -un)
+case $user in
+  '' | *[!a-z0-9_-]*) die "this account is not a Hostashi site" ;;
+esac
+
+file=/etc/hostashi-php/$user
+if [ ! -f "$file" ] || [ -L "$file" ] || [ "$(stat -c %u "$file")" != 0 ]; then
+  die "the site $user has no PHP; WP-CLI needs a PHP site"
+fi
+version=$(head -n 1 "$file")
+case $version in
+  [0-9].[0-9] | [0-9].[0-9][0-9]) ;;
+  *) die "the PHP version of $user cannot be read" ;;
+esac
+php=/usr/bin/php$version
+[ -x "$php" ] || die "PHP $version, the version of $user, has no command line binary $php"
+
+# The newest installed phar: the agent only installs the pinned release,
+# and an older one stays usable until the new one is in place.
+phar=$(printf '%s\n' /opt/hostashi/wp-cli/*/wp-cli.phar | sort -V | tail -n 1)
+# Without any, the pattern itself is left, which is no file.
+[ -f "$phar" ] && [ ! -L "$phar" ] || die "WP-CLI is not installed on this server yet. It comes with the first WordPress install from the panel, or an administrator installs it with: systemctl start hostashi-wpcli-install.service"
+
+# The phar is root's and read-only: it cannot update itself.
+WP_CLI_DISABLE_AUTO_CHECK_UPDATE=${WP_CLI_DISABLE_AUTO_CHECK_UPDATE:-1}
+export WP_CLI_DISABLE_AUTO_CHECK_UPDATE
+exec "$php" "$phar" "$@"

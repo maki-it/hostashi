@@ -27,6 +27,8 @@ type fakeServices struct {
 	missing map[string]bool
 	sshdErr error
 	failOn  string
+	// failed units show ActiveState failed after the action, with result.
+	failed map[string]string
 }
 
 func (f *fakeServices) Show(_ context.Context, units []string) ([]agentapi.ServiceState, error) {
@@ -42,6 +44,9 @@ func (f *fakeServices) Show(_ context.Context, units []string) ([]agentapi.Servi
 		}
 
 		out[i] = agentapi.ServiceState{Unit: u, Installed: true, Load: "loaded", Active: "active", NRestarts: 1}
+		if r, ok := f.failed[u]; ok && slices.Contains(f.calls, "start "+u) {
+			out[i].Active, out[i].Result = "failed", r
+		}
 	}
 
 	return out, nil
@@ -158,7 +163,8 @@ func TestServicesStatusAndActions(t *testing.T) {
 
 	want := []string{
 		"nginx/=nginx.service", "mariadb/=mariadb.service", "ssh/=ssh.service", "fail2ban/=fail2ban.service",
-		"firewall/=hostashi-firewall.service", "adminer/=hostashi-adminer.service", "panel/=hostashi.service", "agent/=hostashi-agent.service",
+		"firewall/=hostashi-firewall.service", "adminer/=hostashi-adminer.service",
+		"freshclam/=clamav-freshclam.service", "clamd/=clamav-daemon.service", "clamonacc/=clamav-clamonacc.service", "panel/=hostashi.service", "agent/=hostashi-agent.service",
 		"php/blog=hostashi-php-8.3@blog.service", "php/shop=hostashi-php-8.4@shop.service",
 		"valkey/blog=hostashi-valkey@blog.service", "valkey/shop=hostashi-valkey@shop.service",
 	}
@@ -244,6 +250,19 @@ func TestServicesStatusAndActions(t *testing.T) {
 		t.Fatalf("leaked: %v", err)
 	}
 
+	svc.take()
+
+	// A unit that failed to start says so, with its result and log
+	// (clamd blocked by AppArmor said only "try again").
+	svc.failOn, svc.failed = "clamav-daemon.service", map[string]string{"clamav-daemon.service": "exit-code"}
+	_, err = agentapi.ServiceAction.Call(ctx, c, agentapi.ServiceActionRequest{ID: "clamd", Action: "start"})
+	wantCode(t, err, agentrpc.CodePrecondition)
+
+	if want := "clamav-daemon.service did not start: it failed with result exit-code. Its log: journalctl -u clamav-daemon.service"; !strings.Contains(err.Error(), want) || containsSecret(err) {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+
+	svc.failOn, svc.failed = "", nil
 	svc.take()
 
 	// nginx goes through the reconciler: no generation yet, then test and

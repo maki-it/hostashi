@@ -25,6 +25,9 @@ const (
 	KnownHostsFile = "known_hosts"
 	StatusFile     = "status.json"
 	SnapshotsFile  = "snapshots.json"
+	// ForgetFile lists the sites whose snapshots the next run removes
+	// (ADR-0074); it lives next to the settings.
+	ForgetFile = "forget.json"
 
 	// AgentStateDir holds the agent's registries; UnitDir is systemd's
 	// directory for local units and drop-ins.
@@ -49,5 +52,5 @@ var ErrInvalid = agentapi.ErrBackupInvalid
 func DefaultSettings() Settings { return agentapi.DefaultBackupSettings() }
 
 func keep(r Retention) resticctl.Keep {
-	return resticctl.Keep{Daily: r.Daily, Weekly: r.Weekly, Monthly: r.Monthly}
+	return resticctl.Keep{Hourly: r.Hourly, Daily: r.Daily, Weekly: r.Weekly, Monthly: r.Monthly, Yearly: r.Yearly}
 }

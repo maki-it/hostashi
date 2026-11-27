@@ -14,7 +14,32 @@ export type SystemInfo = {
   rebootRequired: boolean;
   rebootPackages?: string[];
   cloudInit: boolean;
+  /** The hostashi package (ADR-0050); absent when the server was not set up from it. */
+  updates?: SystemUpdates;
 };
+
+export type SystemUpdates = {
+  installed: string;
+  /** The newest version apt saw in the Hostashi repository; absent while apt has no list. */
+  available?: string;
+  update: boolean;
+  /** unattended-upgrades installs new versions by itself (--auto-update). */
+  auto: boolean;
+  /** When apt last fetched the list, RFC 3339. */
+  listedAt?: string;
+  /** The installed hostashi-runtimes, YYYYMMDDHHMMSS (ADR-0077); absent when it is not installed. */
+  runtimes?: string;
+  /** unattended-upgrades updates hostashi-runtimes. */
+  runtimesAuto: boolean;
+};
+
+/** pinsDate turns a hostashi-runtimes version (YYYYMMDDHHMMSS, UTC) into a date; "" for anything else. */
+export function pinsDate(v: string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(v);
+  if (!m) return "";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
+  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
 
 export const getSystem = () => request<SystemInfo>("GET", "/system");
 
@@ -23,6 +48,8 @@ export const listTimezones = () => request<{ zones: string[] }>("GET", "/system/
 export const setTimezone = (zone: string) => request<SystemInfo>("PUT", "/system/timezone", { zone });
 
 export const setHostname = (hostname: string) => request<SystemInfo>("PUT", "/system/hostname", { hostname });
+
+export const setAutoUpdate = (on: boolean) => request<SystemInfo>("PUT", "/system/auto-update", { on });
 
 export const rebootServer = (confirm: string) => request<{ delaySeconds: number }>("POST", "/system/reboot", { confirm });
 
@@ -123,4 +150,13 @@ export async function panelVersion(): Promise<string> {
 /** versionLabel shows a release as "v0.4.0" and anything else unchanged. */
 export function versionLabel(v: string): string {
   return /^\d+\.\d+\.\d+/.test(v) ? `v${v}` : v;
+}
+
+const releases = "https://github.com/maki-it/hostashi/releases";
+
+// releaseUrl links a released version (X.Y.Z, or a pre-release such as
+// X.Y.Z-rc.1) to its release notes. A dev build has no tag ("dev", or
+// "X.Y.Z-dev+commit" from a snapshot), so it links to the list of releases.
+export function releaseUrl(v: string): string {
+  return /^\d+\.\d+\.\d+(-(alpha|beta|rc)[0-9.]*)?$/.test(v) ? `${releases}/tag/v${v}` : releases;
 }

@@ -34,8 +34,10 @@ type fakeAccounts struct {
 	groups    map[string]bool
 	inUse     bool
 	createErr error
-	creates   int
-	deletes   int
+	// distinct gives every new account its own ids (copy tests).
+	distinct bool
+	creates  int
+	deletes  int
 }
 
 func newFake() *fakeAccounts {
@@ -71,6 +73,10 @@ func (f *fakeAccounts) Create(_ context.Context, name, _ string) (Account, error
 	}
 
 	uid, gid := testIDs()
+	if f.distinct {
+		uid, gid = 60000+uint32(f.creates), 60000+uint32(f.creates)
+	}
+
 	a := Account{UID: uid, GID: gid}
 	f.users[name] = a
 

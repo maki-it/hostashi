@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,8 +30,11 @@ var (
 
 // Site is a stored site with its domains, the primary one first.
 type Site struct {
-	ID    int64
-	Name  string
+	ID   int64
+	Name string
+	// Title is the display name (ADR-0072), empty for none. Display text
+	// only: it never reaches the agent, a path or a unit name.
+	Title string
 	Pool  string
 	State string
 	// Type is one of the SiteType constants (ADR-0054).
@@ -56,11 +60,21 @@ type Site struct {
 	// App is the app of a Node.js or app site (ADR-0054); nil for sites that
 	// never had one. Kept after a type change, so switching back
 	// restores it.
-	App     *SiteApp
+	App *SiteApp
+	// Domains are the names the site serves, the primary one first.
 	Domains []string
-	TLS     bool // HTTPS wanted
+	// RedirectDomains stay on the site and its certificate and answer
+	// with 301 to the primary domain (ADR-0068).
+	RedirectDomains []string
+	// PendingDomains is a domain change that waits for its certificate
+	// (ADR-0068); nil for none.
+	PendingDomains *DomainChange
+	TLS            bool // HTTPS wanted
 	// HSTS sends Strict-Transport-Security while the site is on HTTPS.
 	HSTS bool
+	// WWWRedirect is the site's www redirect (ADR-0065): "", "to-www" or
+	// "to-non-www".
+	WWWRedirect string
 	// PHPPrograms lets the site's PHP start programs (ADR-0033).
 	PHPPrograms bool
 	// Disabled: the web server answers with 503 and PHP is stopped; the
@@ -277,7 +291,7 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 		return Site{}, fmt.Errorf("store: %w", err)
 	}
 
-	if err := insertDomains(ctx, tx, id, domains); err != nil {
+	if err := insertDomains(ctx, tx, id, domains, nil); err != nil {
 		return Site{}, err
 	}
 
@@ -287,7 +301,7 @@ func (s *Store) createSite(ctx context.Context, site Site, domains []string, now
 
 	t := time.Unix(now.Unix(), 0).UTC()
 
-	site.ID, site.State, site.Domains, site.TLSDomains, site.CreatedAt, site.UpdatedAt = id, SiteCreating, domains, []string{}, t, t
+	site.ID, site.State, site.Domains, site.RedirectDomains, site.TLSDomains, site.CreatedAt, site.UpdatedAt = id, SiteCreating, domains, []string{}, []string{}, t, t
 
 	return site, nil
 }
@@ -326,8 +340,14 @@ func freeAppPort(ctx context.Context, tx *sql.Tx) (int, error) {
 	return next, nil
 }
 
-func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []string) error {
-	for i, d := range domains {
+// insertDomains stores the served domains (the primary one first) and
+// the redirect domains of a site after them. A domain of another site or
+// of another site's pending change is refused; a parked domain stops being
+// parked.
+func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains, redirect []string) error {
+	all := append(append([]string{}, domains...), redirect...)
+
+	for i, d := range all {
 		var owner int64
 
 		err := tx.QueryRowContext(ctx, `SELECT site_id FROM site_domains WHERE domain = ?`, d).Scan(&owner)
@@ -339,13 +359,17 @@ func insertDomains(ctx context.Context, tx *sql.Tx, siteID int64, domains []stri
 			return fmt.Errorf("store: %w", err)
 		}
 
+		if err := pendingElsewhere(ctx, tx, siteID, d); err != nil {
+			return err
+		}
+
 		// A parked domain that becomes part of a site is no longer parked.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM parked_domains WHERE domain = ?`, d); err != nil {
 			return fmt.Errorf("store: %w", err)
 		}
 
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO site_domains (domain, site_id, position) VALUES (?, ?, ?)`, d, siteID, i); err != nil {
+			`INSERT INTO site_domains (domain, site_id, position, redirect) VALUES (?, ?, ?, ?)`, d, siteID, i, boolInt(i >= len(domains))); err != nil {
 			return fmt.Errorf("store: %w", err)
 		}
 	}
@@ -404,11 +428,55 @@ func (s *Store) SetSitePHP(ctx context.Context, name, php string, now time.Time)
 	return old, nil
 }
 
-// ReplaceSiteDomains sets the domains of a site and returns the previous ones.
+// ReplaceSiteDomains sets the served domains of a site and keeps its
+// redirect domains, except those that are now served. It returns the
+// previous served domains.
 func (s *Store) ReplaceSiteDomains(ctx context.Context, name string, domains []string, now time.Time) ([]string, error) {
+	site, err := s.SiteByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	redirect := []string{}
+
+	for _, d := range site.RedirectDomains {
+		if !slices.Contains(domains, d) {
+			redirect = append(redirect, d)
+		}
+	}
+
+	old, err := s.ReplaceSiteDomainSet(ctx, name, DomainSet{Domains: domains, Redirect: redirect}, now)
+
+	return old.Domains, err
+}
+
+// DomainSet is what a site answers to: the served domains (the primary
+// one first) and the redirect domains (ADR-0068).
+type DomainSet struct {
+	Domains  []string `json:"domains"`
+	Redirect []string `json:"redirectDomains"`
+}
+
+// All returns the served and then the redirect domains: the names of the
+// site's certificate.
+func (d DomainSet) All() []string {
+	return append(append([]string{}, d.Domains...), d.Redirect...)
+}
+
+// DomainSet returns the served and redirect domains of the site.
+func (s Site) DomainSet() DomainSet {
+	return DomainSet{Domains: s.Domains, Redirect: s.RedirectDomains}
+}
+
+// AllDomains returns the served and then the redirect domains of the site.
+func (s Site) AllDomains() []string { return s.DomainSet().All() }
+
+// ReplaceSiteDomainSet sets the served and redirect domains of a site and
+// returns the previous ones.
+func (s *Store) ReplaceSiteDomainSet(ctx context.Context, name string, set DomainSet, now time.Time) (DomainSet, error) {
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	defer func() { _ = tx.Rollback() }()
@@ -416,31 +484,31 @@ func (s *Store) ReplaceSiteDomains(ctx context.Context, name string, domains []s
 	var id int64
 	if err := tx.QueryRowContext(ctx, `SELECT id FROM sites WHERE name = ?`, name).Scan(&id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
+			return DomainSet{}, ErrNotFound
 		}
 
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	old, err := domainsOf(ctx, tx, id)
 	if err != nil {
-		return nil, err
+		return DomainSet{}, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM site_domains WHERE site_id = ?`, id); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
-	if err := insertDomains(ctx, tx, id, domains); err != nil {
-		return nil, err
+	if err := insertDomains(ctx, tx, id, set.Domains, set.Redirect); err != nil {
+		return DomainSet{}, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `UPDATE sites SET updated_at = ? WHERE id = ?`, now.Unix(), id); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	return old, nil
@@ -450,27 +518,35 @@ type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-func domainsOf(ctx context.Context, q queryer, siteID int64) ([]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT domain FROM site_domains WHERE site_id = ? ORDER BY position`, siteID)
+func domainsOf(ctx context.Context, q queryer, siteID int64) (DomainSet, error) {
+	rows, err := q.QueryContext(ctx, `SELECT domain, redirect FROM site_domains WHERE site_id = ? ORDER BY position`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	defer rows.Close()
 
-	out := []string{}
+	out := DomainSet{Domains: []string{}, Redirect: []string{}}
 
 	for rows.Next() {
-		var d string
-		if err := rows.Scan(&d); err != nil {
-			return nil, fmt.Errorf("store: %w", err)
+		var (
+			d        string
+			redirect int
+		)
+
+		if err := rows.Scan(&d, &redirect); err != nil {
+			return DomainSet{}, fmt.Errorf("store: %w", err)
 		}
 
-		out = append(out, d)
+		if redirect == 1 {
+			out.Redirect = append(out.Redirect, d)
+		} else {
+			out.Domains = append(out.Domains, d)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+		return DomainSet{}, fmt.Errorf("store: %w", err)
 	}
 
 	return out, nil
@@ -513,10 +589,27 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 		return nil, err
 	}
 
+	pending, err := s.DomainChanges(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	byName := make(map[string]*DomainChange, len(pending))
+	for i := range pending {
+		byName[pending[i].Site] = &pending[i]
+	}
+
 	for i := range out {
-		out[i].Domains = domains[out[i].ID]
+		out[i].PendingDomains = byName[out[i].Name]
+		set := domains[out[i].ID]
+		out[i].Domains, out[i].RedirectDomains = set.Domains, set.Redirect
+
 		if out[i].Domains == nil {
 			out[i].Domains = []string{}
+		}
+
+		if out[i].RedirectDomains == nil {
+			out[i].RedirectDomains = []string{}
 		}
 	}
 
@@ -524,27 +617,35 @@ func (s *Store) Sites(ctx context.Context) ([]Site, error) {
 }
 
 // allDomains maps each site ID to its domains, the primary one first.
-func allDomains(ctx context.Context, q queryer) (map[int64][]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT site_id, domain FROM site_domains ORDER BY site_id, position`)
+func allDomains(ctx context.Context, q queryer) (map[int64]DomainSet, error) {
+	rows, err := q.QueryContext(ctx, `SELECT site_id, domain, redirect FROM site_domains ORDER BY site_id, position`)
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
 
 	defer rows.Close()
 
-	out := map[int64][]string{}
+	out := map[int64]DomainSet{}
 
 	for rows.Next() {
 		var (
-			id int64
-			d  string
+			id       int64
+			d        string
+			redirect int
 		)
 
-		if err := rows.Scan(&id, &d); err != nil {
+		if err := rows.Scan(&id, &d, &redirect); err != nil {
 			return nil, fmt.Errorf("store: %w", err)
 		}
 
-		out[id] = append(out[id], d)
+		set := out[id]
+		if redirect == 1 {
+			set.Redirect = append(set.Redirect, d)
+		} else {
+			set.Domains = append(set.Domains, d)
+		}
+
+		out[id] = set
 	}
 
 	if err := rows.Err(); err != nil {
@@ -552,6 +653,22 @@ func allDomains(ctx context.Context, q queryer) (map[int64][]string, error) {
 	}
 
 	return out, nil
+}
+
+// SiteByID returns the site with that id, or ErrNotFound.
+func (s *Store) SiteByID(ctx context.Context, id int64) (Site, error) {
+	var name string
+
+	err := s.db.QueryRowContext(ctx, `SELECT name FROM sites WHERE id = ?`, id).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Site{}, ErrNotFound
+	}
+
+	if err != nil {
+		return Site{}, fmt.Errorf("store: %w", err)
+	}
+
+	return s.SiteByName(ctx, name)
 }
 
 // SiteByName returns one site or ErrNotFound.
@@ -565,7 +682,17 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 		return Site{}, err
 	}
 
-	if st.Domains, err = domainsOf(ctx, s.db, st.ID); err != nil {
+	set, err := domainsOf(ctx, s.db, st.ID)
+	if err != nil {
+		return Site{}, err
+	}
+
+	st.Domains, st.RedirectDomains = set.Domains, set.Redirect
+
+	switch c, err := s.DomainChangeOf(ctx, name); {
+	case err == nil:
+		st.PendingDomains = &c
+	case !errors.Is(err, ErrNotFound):
 		return Site{}, err
 	}
 
@@ -574,10 +701,10 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 
 type scanner interface{ Scan(dest ...any) error }
 
-const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
+const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, www_redirect, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
 	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
-	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, created_at, updated_at`
+	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, title, created_at, updated_at`
 
 func scanSite(r scanner) (Site, error) {
 	var (
@@ -599,10 +726,10 @@ func scanSite(r scanner) (Site, error) {
 		args                       string
 	)
 
-	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
+	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &st.WWWRedirect, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
 		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
-		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &cre, &upd)
+		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &st.Title, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, err
 	}
@@ -718,6 +845,66 @@ func (s *Store) SetSiteCert(ctx context.Context, name string, domains []string, 
 // SetSiteHSTS sets whether a site sends HSTS and returns the previous value.
 func (s *Store) SetSiteHSTS(ctx context.Context, name string, on bool, now time.Time) (bool, error) {
 	return s.setSiteFlag(ctx, `SELECT hsts FROM sites WHERE name = ?`, `UPDATE sites SET hsts = ?, updated_at = ? WHERE name = ?`, name, on, now)
+}
+
+// SetSiteTitle sets the display name of a site (ADR-0072) and returns the
+// previous one. The caller validates it.
+func (s *Store) SetSiteTitle(ctx context.Context, name, title string, now time.Time) (string, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT title FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET title = ?, updated_at = ? WHERE name = ?`, title, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
+}
+
+// SetSiteWWWRedirect sets the www redirect of a site and returns the
+// previous one.
+func (s *Store) SetSiteWWWRedirect(ctx context.Context, name, mode string, now time.Time) (string, error) {
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT www_redirect FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET www_redirect = ?, updated_at = ? WHERE name = ?`, mode, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
 }
 
 // SetSitePHPPrograms sets whether a site's PHP may start programs and
@@ -1124,4 +1311,22 @@ func appArgs(args []string) string {
 	}
 
 	return string(b)
+}
+
+// RenameSitePool moves the pool name of every site from name to newName
+// after the agent renamed the pool (ADR-0016 addendum 2). It returns how
+// many sites changed; none is not an error, so a repeated call after a
+// failed first one can still finish the rename.
+func (s *Store) RenameSitePool(ctx context.Context, name, newName string, now time.Time) (int64, error) {
+	res, err := s.w.ExecContext(ctx, `UPDATE sites SET pool = ?, updated_at = ? WHERE pool = ?`, newName, now.Unix(), name)
+	if err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("store: %w", err)
+	}
+
+	return n, nil
 }

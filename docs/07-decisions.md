@@ -13,7 +13,7 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0007 | Isolation model per site | Accepted on 2026-11-21 (Kim) | No |
 | 0008 | Backups with restic | Accepted on 2026-11-19 ([adr/0008](adr/0008-backups-with-restic.md)) | Done |
 | 0009 | Target platforms and packaging | Accepted on 2026-11-21 (Kim) | Partly |
-| 0010 | Target audience and v1 scope | Proposed (draft: [adr/0010](adr/0010-target-audience-and-v1-scope.md)) | **Yes** |
+| 0010 | Target audience and v1 scope | Accepted on 2026-11-25 (Kim), option A ([adr/0010](adr/0010-target-audience-and-v1-scope.md)) | Done |
 | 0011 | Name and trademark | Accepted (subject to trademark search) | Done, trademark open |
 | 0012 | Language of code and documentation | Accepted on 2026-11-21 (Kim) | Yes, briefly |
 | 0013 | Business model and governance | Proposed (draft: [adr/0013](adr/0013-business-model-and-governance.md)) | **Yes** |
@@ -65,6 +65,18 @@ All entries are **proposals** (`Proposed`) until you confirm them. Format: conte
 | 0059 | Real client IP behind CDNs and proxies | Accepted on 2026-11-22 ([adr/0059](adr/0059-real-client-ip-behind-proxies.md)) | No |
 | 0060 | Time zone, hostname and reboot from the panel | Accepted on 2026-11-22 ([adr/0060](adr/0060-time-zone-hostname-and-reboot.md)) | No |
 | 0061 | Site type Python | Accepted on 2026-11-22 ([adr/0061](adr/0061-site-type-python.md)) | No |
+| 0062 | Git deploy per site | Accepted on 2026-11-24 ([adr/0062](adr/0062-git-deploy-per-site.md)) | No |
+| 0063 | Resource usage per site | Accepted on 2026-11-24 ([adr/0063](adr/0063-resource-usage-per-site.md)) | No |
+| 0065 | www/non-www redirect per site | Accepted on 2026-11-24 ([adr/0065](adr/0065-www-redirect-per-site.md)) | No |
+| 0066 | Password protection and IP rules per site | Accepted on 2026-11-24 ([adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md)) | No |
+| 0067 | Reset the file permissions of a site | Accepted on 2026-11-24 ([adr/0067](adr/0067-reset-site-permissions.md)) | Done |
+| 0068 | Change the domain of a site | Accepted on 2026-11-25 ([adr/0068](adr/0068-change-the-domain-of-a-site.md)) | No |
+| 0069 | Application profiles (vhost templates) and WordPress quick install | Accepted on 2026-11-25 ([adr/0069](adr/0069-application-profiles-and-wordpress-install.md)) | Done |
+| 0070 | Staging and cloning a site | Accepted on 2026-11-25 ([adr/0070](adr/0070-staging-and-cloning-a-site.md)) | Done |
+| 0071 | Panel UI in English and German | Accepted on 2026-11-25 ([adr/0071](adr/0071-panel-ui-in-english-and-german.md)) | Done |
+| 0072 | Rename a site | Accepted on 2026-11-25 ([adr/0072](adr/0072-rename-a-site.md)) | Done |
+| 0073 | MCP server for AI assistants | Accepted on 2026-11-25 ([adr/0073](adr/0073-mcp-server.md)) | Done |
+| 0074 | Backups of deleted sites | Accepted on 2026-11-26 ([adr/0074](adr/0074-backups-of-deleted-sites.md)) | In progress |
 
 ---
 
@@ -159,7 +171,7 @@ Rationale (general knowledge, unverified): Debian is more conservative, has fewe
 
 ## ADR-0010 Target audience and v1 scope
 
-**Full draft (status Proposed):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Summary: option A (single server for developers and agencies) with guardrails.
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0010-target-audience-and-v1-scope.md](adr/0010-target-audience-and-v1-scope.md). Summary: option A (single server for developers and agencies) with guardrails.
 
 Original proposal: single server for developers and agencies. Resellers, mail, DNS server and multi-server are non-goals for v1 (see [vision](02-vision-scope.md)).
 
@@ -229,7 +241,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0016 Per-site storage location (storage pools)
 
-**Full text (status Accepted, 2026-11-21):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this.
+**Full text (status Accepted, 2026-11-21):** [adr/0016-per-site-storage-location.md](adr/0016-per-site-storage-location.md). Summary: the storage location can be chosen through named **storage pools** (for example a second volume), never through a free path from the API. The agent checks mount point, marker file and quota per pool, so that an unmounted volume does not fill the root disk. The site's home directory lives directly in the pool, without symlinks. Hostashi does not format or partition disks. Moving between pools is a later, separate operation. All mechanisms are unverified, spike S9 clarifies this. Addendum 2 (Accepted, Kim, 2026-11-24): admins can rename a pool and choose the default pool in the panel and the CLI; adding and removing stay root-only.
 
 ## ADR-0017 CloudPanel import as migration, presets
 
@@ -394,7 +406,7 @@ ashi site add example.com --type php --php 8.4   # same program
 
 ## ADR-0054 Site types Node.js, reverse proxy and redirect
 
-**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `app`, `proxy`, `redirect`; changeable at any time, Addendum 3). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites are created without a Linux account. Addendum 1: static sites with a document root folder below `htdocs` and a single-page-app switch. Addendum 4: browser asset caching with configurable time and file types for static and PHP sites. Addendum 2: own app as a binary (`hostashi-app@<site>`). CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
+**Full text (status Accepted, 2026-11-22, by Kim):** [adr/0054](adr/0054-site-types-nodejs-proxy-redirect.md). Summary: a `type` column for sites (`static`, `php`, `node`, `app`, `proxy`, `redirect`; changeable at any time, Addendum 3). Node.js from the official nodejs.org builds of the supported LTS lines, pinned with SHA-256 in Hostashi, installed by a fixed root unit to `/opt/hostashi/node/<major>`; the app runs as `hostashi-node@<site>` under the site user with a typed start command (`node <file>` or `npm run <script>`), encrypted environment variables and a Hostashi-assigned loopback port that nftables opens only for nginx and the site user. Reverse proxy to one http(s) URL, private networks allowed, loopback and link-local refused, certificate checked by default. Redirect with 301/302/307/308 and optional path. Proxy and redirect sites are created without a Linux account. Addendum 1: static sites with a document root folder below `htdocs` and a single-page-app switch. Addendum 4: browser asset caching with configurable time and file types for static and PHP sites. Addendum 2: own app as a binary (`hostashi-app@<site>`). Addendum 5 (Accepted, 2026-11-24, by Kim): the document root check allows exactly the link a Git deploy makes (`.deploy/releases/<n>`), all other links stay refused. CloudPanel import takes over `proxy` and `nodejs` sites. No new `os/exec` exception.
 
 ## ADR-0055 Email notifications for service outages
 
@@ -423,3 +435,51 @@ ashi site add example.com --type php --php 8.4   # same program
 ## ADR-0061 Site type Python
 
 **Full text (status Accepted, 2026-11-22, by Kim):** [adr/0061](adr/0061-site-type-python.md). Summary: new site type `python`, built like `node`. CPython from python-build-standalone, every line that has not ended (today 3.11–3.15), pinned with SHA-256 in `internal/agentapi/python_versions.go` and installed by the fixed unit `hostashi-python-install@<line>` to `/opt/hostashi/python/<line>` with the Node.js unpack code; a daily workflow checks `SHA256SUMS` and the Sigstore build provenance and opens a PR. Hostashi creates `<home>/.venv` as the site user through a oneshot unit; packages are installed over SSH. The app runs in `hostashi-python@<site>` with typed start forms `wsgi` (gunicorn), `asgi` (uvicorn) or `script`, Hostashi adds the bind to `127.0.0.1:<port>`. Port, firewall filter, nginx branch, log and environment variables as for Node.js. CloudPanel Python sites are imported stopped, without a start command. No new binary, no new `os/exec` exception.
+
+## ADR-0062 Git deploy per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0062](adr/0062-git-deploy-per-site.md). Summary: Kim wants proper Git support in sites. Recommended: per site a repository (HTTPS with an optional sealed token, or SSH with an Ed25519 deploy key made by Hostashi and a pinned host key), a branch, shared paths and build commands. Each deploy checks the commit out into a new release directory with go-git in `hostashi git-sync`, run as the site user in a fixed sandboxed oneshot unit `hostashi-deploy@<site>`; build commands run there as cron commands do (ADR-0028); only a fully successful run is switched live by an atomic symlink swap, followed by a PHP reload or app restart and a cache purge. Rollback to a kept release, history and logs in the panel. Started by button, API, CLI or an optional signed webhook (GitHub, GitLab, Gitea/Forgejo, bearer token). No new `os/exec` exception. Decided by Kim on 2026-11-24: release directories with an atomic switch, go-git as the site user (no Git LFS in v1), build commands as for cron with presets, an optional webhook per site.
+
+## ADR-0063 Resource usage per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0063](adr/0063-resource-usage-per-site.md). Summary: Kim wants CPU, memory and network per site to see which site uses the most. Recommended: the agent reads CPU, memory working set, tasks and disk I/O from each site's slice and its SSH user slice (read-only op `sites.stats`, `IOAccounting=yes` on the slices); web traffic (bytes in and out, requests) from a small extra nginx log per site without IPs or paths; the panel samples every 15 s and keeps tiers like the server dashboard (new table `site_samples`). UI: a "Sites by usage" ranking for admins and a "Usage" tab per site. Outgoing traffic of the site's processes through nftables counters comes later in an addendum. cgroups have no network counters, and SQL load in the shared database server is not counted per site. Decided by Kim on 2026-11-24: web traffic now, outgoing traffic later.
+
+## ADR-0065 www/non-www redirect per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0065](adr/0065-www-redirect-per-site.md). Summary: a per-site setting `wwwRedirect` (`off`, `to-www`, `to-non-www`) redirects with 301 between `d` and `www.d` when both are domains of the site; domains without a partner are served as before. The partner is never added implicitly, so domain checks and the certificate stay unchanged; the panel offers a button to add it. nginx gets an extra server block per redirected name with the site's certificate, ACME location, logs and headers. Not for redirect sites. The CloudPanel import maps `www` redirect hosts to the setting. Decided by Kim on 2026-11-24: both names listed explicitly.
+
+## ADR-0066 Password protection and IP rules per site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0066](adr/0066-basic-auth-and-ip-rules-per-site.md). Summary: basic auth and IP blocking per site are P1. Recommended: typed settings instead of snippets. An IP rule per site (off, only these addresses, or block these addresses; up to 256 entries) and password protection for the whole site or a list of path prefixes (case-insensitive, through `map $uri` and a variable `auth_basic`), with up to 50 users whose bcrypt hashes (cost 5, about 3.5 ms per request) the panel makes, and an optional list of addresses that skip the password. The ACME and health locations always stay open, nginx does not pass the `Authorization` header on to the application, and the password file lives outside the site's home (root:www-data 0640, named by its content so rollbacks stay consistent). Real IP (ADR-0059) applies first. A fail2ban jail on the site error logs bans on ports 80 and 443. Everyone with a grant for the site may change it; snippets with the same directives are refused while the setting is on.
+
+## ADR-0067 Reset the file permissions of a site
+
+**Full text (status Accepted, 2026-11-24, by Kim):** [adr/0067](adr/0067-reset-site-permissions.md). Summary: a typed agent op `site.permissions.reset` gives every entry below a site's home back to the site user (home `site:www-data 0750`), directories `0755`, files `0644` or `0755` if executable, setuid/setgid/sticky removed, `.ssh` and `.gnupg` private (`0700`/`0600`). It walks on file descriptors only, never follows a link (the Git deploy link stays), skips other file systems, device files and hard links to foreign files and reports them. API `POST /api/v1/sites/{name}/permissions/reset` (scope `sites:write`, own sites), audited, CLI `hostashi api sites reset-permissions`. No new `os/exec` exception.
+
+## ADR-0068 Change the domain of a site
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0068](adr/0068-change-the-domain-of-a-site.md). Summary: a site's identity (name, Linux user, home, logs, backups, settings) is already independent of its domains, and the domain list can already be edited. The gap is HTTPS: a new name drops the whole site to HTTP until a certificate is there. Recommended: on a Let's Encrypt site on HTTPS, the change waits as pending until a certificate for the new list is installed, then domains and certificate switch in one web apply; on failure the site stays as it was and the error shows (cancel, retry, or change now). Port 80's default server answers ACME challenges for any host. New per-site redirect domains answer with 301 to the primary domain and stay on the certificate, so old names keep working after a change; the CloudPanel import uses them for redirect hosts. A "Change primary domain" dialog does the common case in one step. Site content (WordPress URLs, app environment) is not rewritten; the dialog lists what to check. Migration 0063.
+
+## ADR-0069 Application profiles (vhost templates) and WordPress quick install
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0069](adr/0069-application-profiles-and-wordpress-install.md). Summary: vhost templates become typed application profiles of the PHP type (ADR-0017 Part 4): web root, front controller, presets, PHP defaults and suggested cron jobs, never nginx text. Recommended: built-in profiles (Generic PHP, WordPress, WooCommerce, Laravel, Symfony, Shopware 6, TYPO3, Drupal; Magento 2 later) plus own profiles as typed data with YAML import/export and a read-only preview; extra rules only through the ADR-0029 snippet slots. WordPress quick install through a pinned WP-CLI in a oneshot unit `hostashi-wp@<site>` as the site user, started by a Go runner with fixed sub-commands and secrets on stdin; this needs a new, narrow `os/exec` exception `internal/wpcli`. Decided by Kim on 2026-11-25: own profiles (1B), WP-CLI with the `internal/wpcli` exception (2A), the eight built-in profiles with Magento 2 after 1.0.
+
+## ADR-0070 Staging and cloning a site
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0070](adr/0070-staging-and-cloning-a-site.md). Summary: clone a site with a Linux account into a new, independent site, optionally marked as staging of its source with "refresh from source"; no push back to live in 1.0. Files are copied by a typed agent routine on file descriptors (same safety as ADR-0067, base for the later pool move); local MariaDB databases are dumped and loaded into new databases as the clone's user through `mariadbctl`; external databases are not cloned. WordPress clones get their database settings and URLs rewritten with WP-CLI `search-replace` (ADR-0069 runner), Laravel and Symfony get typed `.env` edits, other applications a checklist. Staging clones start with cron disabled, password protection and `noindex`; Git deploy, SSH keys and caches are not copied. Decided by Kim on 2026-11-25: clone with refresh and no push to live (1B), all three staging defaults, URL rewrite for WordPress only (3A).
+
+## ADR-0071 Panel UI in English and German
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0071](adr/0071-panel-ui-in-english-and-german.md). Summary: the UI gets a translation layer with `i18next` + `react-i18next` (MIT), JSON catalogs per language and page, keys typed from the English catalog, and CI tests for missing keys and for JSX text outside `t()`. Each user has a language setting (`auto`, `en`, `de`); `auto` follows the browser. Numbers and dates go through one `Intl` module. API errors stay English on the server and are translated in the UI by their `code`; the six mail templates get a German version chosen by the recipient's setting. Wiki, CLI, OpenAPI and logs stay English. Translation in the repository; Weblate possible later. Decided by Kim on 2026-11-25: i18next + react-i18next (1A), UI plus errors plus mails (2B), German with "du".
+
+## ADR-0072 Rename a site
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0072](adr/0072-rename-a-site.md). Summary: today the site name is at the same time the UI label, the Linux user and group, the home folder, the registry key and the `{name}` in the API. Recommendation: add a free display name (`sites.title`, migration 0065, at most 64 characters, display only, never sent to the agent), editable through `PUT /api/v1/sites/{name}/title`, the CLI and a "Rename" dialog that keeps the system name visible. A real rename of the system name is not done in place (it would need downtime, new `usermod`/`groupmod` exec use and breaks absolute paths in applications); after ADR-0070 a later ADR can add "move to a new system name" through clone and domain handover. Decided by Kim on 2026-11-25: display name for 1.0 (A), move to a new system name through clone later (C).
+
+## ADR-0073 MCP server for AI assistants
+
+**Full text (status Accepted, 2026-11-25, by Kim):** [adr/0073](adr/0073-mcp-server.md). Summary: an MCP server so that AI assistants such as Claude can use the panel. Recommendation: a Streamable HTTP endpoint `POST /api/v1/mcp` in `serve` (stateless, official Go SDK `modelcontextprotocol/go-sdk`, protocol 2026-07-28), authenticated only by API token with a new scope `mcp:use`, no OAuth. A curated list of about 20 tools, each dispatched in-process to an existing API handler, so scopes, roles, site grants, validation and audit stay as they are; tools are filtered by the token's scopes, high-risk and session-only operations are never offered, writes are limited to reversible actions (maintenance, cache purge, backup, deploy, PHP pool restart). Prompt injection is named as a residual risk; mitigations: read-only token preset, untrusted content marked in results, `via: mcp` in the audit log, rate limit. No new agent operation, no new `os/exec`. Timing: after 1.0, as part of 1.1. Decided by Kim on 2026-11-25: HTTP endpoint (A), curated tools with reversible writes (B), after 1.0, no OAuth for now.
+
+## ADR-0074 Backups of deleted sites
+
+**Full text (status Accepted, 2026-11-26, by Kim):** [adr/0074](adr/0074-backups-of-deleted-sites.md). Summary: after a site is deleted its snapshots stay in the repository (restic `forget` never empties a group that gets no new snapshots), but the Backups page only lists existing sites and a restore needs the site's home. Recommendation: list sites with snapshots through a new agent operation `backup.sites`, show "Deleted sites" to administrators, restore a deleted site's snapshot into an existing site the administrator picks, keep the snapshots until the administrator deletes them with a typed-name confirmation, and show a reused name only the snapshots taken after the new site was created. Decided by Kim on 2026-11-26: restore into an existing site (A), keep until deleted by hand (A) with optional automatic expiry set in the UI, name reuse shows only newer snapshots (A).

@@ -44,12 +44,14 @@ const pairs: [string, string, number][] = [
   ["--fg", "--bg", 4.5],
   ["--fg", "--surface", 4.5],
   ["--fg", "--sunken", 4.5],
+  ["--fg", "--selection", 4.5],
   ["--muted", "--surface", 4.5],
   ["--muted", "--sunken", 4.5],
   ["--accent", "--surface", 4.5],
   ["--accent", "--bg", 4.5],
   ["--accent", "--sunken", 4.5],
   ["--on-primary", "--primary", 4.5],
+  ["--on-brand", "--brand", 4.5],
   ["--ok", "--ok-bg", 4.5],
   ["--warn", "--warn-bg", 4.5],
   ["--err", "--err-bg", 4.5],
@@ -91,9 +93,28 @@ describe("component styles", () => {
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i);
   });
 
+  // Measured sizes that components set at runtime, not design tokens.
+  const runtime = new Set(["--files-bar-h", "--files-sticky-h"]);
+
   it.each(sheets)("%s uses only defined tokens", (file) => {
     const css = readFileSync(resolve(dir, file), "utf8");
     const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]!));
-    expect([...used].filter((v) => !light.has(v))).toEqual([]);
+    expect([...used].filter((v) => !light.has(v) && !runtime.has(v))).toEqual([]);
+  });
+
+  // The sheets use no nesting, so a rule that starts at the left margin
+  // while another is still open lost its closing brace (as after a merge).
+  it.each(sheets)("%s closes every rule", (file) => {
+    const css = readFileSync(resolve(dir, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    let depth = 0;
+    let inMedia = false;
+    const open: number[] = [];
+    css.split("\n").forEach((line, i) => {
+      if (line && !/^[\s}]/.test(line) && depth > (inMedia ? 1 : 0) && !line.startsWith("@")) open.push(i + 1);
+      if (depth === 0) inMedia = line.startsWith("@");
+      depth += (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
+    });
+    expect(open).toEqual([]);
+    expect(depth).toBe(0);
   });
 });

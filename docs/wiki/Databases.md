@@ -19,14 +19,16 @@ In the site's configuration, use `localhost` as the database host for the server
 
 ## Import and export
 
-Dumps are files in the site's home. Upload them first, for example with [SFTP](SSH-and-SFTP.md) or the [file manager](File-manager.md).
-
-- **Import:** on the database's page, under **Import or export**, enter the path relative to the site's home. MariaDB and MySQL take `.sql` or `.sql.gz`, PostgreSQL also `.dump` (`pg_dump` custom format).
+- **Import:** on the database's page, under **Import or export**, choose **Import a file**. MariaDB and MySQL take `.sql` or `.sql.gz`, PostgreSQL also `.dump` (`pg_dump` custom format).
+  - **My computer:** pick the file. The panel uploads it into `hostashi-imports/` in the site's home, imports it and removes it again. While it is there it counts towards the site's disk space.
+  - **The home of site …:** enter the path of a file already in the site's home, for example one uploaded with [SFTP](SSH-and-SFTP.md) or the [file manager](File-manager.md).
 - **Export:** enter the file to write, relative to the home. An existing file is never replaced.
 
 ## Browse and edit the data
 
 If the web database tool is installed, **Open in Adminer** opens the database in a new browser tab. Hostashi creates a temporary database user for it; that user and its connections end after the session length you choose. No password reaches your browser.
+
+The top bar in Adminer shows when the session ends. **+30 min** opens the panel in a new tab, where one click extends the session; the Adminer tab shows the new time when you go back to it. **Logout** in Adminer opens the panel, where one click ends the session: the temporary user is removed and its connections close. The database's page in the panel lists the open sessions with the same two actions.
 
 ## Delete a database
 

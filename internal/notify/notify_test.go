@@ -109,6 +109,8 @@ func TestEnabledDefaults(t *testing.T) {
 		{"admin", nil, Services, true},
 		{"user", map[string]bool{"services": true}, Services, true},
 		{"manager", nil, Services, false},
+		{"admin", nil, Deploys, false}, // opt-in for everyone (ADR-0062)
+		{"user", map[string]bool{"deploys": true}, Deploys, true},
 		{"admin", nil, Category("other"), false},
 	} {
 		if got := Enabled(c.role, c.prefs, c.cat); got != c.want {
@@ -227,6 +229,56 @@ func TestWatcherBackups(t *testing.T) {
 	w.Check(t.Context())
 
 	status.Finished, status.Running = now.Add(-time.Minute), true
+
+	w.Check(t.Context())
+
+	if len(ob.sent) != 1 {
+		t.Fatalf("sent %d", len(ob.sent))
+	}
+}
+
+func TestWatcherBackupOverdue(t *testing.T) {
+	n, _, ob := newNotifier(t)
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	status := agentapi.BackupStatus{OK: true, Finished: now.Add(-25 * time.Hour)}
+	info := agentapi.BackupInfo{Settings: agentapi.DefaultBackupSettings(), Ready: true}
+	w := &Watcher{
+		Notifier: n, Now: func() time.Time { return now }, Log: n.Log,
+		Backups:    func(context.Context) (agentapi.BackupStatus, error) { return status, nil },
+		BackupInfo: func(context.Context) (agentapi.BackupInfo, error) { return info, nil },
+	}
+
+	// Daily: 25 hours is within the 26.
+	w.Check(t.Context())
+
+	if len(ob.sent) != 0 {
+		t.Fatalf("daily run reported after 25 hours: %+v", ob.sent)
+	}
+
+	// Hourly: 4 hours without a run is missing, and reported once.
+	info.Settings.IntervalHours = 1
+	status.Finished = now.Add(-4 * time.Hour)
+
+	w.Check(t.Context())
+	w.Check(t.Context())
+
+	if len(ob.sent) != 1 || ob.sent[0].Subject != "Backup missing" {
+		t.Fatalf("sent %+v", ob.sent)
+	}
+
+	for _, want := range []string{"scheduled to run every hour", "hostashi-backup.timer", "#/backups"} {
+		if !strings.Contains(ob.sent[0].Body, want) {
+			t.Errorf("body lacks %q:\n%s", want, ob.sent[0].Body)
+		}
+	}
+
+	// Not while a run is going, nor when backups are not set up.
+	ob.seen = nil
+	status.Running = true
+
+	w.Check(t.Context())
+
+	status.Running, info.Ready = false, false
 
 	w.Check(t.Context())
 

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CheckCircle, Info, Warning, WarningOctagon } from "@phosphor-icons/react";
+import { CheckCircle, Info, Warning, XCircle } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
 export type NoticeTone = "info" | "ok" | "warn" | "err";
 
-const icons = { info: Info, ok: CheckCircle, warn: Warning, err: WarningOctagon };
+const icons = { info: Info, ok: CheckCircle, warn: Warning, err: XCircle };
 const toneClass = { info: "ui-tone-off", ok: "ui-tone-ok", warn: "ui-tone-warn", err: "ui-tone-err" };
 
 /**
@@ -19,7 +19,7 @@ export function Notice({ tone, title, children }: { tone: NoticeTone; title: str
       <Icon size={20} aria-hidden="true" />
       <div className="ui-notice-body">
         <strong>{title}</strong>
-        {children !== undefined && <p>{children}</p>}
+        {children !== undefined && <div className="ui-notice-text">{children}</div>}
       </div>
     </div>
   );

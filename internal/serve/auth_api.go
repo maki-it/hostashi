@@ -55,6 +55,9 @@ type meJSON struct {
 
 	SecondFactor         bool `json:"secondFactor"`
 	SecondFactorRequired bool `json:"secondFactorRequired"`
+	// TOTP is whether an authenticator app is set up (a passkey is the
+	// other second factor).
+	TOTP bool `json:"totp"`
 	preferencesJSON
 }
 
@@ -92,6 +95,11 @@ type totpConfirmRequest struct {
 	Code string `json:"code"`
 }
 
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
 type totpDisableRequest struct {
 	Password string `json:"password"`
 	Code     string `json:"code"`
@@ -127,7 +135,7 @@ func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON,
 
 	return meJSON{
 		userJSON:     userJSON{Username: u.Username, Role: u.Role},
-		SecondFactor: has, SecondFactorRequired: auth.SecondFactorRequired(u),
+		SecondFactor: has, SecondFactorRequired: auth.SecondFactorRequired(u), TOTP: u.TOTPEnabled,
 		preferencesJSON: preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme},
 	}, true
 }
@@ -458,6 +466,80 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 
 		if err := svc.TOTPDisable(r.Context(), u.ID, in.Password, in.Code); err != nil {
 			fail(w, err, "totp disable")
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Moving TOTP to a new device needs the password and a current or
+	// recovery code; the old app works until the new one is confirmed.
+	mux.Op("POST /api/v1/auth/totp/replace", openapi.Operation{
+		ID: "replaceTOTP", Tag: "auth", Summary: "Start moving TOTP to a new device with password and a current code; returns the new secret",
+		In: totpDisableRequest{}, Out: totpEnrollJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in totpDisableRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		secret, uri, err := svc.TOTPReplaceStart(r.Context(), u.ID, in.Password, in.Code)
+		if err != nil {
+			fail(w, err, "totp replace")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, totpEnrollJSON{Secret: secret, URI: uri})
+	})
+
+	mux.Op("POST /api/v1/auth/totp/replace/confirm", openapi.Operation{
+		ID: "confirmTOTPReplace", Tag: "auth", Summary: "Confirm the new device with a first code; returns new recovery codes once",
+		In: totpConfirmRequest{}, Out: recoveryCodesJSON{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in totpConfirmRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		codes, err := svc.TOTPReplaceConfirm(r.Context(), u.ID, in.Code)
+		if err != nil {
+			fail(w, err, "totp replace confirm")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, recoveryCodesJSON{RecoveryCodes: codes})
+	})
+
+	// The password changes only with the current one, from a browser
+	// session; the other sessions of the account end.
+	mux.Op("POST /api/v1/auth/password", openapi.Operation{
+		ID: "changePassword", Tag: "auth", Summary: "Change the caller's password; ends the other sessions", In: passwordChangeRequest{},
+	}, func(w http.ResponseWriter, r *http.Request) {
+		u, ok := current(w, r)
+		if !ok {
+			return
+		}
+
+		var in passwordChangeRequest
+		if !decodeJSON(w, r, &in) {
+			return
+		}
+
+		if err := svc.ChangePassword(r.Context(), u.ID, in.CurrentPassword, in.NewPassword, sessionToken(r), clientIP(r)); err != nil {
+			fail(w, err, "change password")
 
 			return
 		}

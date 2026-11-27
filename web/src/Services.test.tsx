@@ -32,22 +32,49 @@ describe("services helpers", () => {
 
 describe("Services", () => {
   it("lists services with state, restarts and only the allowed actions", async () => {
+    const user = userEvent.setup();
     mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
     render(<Services />);
 
-    const table = await screen.findByRole("table", { name: "Services" });
-    const [, nginx, mariadb, panel, php] = within(table).getAllByRole("row");
+    await user.click(await screen.findByRole("radio", { name: /^All/ }));
+    const table = await screen.findByRole("table", { name: "Server" });
+    const [, nginx, mariadb, panel] = within(table).getAllByRole("row");
+    const [, php] = within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row");
     expect(nginx).toHaveTextContent("Web server (nginx)");
     expect(nginx).toHaveTextContent("50 MiB");
-    // Start is pointless while it runs.
-    expect(within(nginx!).getByRole("button", { name: "Start Web server (nginx)" })).toBeDisabled();
+    // Start is hidden while it runs; nginx has no Stop at all.
+    expect(within(nginx!).queryByRole("button", { name: "Start Web server (nginx)" })).not.toBeInTheDocument();
     expect(within(nginx!).getByRole("button", { name: "Reload Web server (nginx)" })).toBeEnabled();
     expect(within(nginx!).queryByRole("button", { name: /Stop/ })).not.toBeInTheDocument();
     expect(mariadb).toHaveTextContent("2");
+    // A running MariaDB offers Stop in place of Start.
+    expect(within(mariadb!).getByRole("button", { name: "Stop MariaDB" })).toBeEnabled();
+    expect(within(mariadb!).queryByRole("button", { name: "Start MariaDB" })).not.toBeInTheDocument();
+    // A failed PHP-FPM offers Start.
+    expect(within(php!).getByRole("button", { name: /^Start PHP/ })).toBeEnabled();
     expect(panel).toHaveTextContent("Managed by Hostashi");
     expect(php).toHaveTextContent("Failed");
-    expect(php).toHaveTextContent("Site blog");
+    expect(within(php!).getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
     expect(screen.getByText("Restarted by systemd 2 times after a crash", { exact: false })).toBeInTheDocument();
+  });
+
+  it("groups the server and the sites and filters the problems", async () => {
+    const user = userEvent.setup();
+    mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
+    render(<Services />);
+
+    // With problems, the page opens on them.
+    expect(await screen.findByRole("radio", { name: /^Problems/ })).toHaveAttribute("aria-checked", "true");
+    const problems = within(screen.getByRole("table", { name: "Problems" })).getAllByRole("row").slice(1);
+    // The failed PHP-FPM and MariaDB, which systemd restarted today.
+    expect(problems.map((r) => within(r).getAllByRole("cell")[0]!.querySelector("strong")?.textContent)).toEqual(["MariaDB", "PHP-FPM · blog"]);
+    expect(screen.queryByRole("table", { name: "Server" })).toBeNull();
+
+    await user.click(screen.getByRole("radio", { name: /^All/ }));
+    expect(screen.getByRole("region", { name: "Sites" })).toHaveTextContent("1 of 1 with a problem");
+    await user.type(screen.getByRole("searchbox", { name: "Filter services" }), "blog");
+    expect(screen.getByRole("table", { name: "Server" })).toHaveTextContent("No server service matches the filter.");
+    expect(within(screen.getByRole("table", { name: "Sites" })).getAllByRole("row")).toHaveLength(2);
   });
 
   it("asks to type the action before stopping MariaDB", async () => {
@@ -78,6 +105,7 @@ describe("Services", () => {
       "POST /api/v1/services/nginx/reload": { status: 409, body: { error: { code: "failed_precondition", message: "nginx -t rejected the configuration" } } },
     });
     render(<Services />);
+    await user.click(await screen.findByRole("radio", { name: /^Server/ }));
 
     await user.click(await screen.findByRole("button", { name: "Reload Web server (nginx)" }));
     expect(await screen.findByText(/nginx -t rejected/)).toBeInTheDocument();

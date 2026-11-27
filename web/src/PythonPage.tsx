@@ -4,12 +4,13 @@
 // python-build-standalone, each checked against its pinned checksum
 // (ADR-0061).
 
+import { RuntimesHead } from "./Runtimes";
 import { DownloadSimple, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { getPython, installPython, pythonMessage, removePython, sortPythonLines, type PythonRelease, type PythonStatus } from "./python";
 import { daysUntil, todayUTC } from "./php";
 import { listSites, type Site } from "./sites";
-import { Badge, Button, Card, IconButton, JobCard, Notice, PageHead, Table, useJobCard, type Column } from "./ui";
+import { Badge, Button, Card, IconButton, JobCard, Notice, Table, useJobCard, type Column } from "./ui";
 
 type Row = PythonRelease & { installed: string; installedBuild: string; sites: number | null };
 
@@ -69,12 +70,7 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
     }
   };
 
-  const head = (
-    <PageHead
-      title="Python versions"
-      description="The supported lines of Python, from the CPython builds of python-build-standalone. Hostashi checks every download against its pinned checksum; a Hostashi update brings newer releases and rebuilds."
-    />
-  );
+  const head = <RuntimesHead active="python" description={"The supported lines of Python, from the CPython builds of python-build-standalone. Hostashi checks every download against its pinned checksum; a Hostashi update brings newer releases and rebuilds."} />;
 
   if (!status) {
     return (
@@ -144,7 +140,7 @@ export function PythonPage({ today = todayUTC(), poll = 3000 }: { today?: string
             </Button>
           )}
           {r.installed && r.sites === 0 && (
-            <IconButton label={"Remove Python " + r.line} icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
+            <IconButton label={"Remove Python " + r.line} text="Remove" icon={<Trash size={16} aria-hidden="true" />} danger disabled={running || busy} onClick={() => setConfirm(r.line)} />
           )}
         </span>
       ),

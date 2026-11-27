@@ -4,10 +4,12 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,16 +33,65 @@ func TestTargetValidate(t *testing.T) {
 		t.Errorf("repository %q", got)
 	}
 
+	generic := map[string]struct {
+		tg   Target
+		repo string
+		kh   string
+	}{
+		"linux server, absolute path": {
+			Target{User: "backup_web3", Host: "backup.example.org", Port: 22, Path: "/srv/backups/web3"},
+			"sftp://backup_web3@backup.example.org:22//srv/backups/web3", "backup.example.org",
+		},
+		"nas by ipv4": {
+			Target{User: "First.Last", Host: "192.0.2.10", Port: 2222, Path: "hostashi"},
+			"sftp://First.Last@192.0.2.10:2222/hostashi", "[192.0.2.10]:2222",
+		},
+		"ipv6": {
+			Target{User: "u1", Host: "2001:db8::10", Port: 22, Path: "restic"},
+			"sftp://u1@[2001:db8::10]:22/restic", "2001:db8::10",
+		},
+		"ipv6 other port": {
+			Target{User: "u1", Host: "2001:db8::10", Port: 23, Path: "restic"},
+			"sftp://u1@[2001:db8::10]:23/restic", "[2001:db8::10]:23",
+		},
+	}
+
+	for name, c := range generic {
+		if err := c.tg.Validate(); err != nil {
+			t.Errorf("%s refused: %v", name, err)
+			continue
+		}
+
+		if got := c.tg.Repository(); got != c.repo {
+			t.Errorf("%s: repository %q, want %q", name, got, c.repo)
+		}
+
+		if got := c.tg.KnownHostsName(); got != c.kh {
+			t.Errorf("%s: known hosts name %q, want %q", name, got, c.kh)
+		}
+	}
+
 	bad := map[string]func(*Target){
 		"empty user":        func(t *Target) { t.User = "" },
 		"user with @":       func(t *Target) { t.User = "a@b" },
 		"user as option":    func(t *Target) { t.User = "-oProxyCommand" },
-		"ip host":           func(t *Target) { t.Host = "127.0.0.1" },
+		"user with colon":   func(t *Target) { t.User = "a:b" },
+		"user with slash":   func(t *Target) { t.User = "a/b" },
+		"user with space":   func(t *Target) { t.User = "a b" },
+		"loopback host":     func(t *Target) { t.Host = "127.0.0.1" },
+		"loopback ipv6":     func(t *Target) { t.Host = "::1" },
+		"unspecified host":  func(t *Target) { t.Host = "0.0.0.0" },
+		"multicast host":    func(t *Target) { t.Host = "224.0.0.1" },
+		"bracketed ipv6":    func(t *Target) { t.Host = "[2001:db8::1]" },
+		"ipv6 with zone":    func(t *Target) { t.Host = "fe80::1%eth0" },
+		"ipv6 uppercase":    func(t *Target) { t.Host = "2001:DB8::1" },
+		"ipv4 mapped ipv6":  func(t *Target) { t.Host = "::ffff:192.0.2.1" },
+		"single label host": func(t *Target) { t.Host = "nas" },
 		"uppercase host":    func(t *Target) { t.Host = "U1.Example.com" },
 		"host with port":    func(t *Target) { t.Host = "u1.example.com:22" },
 		"port zero":         func(t *Target) { t.Port = 0 },
 		"port too large":    func(t *Target) { t.Port = 65536 },
-		"absolute path":     func(t *Target) { t.Path = "/etc" },
+		"double slash path": func(t *Target) { t.Path = "//etc" },
 		"dotdot":            func(t *Target) { t.Path = "a/../../etc" },
 		"dot segment":       func(t *Target) { t.Path = "a/./b" },
 		"trailing slash":    func(t *Target) { t.Path = "a/" },
@@ -66,7 +117,7 @@ func TestSettingsValidate(t *testing.T) {
 		t.Fatalf("defaults refused: %v", err)
 	}
 
-	if d.Retention != (Retention{Daily: 7, Weekly: 4, Monthly: 6}) || d.WindowStart != 1 || d.WindowEnd != 5 || d.ReadParts != 12 {
+	if d.Retention != (Retention{Daily: 7, Weekly: 4, Monthly: 6}) || d.IntervalHours != 24 || d.WindowStart != 1 || d.WindowEnd != 5 || d.ReadParts != 12 {
 		t.Errorf("defaults changed: %+v", d)
 	}
 
@@ -75,6 +126,14 @@ func TestSettingsValidate(t *testing.T) {
 		"daily too many":   func(s *Settings) { s.Retention.Daily = agentapi.MaxBackupDaily + 1 },
 		"weekly negative":  func(s *Settings) { s.Retention.Weekly = -1 },
 		"monthly too many": func(s *Settings) { s.Retention.Monthly = agentapi.MaxBackupMonthly + 1 },
+		"hourly negative":  func(s *Settings) { s.Retention.Hourly = -1 },
+		"hourly too many":  func(s *Settings) { s.Retention.Hourly = agentapi.MaxBackupHourly + 1 },
+		"yearly negative":  func(s *Settings) { s.Retention.Yearly = -1 },
+		"yearly too many":  func(s *Settings) { s.Retention.Yearly = agentapi.MaxBackupYearly + 1 },
+		"interval zero":    func(s *Settings) { s.IntervalHours = 0 },
+		"interval 5":       func(s *Settings) { s.IntervalHours = 5 },
+		"interval 48":      func(s *Settings) { s.IntervalHours = 48 },
+		"interval minus":   func(s *Settings) { s.IntervalHours = -1 },
 		"window reversed":  func(s *Settings) { s.WindowStart, s.WindowEnd = 5, 1 },
 		"window empty":     func(s *Settings) { s.WindowStart, s.WindowEnd = 3, 3 },
 		"window 25":        func(s *Settings) { s.WindowEnd = 25 },
@@ -100,11 +159,116 @@ func TestSettingsValidate(t *testing.T) {
 	}
 }
 
+func TestSettingsHourlyAndYearly(t *testing.T) {
+	for _, h := range agentapi.BackupIntervals {
+		s := DefaultSettings()
+		s.IntervalHours = h
+		s.Retention = Retention{Hourly: agentapi.MaxBackupHourly, Daily: 1, Yearly: agentapi.MaxBackupYearly}
+
+		if err := s.Validate(); err != nil {
+			t.Errorf("interval %d refused: %v", h, err)
+		}
+	}
+
+	// Settings from before the hourly schedule run daily and keep no hourly
+	// or yearly snapshots.
+	var old Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"daily":7,"weekly":4,"monthly":6},"windowStart":1,"windowEnd":5,"readParts":12}`), &old); err != nil {
+		t.Fatal(err)
+	}
+
+	if old != DefaultSettings() {
+		t.Errorf("old settings decoded as %+v", old)
+	}
+
+	var set Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"hourly":48,"daily":7,"yearly":2},"intervalHours":1,"windowStart":1,"windowEnd":5}`), &set); err != nil {
+		t.Fatal(err)
+	}
+
+	if set.IntervalHours != 1 || set.Retention.Hourly != 48 || set.Retention.Yearly != 2 {
+		t.Errorf("decoded %+v", set)
+	}
+
+	for _, raw := range []string{
+		`{"version":1,"retention":{"daily":7},"every":"1h"}`,
+		`{"version":1,"retention":{"daily":7,"minutely":5}}`,
+		`{"version":1,"intervalHours":"1"}`,
+	} {
+		var s Settings
+		if err := json.Unmarshal([]byte(raw), &s); err == nil {
+			t.Errorf("%s decoded as %+v", raw, s)
+		}
+	}
+}
+
+func TestBackupOverdue(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	done := func(ago time.Duration) agentapi.BackupStatus { return agentapi.BackupStatus{Finished: now.Add(-ago)} }
+
+	cases := []struct {
+		name     string
+		interval int
+		ready    bool
+		st       agentapi.BackupStatus
+		want     bool
+	}{
+		{"daily within 26 hours", 24, true, done(26 * time.Hour), false},
+		{"daily after 26 hours", 24, true, done(26*time.Hour + time.Minute), true},
+		{"hourly within 3 hours", 1, true, done(3 * time.Hour), false},
+		{"hourly after 3 hours", 1, true, done(3*time.Hour + time.Second), true},
+		{"every 6 hours after 8", 6, true, done(9 * time.Hour), true},
+		{"not set up", 1, false, done(48 * time.Hour), false},
+		{"running", 1, true, agentapi.BackupStatus{Running: true, Finished: now.Add(-48 * time.Hour)}, false},
+		{"never finished", 1, true, agentapi.BackupStatus{}, false},
+		{"invalid interval counts as daily", 0, true, done(25 * time.Hour), false},
+	}
+
+	for _, c := range cases {
+		s := DefaultSettings()
+		s.IntervalHours = c.interval
+
+		if got := agentapi.BackupOverdue(s, c.ready, c.st, now); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+}
+
+func TestTimerWindow(t *testing.T) {
+	cases := map[int]string{
+		24: "OnCalendar=*-*-* 01:00:00\nRandomizedDelaySec=4h\n",
+		12: "OnCalendar=*-*-* 00/12:00:00\nRandomizedDelaySec=60min\n",
+		6:  "OnCalendar=*-*-* 00/6:00:00\nRandomizedDelaySec=60min\n",
+		1:  "OnCalendar=*-*-* 00/1:00:00\nRandomizedDelaySec=60min\n",
+	}
+
+	for h, want := range cases {
+		s := DefaultSettings()
+		s.IntervalHours = h
+
+		got := TimerWindow(s)
+		if !strings.HasPrefix(got, "# Written by the Hostashi agent") || !strings.Contains(got, "[Timer]\nOnCalendar=\n"+want) {
+			t.Errorf("interval %d: %q", h, got)
+		}
+	}
+
+	// The window only shapes the daily run.
+	s := DefaultSettings()
+	s.IntervalHours, s.WindowStart, s.WindowEnd = 2, 20, 22
+
+	if got := TimerWindow(s); strings.Contains(got, "20:00") || strings.Contains(got, "RandomizedDelaySec=2h") {
+		t.Errorf("window applied to an interval: %q", got)
+	}
+}
+
 func TestResticAcceptsEveryValidTarget(t *testing.T) {
 	for _, tg := range []Target{
 		*storageBox(),
 		{User: "u1", Host: "backup.example.org", Port: 65535, Path: "a"},
 		{User: "0", Host: "a.de", Port: 1, Path: "a_b/c-d/e.f"},
+		{User: "backup_web3", Host: "nas.example.lan", Port: 22, Path: "/srv/backups/web3"},
+		{User: "First.Last", Host: "192.0.2.10", Port: 2222, Path: "hostashi"},
+		{User: "u1", Host: "2001:db8::10", Port: 22, Path: "/srv/restic"},
 	} {
 		s := DefaultSettings()
 		s.Target = &tg
@@ -158,7 +322,20 @@ type fakeRepo struct {
 	partial   string
 	failOpen  error
 	failCheck error
+	failIDs   error
 	snaps     []resticctl.Snapshot
+	forgotten []string
+}
+
+func (f *fakeRepo) ForgetIDs(_ context.Context, ids []string) error {
+	f.calls = append(f.calls, "forget-ids "+strconv.Itoa(len(ids)))
+	if f.failIDs != nil {
+		return f.failIDs
+	}
+
+	f.forgotten = append(f.forgotten, ids...)
+
+	return nil
 }
 
 func (f *fakeRepo) Init(context.Context) error {
@@ -505,5 +682,93 @@ func TestSettingsAndStatusFiles(t *testing.T) {
 	got, err := ReadStatus(dir, uid)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("status round trip:\n got %+v\nwant %+v (%v)", got, want, err)
+	}
+}
+
+// The run removes the snapshots of deleted sites that are marked or, with
+// DeletedSiteDays, expired, and never those of a site that exists unless
+// a mark names an earlier site of that name (ADR-0074).
+func TestRunRemovesDeletedSites(t *testing.T) {
+	now := time.Date(2026, 11, 26, 2, 0, 0, 0, time.UTC)
+	created := now.AddDate(0, -1, 0)
+	snap := func(id byte, site string, age time.Duration) resticctl.Snapshot {
+		return resticctl.Snapshot{ID: strings.Repeat(string(id), 64), Time: now.Add(-age), Tags: []string{"site:" + site, "kind:files"}}
+	}
+
+	day := 24 * time.Hour
+	repo := &fakeRepo{snaps: []resticctl.Snapshot{
+		snap('a', "blog", day),     // live
+		snap('b', "blog", 60*day),  // earlier site of blog, marked
+		snap('c', "old", 40*day),   // deleted, newest 40 days ago: expires
+		snap('d', "old", 50*day),   // same site
+		snap('e', "gone", 5*day),   // deleted, marked
+		snap('f', "fresh", 5*day),  // deleted, neither marked nor old enough
+		snap('9', "shop", 400*day), // live and old: kept
+		{ID: strings.Repeat("8", 64), Time: now.Add(-400 * day), Tags: []string{"kind:panel"}},
+	}}
+
+	s := settingsWithTarget()
+	s.DeletedSiteDays = 30
+
+	r := &Runner{
+		Repo: repo, Settings: s, Now: func() time.Time { return now }, Lstat: fakeFS(nil, nil),
+		Live: map[string]bool{"blog": true, "shop": true},
+		Marks: []agentapi.BackupForgetMark{
+			{Site: "blog", Before: created},
+			{Site: "gone"},
+			{Site: "shop"}, // no Before while shop exists: ignored
+		},
+	}
+
+	st := r.Run(context.Background(), nil)
+
+	got := strings.Join(slices.Sorted(slices.Values(repo.forgotten)), ",")
+	want := strings.Join([]string{strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("d", 64), strings.Repeat("e", 64)}, ",")
+
+	if got != want {
+		t.Errorf("forgotten %s", got)
+	}
+
+	wantRemoved := []agentapi.BackupRemoved{{Site: "blog", Snapshots: 1}, {Site: "gone", Snapshots: 1}, {Site: "old", Snapshots: 2, Expired: true}}
+	if !reflect.DeepEqual(st.Removed, wantRemoved) || st.RemoveError != "" || !st.OK {
+		t.Errorf("status %+v", st)
+	}
+
+	// The removal comes before the retention policy.
+	if i := slices.Index(repo.calls, "forget-ids 4"); i < 0 || repo.calls[i+1] != "forget" {
+		t.Errorf("calls %q", repo.calls)
+	}
+
+	// A failure is reported apart from the backup, which stays OK.
+	repo2 := &fakeRepo{snaps: repo.snaps, failIDs: errors.New("locked")}
+	r.Repo = repo2
+
+	if st := r.Run(context.Background(), nil); !st.OK || !strings.Contains(st.RemoveError, "locked") || st.Removed != nil {
+		t.Errorf("failed removal: %+v", st)
+	}
+
+	// Without a list of live sites nothing is removed.
+	repo3 := &fakeRepo{snaps: repo.snaps}
+	r.Repo, r.Live = repo3, nil
+
+	if r.Run(context.Background(), nil); len(repo3.forgotten) != 0 {
+		t.Errorf("removed without live sites: %v", repo3.forgotten)
+	}
+}
+
+func TestDeletedSiteDaysBounds(t *testing.T) {
+	s := DefaultSettings()
+
+	for days, ok := range map[int]bool{0: true, 1: true, 3650: true, -1: false, 3651: false} {
+		s.DeletedSiteDays = days
+		if err := s.Validate(); (err == nil) != ok {
+			t.Errorf("%d: %v", days, err)
+		}
+	}
+
+	// Settings written before the field exist keep everything.
+	var old Settings
+	if err := json.Unmarshal([]byte(`{"version":1,"retention":{"daily":7},"windowStart":1,"windowEnd":5,"readParts":12}`), &old); err != nil || old.DeletedSiteDays != 0 {
+		t.Errorf("old settings: %+v, %v", old, err)
 	}
 }

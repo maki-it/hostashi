@@ -14,7 +14,7 @@ import {
   type ObjectCache,
 } from "./objcache";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, Notice } from "./ui";
+import { AppliesAtOnce, Badge, Button, Card, CopyButton, Field, Notice, Switch } from "./ui";
 
 type Props = {
   site: Site;
@@ -99,7 +99,7 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
   const state = cacheState(c);
 
   return (
-    <Card title="Object cache">
+    <Card title="Object cache" actions={<AppliesAtOnce />}>
       <div className="ui-stack">
         <p className="ui-row">
           <Badge tone={state.tone}>{state.word}</Badge>
@@ -109,18 +109,18 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
             </span>
           )}
         </p>
-        <label className="ui-check">
-          <input type="checkbox" checked={c.enabled} disabled={busy || (site.disabled && !c.enabled)} onChange={(e) => void toggle(e.target.checked)} />
+        <Switch
+          checked={c.enabled}
+          disabled={busy || (site.disabled && !c.enabled)}
+          onChange={(on) => void toggle(on)}
+          hint="Only this site's PHP, cron jobs and SSH logins reach it, over a socket. It keeps nothing on disk: a restart, a flush or a new size empties it. Its memory counts against the site's memory limit."
+        >
           Run an object cache (Valkey, compatible with Redis) for this site
-        </label>
-        <p className="ui-hint">
-          Only this site's PHP, cron jobs and SSH logins reach it, over a socket. It keeps nothing on disk: a restart, a flush or a new
-          size empties it. Its memory counts against the site's memory limit.
-        </p>
+        </Switch>
         {site.disabled && !c.enabled && <Notice tone="warn" title="Enable the site first to turn the cache on." />}
         {c.status?.paused && <Notice tone="warn" title="The site is disabled, so its cache is stopped. It starts again with the site." />}
         {canSize && (
-          <form className="ui-row ui-row-end" onSubmit={saveSize} noValidate>
+          <form className="ui-row ui-row-field" onSubmit={saveSize} noValidate>
             <Field label="Size">
               <select className="ui-select" value={size} onChange={(e) => setSize(Number(e.target.value))}>
                 {sizeChoices(c).map((n) => (
@@ -141,6 +141,10 @@ export function ObjectCacheSettings({ site, canSize }: Props) {
             <Field label="Socket" hint="Apps connect here instead of 127.0.0.1:6379. No password.">
               <input className="ui-input ui-mono" readOnly value={c.socket} onFocus={(e) => e.target.select()} />
             </Field>
+            <div className="ui-row">
+              <CopyButton text={c.socket} label="Copy the socket path" />
+              <CopyButton text={wpConfig(c.socket)} label="Copy the lines for wp-config.php" />
+            </div>
             <Field label="For WordPress (wp-config.php)" hint="With the Redis Object Cache plugin. Hostashi does not install plugins.">
               <textarea className="ui-input ui-textarea ui-mono" readOnly rows={2} value={wpConfig(c.socket)} onFocus={(e) => e.target.select()} />
             </Field>

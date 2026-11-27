@@ -43,9 +43,13 @@
   color: var(--accent);
   border-color: var(--accent);
 }
-.ui-btn:disabled {
+.ui-btn:disabled,
+.ui-btn-primary:disabled,
+.ui-btn-danger:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--muted);
+  background: var(--sunken);
+  border-color: var(--line-strong);
 }
 .ui-btn-primary {
   color: var(--on-primary);
@@ -159,6 +163,7 @@
 .ui-card-actions {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .ui-card-body {
@@ -178,11 +183,20 @@
   white-space: nowrap;
   border-radius: 999px;
 }
+/* A long badge in a list of details may wrap on a phone. */
+dd > .ui-badge {
+  height: auto;
+  min-height: 24px;
+  padding-block: 2px;
+  line-height: 1.35;
+  white-space: normal;
+}
 .ui-badge::before {
   content: "";
   width: 7px;
   height: 7px;
   background: currentColor;
+  flex: none;
   border-radius: 50%;
 }
 .ui-tone-ok {
@@ -220,8 +234,13 @@
 .ui-notice-body strong {
   display: block;
 }
+/* A div, not a p: a notice may hold paragraphs and buttons. */
+.ui-notice-text,
 .ui-notice-body p {
   margin: 2px 0 0;
+}
+.ui-notice-text > .ui-row {
+  margin-top: var(--space-3);
 }
 
 /* Field */
@@ -242,12 +261,10 @@
 }
 .ui-field > label,
 .ui-fieldset > legend {
-  font-family: var(--label-font);
-  font-size: var(--label-size);
-  font-weight: 500;
-  letter-spacing: var(--label-ls);
-  text-transform: var(--label-tf);
-  color: var(--muted);
+  font-family: var(--field-label-font);
+  font-size: var(--field-label-size);
+  font-weight: var(--field-label-weight);
+  color: var(--fg);
 }
 /* A group of form fields with a heading, one rule above each but the first */
 .ui-group {
@@ -504,6 +521,9 @@
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--line);
 }
+.ui-filters > .ui-select {
+  align-self: center;
+}
 .ui-filters .ui-input {
   flex: 1 1 220px;
   max-width: 320px;
@@ -541,12 +561,9 @@ a.ui-icon-btn {
   margin: 0;
 }
 .ui-facts dt {
-  font-family: var(--label-font);
-  font-size: var(--label-size);
-  letter-spacing: var(--label-ls);
-  text-transform: var(--label-tf);
+  font-family: var(--field-label-font);
+  font-size: var(--field-label-size);
   color: var(--muted);
-  padding-top: 2px;
 }
 .ui-facts dd {
   margin: 0;
@@ -562,8 +579,9 @@ a.ui-icon-btn {
   align-items: center;
   gap: var(--space-2);
 }
-/* A field with its label above and a button beside it: line up the bottoms */
-.ui-row-end {
+/* A field and its button on one line: the button lines up with the
+   control, not with the label above it. Only for fields without a hint. */
+.ui-row-field {
   align-items: flex-end;
 }
 a.ui-btn {
@@ -571,6 +589,13 @@ a.ui-btn {
 }
 .ui-flush {
   margin: 0;
+}
+/* A labelled control inside a filter bar, label and control on one line */
+.ui-filter-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
 }
 /* A short note beside the filters, for example what an action does */
 .ui-filters-note {
@@ -619,6 +644,7 @@ a.ui-btn {
   align-items: flex-start;
 }
 .ui-check-hint input {
+  flex-shrink: 0;
   margin-top: 3px;
 }
 .ui-check-hint > span {
@@ -635,6 +661,56 @@ a.ui-btn {
 .ui-attention {
   border: 2px solid var(--accent);
 }
+/* Token scopes by area: a heading per area, the scopes in columns */
+.ui-scope-group {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.ui-scope-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.ui-scope-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.ui-scope-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3) var(--space-5);
+}
+.ui-scope-col {
+  display: none;
+}
+/* On a phone one column in list order; the rows set inline are for two columns */
+@media (max-width: 719.98px) {
+  .ui-scope-grid > .ui-check {
+    grid-row: auto !important;
+  }
+}
+/* Side by side: reading scopes on the left, the ones that change on the right */
+@media (min-width: 720px) {
+  .ui-scope-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ui-scope-col {
+    display: block;
+    font-family: var(--label-font);
+    font-size: var(--label-size);
+    letter-spacing: var(--label-ls);
+    text-transform: var(--label-tf);
+    color: var(--muted);
+  }
+  .ui-scope-read {
+    grid-column: 1;
+  }
+  .ui-scope-change {
+    grid-column: 2;
+  }
+}
 /* Two allowlists side by side, stacked on a phone */
 .ui-allow {
   display: grid;
@@ -648,6 +724,23 @@ a.ui-btn {
   gap: var(--space-4);
 }
 /* Rows of form fields, one opened port each */
+/* fail2ban's jails on the Firewall page (ADR-0078): one line each. */
+.ui-jails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-jails > li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .ui-port-rows {
   display: flex;
   flex-direction: column;
@@ -749,10 +842,34 @@ a.ui-btn {
 .ui-stat-link:hover {
   text-decoration: underline;
 }
-/* Login: the brand above the card, full-width buttons, an "or" divider */
+/* Login: the brand centred above the card, full-width buttons, an "or"
+   divider. The brand drops the sidebar's offsets and fixed height, so it
+   sits on the card's centre line. */
 .ui-auth-brand {
-  margin-bottom: var(--space-5);
-  padding: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+.ui-auth-brand .app-mark {
+  width: 44px;
+  height: 44px;
+}
+.ui-auth-brand .app-mark svg {
+  width: 26px;
+  height: 26px;
+}
+.ui-auth-brand .app-brand-name {
+  align-items: center;
+  gap: 2px;
+  font-size: 22px;
+}
+.ui-auth-brand .app-host {
+  max-width: 100%;
+  color: var(--muted);
 }
 .ui-auth-actions {
   display: grid;
@@ -797,6 +914,11 @@ a.ui-btn {
   background: var(--sunken);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+/* A long block of code that scrolls instead of growing the page */
+.ui-code-scroll {
+  max-height: 32rem;
+  overflow: auto;
 }
 /* An address and its port on one line */
 .ui-host-port {
@@ -896,9 +1018,129 @@ a.ui-btn {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-5);
   background: var(--sunken);
+  border-bottom: 1px solid var(--line);
+}
+
+/* The bar of the file manager: folder, toolbar, filter and the selection.
+   It sticks to the top of the window while the listing scrolls, and the
+   table head sticks below it (--files-bar-h, measured in Files.tsx). Once
+   stuck it gets compact: folder, filter and toolbar share one row, the
+   controls are lower and the selection stays on one scrolling row. */
+.ui-files-sentinel {
+  height: 1px;
+  margin-bottom: -1px;
+}
+.ui-files-bar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0;
+}
+.ui-files-bar[data-stuck="true"] {
+  --control-h: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border-radius: 0;
+}
+.ui-files-bar[data-stuck="true"] .ui-files-head {
+  display: contents;
+}
+.ui-files-bar[data-stuck="true"] .ui-files-crumbs {
+  flex: 1 1 auto;
+  order: 1;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
+  font-size: 13px;
+}
+.ui-files-bar[data-stuck="true"] .ui-filters {
+  flex: 0 1 280px;
+  order: 2;
+  padding: var(--space-2) 0;
+  border-bottom: 0;
+}
+.ui-files-bar[data-stuck="true"] .ui-filters .ui-input {
+  flex-basis: 160px;
+  min-height: 32px;
+  font-size: 13.5px;
+}
+.ui-files-bar[data-stuck="true"] [role="toolbar"] {
+  order: 3;
+  padding: var(--space-1) var(--space-5) var(--space-1) var(--space-3);
+}
+.ui-files-bar[data-stuck="true"] .ui-files-selection {
+  flex: 1 0 100%;
+  order: 4;
+  flex-wrap: nowrap;
+  padding: var(--space-2) var(--space-5);
+  overflow-x: auto;
+  white-space: nowrap;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  scrollbar-width: thin;
+}
+/* Room at the end of the scrolling row, which padding does not give */
+.ui-files-bar[data-stuck="true"] .ui-files-selection::after {
+  flex: 0 0 var(--space-2);
+  content: "";
+}
+.ui-files-bar[data-stuck="true"] .ui-files-selection .ui-btn {
+  flex: none;
+  padding: 0 10px;
+  font-size: 13.5px;
+}
+/* The table head of the listing sticks below the bar. A collapsed border
+   would scroll away with the table, so the line is a shadow. The lowest
+   stuck part casts the shadow: the table head, or the bar where there is
+   none (phone cards). */
+.ui-files .ui-table-box {
+  overflow-x: visible;
+}
+.ui-files .ui-table thead th {
+  position: sticky;
+  top: var(--files-bar-h, 0px);
+  z-index: 3;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.ui-files-bar[data-stuck="true"] ~ .ui-files-drop .ui-table thead th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  box-shadow: inset 0 -1px 0 var(--line), 0 6px 12px -8px color-mix(in srgb, var(--fg) 35%, transparent);
+}
+@media (max-width: 600px) {
+  .ui-files-bar[data-stuck="true"] {
+    box-shadow: 0 6px 12px -8px color-mix(in srgb, var(--fg) 35%, transparent);
+  }
+  /* Folder and toolbar on one row, the filter and "Select all" below */
+  .ui-files-bar[data-stuck="true"] .ui-files-crumbs {
+    flex: 1 1 0;
+    flex-wrap: nowrap;
+    padding-left: var(--space-4);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .ui-files-bar[data-stuck="true"] [role="toolbar"] {
+    order: 2;
+    gap: 2px;
+    padding-right: var(--space-4);
+  }
+  .ui-files-bar[data-stuck="true"] .ui-filters {
+    flex: 1 0 100%;
+    order: 3;
+    align-items: center;
+    padding: 0 var(--space-4) var(--space-2);
+  }
+  .ui-files-bar[data-stuck="true"] .ui-files-selection {
+    padding-inline: var(--space-4);
+  }
+}
+/* Focus and anchors scroll clear of the bar and the table head. */
+html:has(.ui-files) {
+  scroll-padding-top: var(--files-sticky-h, 0px);
 }
 .ui-files-drop {
   outline: 2px dashed transparent;
@@ -1197,28 +1439,6 @@ a.ui-btn {
   overflow: auto;
   display: block;
 }
-.ui-range {
-  display: inline-flex;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.ui-range button {
-  border: 0;
-  background: var(--surface);
-  color: var(--fg);
-  padding: 4px 10px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.ui-range button + button {
-  border-left: 1px solid var(--line);
-}
-.ui-range button[aria-pressed="true"] {
-  background: var(--sunken);
-  font-weight: 600;
-}
 .ui-meter {
   display: grid;
   gap: 6px;
@@ -1252,6 +1472,25 @@ a.ui-btn {
 .ui-meter-err .ui-meter-fill {
   background: var(--err);
 }
+/* A value with a small bar relative to the largest in its column (ADR-0063). */
+.ui-usage-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+}
+.ui-usage-bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.ui-usage-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--series-1);
+}
 .ui-chart-title {
   margin: 0;
   font-size: 14px;
@@ -1273,34 +1512,51 @@ a.ui-btn {
 }
 
 /* A small group of mutually exclusive choices (radio buttons as a strip) */
-.ui-seg {
+/* Segmented controls (log type, time range) look like the inner tabs:
+   one outline style for every switch inside a card. A filled accent is
+   kept for primary buttons. */
+.ui-seg,
+.ui-range {
   display: inline-flex;
   flex-wrap: wrap;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius);
-  overflow: hidden;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 3px);
   align-self: flex-end;
 }
-.ui-seg-btn {
-  min-height: var(--control-h);
+.ui-seg-btn,
+.ui-range button {
+  min-height: calc(var(--control-h) - 8px);
   padding: 0 var(--space-3);
   font: inherit;
-  color: var(--fg);
-  background: var(--surface);
+  font-size: 14px;
+  color: var(--muted);
+  background: transparent;
   border: 0;
-  border-left: 1px solid var(--line);
+  border-radius: var(--radius);
   cursor: pointer;
 }
-.ui-seg-btn:first-child {
-  border-left: 0;
+.ui-range button {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 13px;
 }
-.ui-seg-btn[aria-checked="true"] {
-  color: var(--surface);
-  background: var(--accent);
+.ui-seg-btn:hover,
+.ui-range button:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--sunken) 60%, transparent);
 }
-.ui-seg-btn:focus-visible {
+.ui-seg-btn[aria-checked="true"],
+.ui-range button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.ui-seg-btn:focus-visible,
+.ui-range button:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: -3px;
+  outline-offset: 1px;
 }
 
 /* A log file (ADR-0053): monospace, newest line at the bottom */
@@ -1390,4 +1646,697 @@ a.ui-btn {
   max-height: 20rem;
   margin-top: var(--space-2);
   overflow: auto;
+}
+
+/* Site page sections: group tabs with inner tabs; one select on a phone */
+/* Inner tabs of a site section: a segmented control in an outlined track
+   without fill, the active tab raised as a white button, so they read as a
+   second level (Kim chose this quieter variant, 2026-11-25). */
+.ui-subtabs {
+  align-self: flex-start;
+  max-width: 100%;
+}
+.ui-subtabs .ui-tabs {
+  gap: 2px;
+  padding: 3px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 3px);
+}
+.ui-subtabs .ui-tab {
+  padding: 6px 14px;
+  font-size: 14px;
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+.ui-subtabs .ui-tab:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--sunken) 60%, transparent);
+}
+.ui-subtabs .ui-tab[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.ui-site-select {
+  display: none;
+}
+@media (max-width: 640px) {
+  .ui-site-select {
+    display: block;
+  }
+  .ui-site-tabs {
+    display: none;
+  }
+}
+
+/* Destructive actions, kept together at the end of a page */
+.ui-danger-zone {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.ui-danger-zone > h2 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 18px;
+  letter-spacing: var(--head-ls);
+  color: var(--err);
+}
+.ui-danger-zone .ui-card {
+  border-color: var(--err);
+}
+
+/* Unsaved changes on the visible tab */
+.ui-unsaved {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-card);
+}
+.ui-unsaved p {
+  flex: 1 1 240px;
+  margin: 0;
+}
+.ui-site-select .ui-select {
+  width: 100%;
+}
+
+/* Form fields side by side: short values get short inputs */
+.ui-fields {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+.ui-fields-server {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 1fr);
+  max-width: 860px;
+}
+.ui-fields-num {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 160px));
+}
+.ui-wide {
+  max-width: 860px;
+}
+@media (max-width: 600px) {
+  .ui-fields-server {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A form opened in place inside a card, below the facts it changes */
+.ui-edit {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+/* A small button, for actions next to a value or in a table row */
+.ui-btn-sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+/* A row whose first link opens it: the whole row is the click target */
+.ui-table tr:has(.ui-row-link) {
+  position: relative;
+}
+.ui-table tr:has(.ui-row-link):hover {
+  background: var(--sunken);
+}
+.ui-row-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.ui-row-tight {
+  gap: var(--space-1);
+}
+.ui-quiet {
+  color: var(--muted);
+}
+
+/* A button that reads as a link inside running text */
+.ui-link-btn {
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ui-unsaved {
+  scroll-margin-bottom: var(--space-6);
+}
+
+/* Sites list: an off site has a muted name */
+.ui-cell-off a,
+.ui-cell-off > span {
+  color: var(--muted);
+}
+/* HTTPS is the normal state, so it stays quiet; only plain HTTP stands out. */
+.ui-https {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+.ui-https-off {
+  color: var(--warn);
+}
+/* Tables on a phone: each row is a card. The first column is the title,
+   the others get their header as a label, row actions sit at the end. */
+@media (max-width: 600px) {
+  .ui-table-box {
+    overflow-x: visible;
+  }
+  .ui-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .ui-table,
+  .ui-table tbody,
+  .ui-table td {
+    display: block;
+  }
+  .ui-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .ui-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .ui-table td,
+  .ui-table :is(th, td):first-child,
+  .ui-table :is(th, td):last-child {
+    padding: 2px 0;
+    border: 0;
+  }
+  .ui-table td:first-child {
+    padding-bottom: var(--space-2);
+  }
+  .ui-table td[data-label],
+  .ui-table td.ui-empty {
+    grid-column: 1 / -1;
+  }
+  .ui-table td[data-label] {
+    display: grid;
+    justify-items: start;
+    grid-template-columns: 9em 1fr;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .ui-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .ui-table td[data-actions] {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  .ui-table td.ui-empty {
+    text-align: center;
+  }
+  .ui-table td[data-label] {
+    grid-template-columns: 9em minmax(0, 1fr);
+  }
+  /* A long badge in a table cell may wrap, as in a list of details. */
+  .ui-table td[data-label] > .ui-badge {
+    height: auto;
+    min-height: 24px;
+    padding-block: 2px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+  /* Tables with several row buttons put them under the row, not beside the title. */
+  .ui-table-actions-below td[data-actions] {
+    grid-row: auto;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: var(--space-2);
+  }
+}
+.ui-row-actions:has(.ui-btn) {
+  gap: var(--space-2);
+}
+/* While the next folder loads, the old listing stays, dimmed after a short
+   moment and not clickable, so the page does not jump or blink. */
+.ui-files-drop[aria-busy="true"] {
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.15s ease 0.25s;
+}
+/* Shown only where the table head is hidden (phone cards). */
+.ui-phone-only {
+  display: none;
+}
+@media (max-width: 600px) {
+  .ui-phone-only {
+    display: flex;
+  }
+}
+/* A checkbox in a table cell: the whole cell is the click target, and the
+   box is a little larger than in forms. */
+.ui-check-cell {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.ui-check-cell input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+/* On a phone card the box sits at the start of the first line, the row
+   actions at its end; both columns have a hidden header, so without this
+   the box landed under the actions. */
+@media (max-width: 600px) {
+  .ui-table td[data-actions]:has(> .ui-check-cell) {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+}
+@media (min-width: 601px) {
+  .ui-table :is(th, td):has(> .ui-check-cell) {
+    position: relative;
+    width: calc(var(--space-5) + 18px + var(--space-4));
+  }
+  .ui-table :is(th, td) > .ui-check-cell {
+    position: absolute;
+    inset: 0;
+    padding-left: var(--space-5);
+  }
+}
+
+/* A number field alone in its row: the field stays narrow, its hint uses the row. */
+.ui-fields-num > .ui-field:only-child {
+  grid-column: 1 / -1;
+}
+.ui-fields-num > .ui-field:only-child > .ui-input,
+.ui-fields-num > .ui-field:only-child > .ui-select {
+  max-width: 160px;
+}
+.ui-fields-num > .ui-field:only-child > .ui-hint {
+  max-width: 70ch;
+}
+
+/* The column of row actions sits at the right edge and is only as wide as
+   its buttons, so rows with more or fewer buttons line up. */
+@media (min-width: 601px) {
+  .ui-table td[data-actions]:not(:has(> .ui-check-cell)) {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .ui-table td[data-actions] > :is(.ui-row-actions, .ui-row) {
+    justify-content: flex-end;
+  }
+}
+
+/* Switch: a setting that applies at once (B1 of the UX review). */
+.ui-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-weight: 400;
+  cursor: pointer;
+}
+.ui-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+.ui-switch-track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin-top: 1px;
+  background: var(--line-strong);
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.ui-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--surface);
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+.ui-switch input:checked + .ui-switch-track {
+  background: var(--accent);
+}
+.ui-switch input:checked + .ui-switch-track::after {
+  transform: translateX(16px);
+}
+.ui-switch input:focus-visible + .ui-switch-track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.ui-switch:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+.ui-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-switch-track,
+  .ui-switch-track::after {
+    transition: none;
+  }
+}
+.ui-applies {
+  font: 500 12px/1.4 var(--font-mono);
+  color: var(--muted);
+}
+.ui-unsaved {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+/* The save bar of a form that spans several cards (Firewall). */
+.ui-apply-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* A value with a copy button (B7) */
+.ui-copy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+.ui-copy > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ui-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Four charts of a site: two by two, not three and one */
+.ui-charts-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  .ui-charts-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A link that opens another site: the icon follows the text, not underlined. */
+.ui-ext {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Status tiles of the site overview: each opens its tab. */
+/* A cron command in the jobs table keeps its spaces and wraps anywhere. */
+.ui-cron-cmd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* A card the Actions menu scrolls to stays clear of the sticky top bar. */
+.ui-card[id] {
+  scroll-margin-top: 88px;
+}
+/* Two cards side by side on a wide screen, one above the other otherwise. */
+.ui-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+.ui-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 14px 16px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 3px);
+}
+.ui-tile:hover {
+  border-color: var(--line-strong);
+}
+.ui-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-tile[data-tone="err"] {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.ui-tile[data-tone="warn"] {
+  border-color: var(--warn);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.ui-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 12px/1.2 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ui-tile-value {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: var(--head-ls);
+}
+.ui-tile-sub {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.ui-tile-bar {
+  height: 6px;
+  overflow: hidden;
+  background: var(--sunken);
+  border-radius: 3px;
+}
+.ui-tile-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ui-tile[data-tone="err"] .ui-tile-bar > span {
+  background: var(--err);
+}
+.ui-tile[data-tone="warn"] .ui-tile-bar > span {
+  background: var(--warn);
+}
+
+/* A drop-down menu of actions, such as the site's Actions menu. */
+.ui-menu-wrap {
+  position: relative;
+}
+.ui-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--radius) + 3px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 14%, transparent);
+}
+.ui-menu [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.ui-menu [role="menuitem"]:hover,
+.ui-menu [role="menuitem"]:focus-visible {
+  background: var(--sunken);
+  outline: none;
+}
+
+/* A small bar with its value in a table cell, such as the disk use. */
+.ui-cellbar {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ui-cellbar-track {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  background: var(--sunken);
+  border-radius: 3px;
+}
+.ui-cellbar-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ui-cellbar[data-tone="warn"] .ui-cellbar-track > span {
+  background: var(--warn);
+}
+.ui-cellbar[data-tone="err"] .ui-cellbar-track > span {
+  background: var(--err);
+}
+/* Filters above several cards: no card around them. */
+.ui-filters-bare {
+  align-items: center;
+  padding: 0;
+  border-bottom: 0;
+}
+.ui-filters-bare > .ui-input {
+  flex: 0 1 280px;
+}
+
+/* Menu items: links look like the buttons, a danger item is red. */
+.ui-menu a[role="menuitem"] {
+  text-decoration: none;
+}
+.ui-menu [role="menuitem"][data-danger] {
+  color: var(--err);
+}
+.ui-menu [role="menuitem"] svg {
+  flex: none;
+}
+
+/* Hidden on a phone, where something compact takes its place. */
+@media (max-width: 600px) {
+  .ui-phone-hide {
+    display: none;
+  }
+}
+
+/* Compact table rows on a phone (C3 of the UX review): one line per row
+   with a checkbox, the main cell and a ⋯ menu; the labelled columns are
+   left out because the main cell carries them. */
+@media (max-width: 600px) {
+  .ui-table[data-compact] tr {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+  }
+  .ui-table[data-compact] td[data-label] {
+    display: none;
+  }
+  .ui-table[data-compact] td:first-child {
+    padding-bottom: 2px;
+  }
+  .ui-table[data-compact] td[data-actions]:has(> .ui-check-cell) {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .ui-table[data-compact] td[data-main] {
+    grid-row: 1;
+    grid-column: 2;
+    min-width: 0;
+  }
+  .ui-table[data-compact] td[data-actions]:not(:has(> .ui-check-cell)) {
+    grid-row: 1;
+    grid-column: 3;
+    align-items: center;
+  }
+  .ui-table[data-compact] td.ui-empty {
+    grid-column: 1 / -1;
+  }
+  .ui-files-meta {
+    display: block;
+    margin-left: 26px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  /* The grey line under the name of a compact row: state, size, age. */
+  .ui-compact-meta {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+}
+
+/* An icon button without a tip text, such as a ⋯ menu, shows no tip. */
+.ui-icon-btn:not([data-tip])::after {
+  content: none;
+}
+/* Segmented links between pages, such as the tabs of Runtimes. */
+.ui-seg-nav {
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
+}
+.ui-seg-nav .ui-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.ui-seg-btn[aria-current="page"] {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
 }

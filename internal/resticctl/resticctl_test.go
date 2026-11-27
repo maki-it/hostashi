@@ -31,7 +31,9 @@ func TestValidate(t *testing.T) {
 	bad := map[string]func(r *Repo){
 		"shell in repository":  func(r *Repo) { r.Repository = "sftp://u1@host:23/x;rm -rf /" },
 		"dotdot in repository": func(r *Repo) { r.Repository = "sftp://u1@host:23/../etc" },
-		"absolute sftp path":   func(r *Repo) { r.Repository = "sftp://u1@host:23//etc" },
+		"triple slash path":    func(r *Repo) { r.Repository = "sftp://u1@host:23///etc" },
+		"unbracketed ipv6":     func(r *Repo) { r.Repository = "sftp://u1@::1:22/x" },
+		"user with colon":      func(r *Repo) { r.Repository = "sftp://u:p@host:23/x" },
 		"port zero":            func(r *Repo) { r.Repository = "sftp://u1@host:0/x" },
 		"port too large":       func(r *Repo) { r.Repository = "sftp://u1@host:70000/x" },
 		"option as user":       func(r *Repo) { r.Repository = "sftp://-oProxyCommand=x@host:23/x" },
@@ -55,6 +57,19 @@ func TestValidate(t *testing.T) {
 
 		if err := r.validate(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v, want ErrInvalid", name, err)
+		}
+	}
+
+	for _, repo := range []string{
+		"sftp://backup_web3@nas.example.lan:22//srv/backups/web3",
+		"sftp://first.last@192.0.2.10:2222/hostashi",
+		"sftp://u1@[2001:db8::10]:22//srv/restic",
+	} {
+		r := validRepo()
+		r.Repository = repo
+
+		if err := r.validate(); err != nil {
+			t.Errorf("%s refused: %v", repo, err)
 		}
 	}
 
@@ -87,6 +102,11 @@ func TestArgumentChecks(t *testing.T) {
 	_, cases["snapshots bad tag"] = r.Snapshots(ctx, []string{"x"})
 	cases["keep no daily"] = r.Forget(ctx, Keep{Daily: 0, Weekly: 4, Monthly: 6})
 	cases["keep negative"] = r.Forget(ctx, Keep{Daily: 7, Weekly: -1})
+	cases["keep hourly negative"] = r.Forget(ctx, Keep{Hourly: -1, Daily: 7})
+	cases["keep yearly too many"] = r.Forget(ctx, Keep{Daily: 7, Yearly: 101})
+	cases["forget short id"] = r.ForgetIDs(ctx, []string{"abc"})
+	cases["forget option id"] = r.ForgetIDs(ctx, []string{"--keep-last=0"})
+	cases["forget too many"] = r.ForgetIDs(ctx, make([]string, MaxForgetIDs+1))
 	cases["check part zero"] = r.Check(ctx, 0, 12)
 	cases["check part too big"] = r.Check(ctx, 13, 12)
 	cases["check negative"] = r.Check(ctx, 1, -1)
@@ -198,6 +218,32 @@ func TestRestic(t *testing.T) {
 
 			if err := r.Forget(ctx, Keep{Daily: 7, Weekly: 4, Monthly: 6}); err != nil {
 				t.Fatalf("forget: %v", err)
+			}
+
+			if err := r.Forget(ctx, Keep{Hourly: 24, Daily: 7, Weekly: 4, Monthly: 6, Yearly: 3}); err != nil {
+				t.Fatalf("forget with hourly and yearly: %v", err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"}); err != nil || len(s) != 1 {
+				t.Fatalf("forget dropped the only snapshot: %+v, %v", s, err)
+			}
+
+			// The snapshot of a deleted site goes by its id (ADR-0074).
+			gone, err := r.Backup(ctx, []string{"site:gone", "kind:files"}, src)
+			if err != nil {
+				t.Fatalf("backup of gone: %v", err)
+			}
+
+			if err := r.ForgetIDs(ctx, []string{gone.SnapshotID}); err != nil {
+				t.Fatalf("forget ids: %v", err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:gone"}); err != nil || len(s) != 0 {
+				t.Fatalf("after forget ids: %+v, %v", s, err)
+			}
+
+			if s, err := r.Snapshots(ctx, []string{"site:blog", "kind:files"}); err != nil || len(s) != 1 {
+				t.Fatalf("forget ids took another snapshot: %+v, %v", s, err)
 			}
 
 			if err := r.Prune(ctx); err != nil {

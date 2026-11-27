@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { System } from "./System";
-import { hostnameError, panelVersion, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
+import { hostnameError, panelVersion, pinsDate, releaseUrl, uptime, versionLabel, waitForPanel, type SystemInfo } from "./system";
 import { mockFetch } from "./test-utils";
 
 const info: SystemInfo = {
@@ -42,6 +42,12 @@ describe("panel version", () => {
     expect(versionLabel("0.4.0")).toBe("v0.4.0");
     expect(versionLabel("1.2.3-rc.1")).toBe("v1.2.3-rc.1");
     expect(versionLabel("dev")).toBe("dev");
+    // A released version links to its notes, a dev build to all releases.
+    const rel = "https://github.com/maki-it/hostashi/releases";
+    expect(releaseUrl("0.7.0")).toBe(rel + "/tag/v0.7.0");
+    expect(releaseUrl("1.2.3-rc.1")).toBe(rel + "/tag/v1.2.3-rc.1");
+    expect(releaseUrl("0.7.1-dev+abc1234")).toBe(rel);
+    expect(releaseUrl("dev")).toBe(rel);
   });
 });
 
@@ -55,6 +61,11 @@ describe("system helpers", () => {
     expect(hostnameError("web_2")).not.toBe("");
     expect(hostnameError("10.0.0.1")).not.toBe("");
     expect(hostnameError("a".repeat(65))).not.toBe("");
+  });
+
+  it("reads the date of the runtime pins", () => {
+    expect(pinsDate("20261127050000")).toContain("2026");
+    expect(pinsDate("2026-11-27")).toBe("");
   });
 
   it("formats the uptime", () => {
@@ -83,6 +94,42 @@ describe("system helpers", () => {
 });
 
 describe("System", () => {
+  it("switches automatic updates", async () => {
+    const updates = {
+      installed: "0.12.0",
+      available: "0.13.0",
+      update: true,
+      auto: false,
+      listedAt: "2026-11-26T06:00:00Z",
+      runtimes: "20261127050000",
+      runtimesAuto: true,
+    };
+    const calls = mockFetch({
+      "GET /api/v1/system": { body: { ...info, updates } },
+      "GET /api/v1/system/timezones": { body: zones },
+      "PUT /api/v1/system/auto-update": { body: { ...info, updates: { ...updates, auto: true } } },
+    });
+    render(<System />);
+
+    const card = await screen.findByRole("region", { name: "Updates" });
+    expect(card).toHaveTextContent("Update available");
+    expect(within(card).getByRole("link", { name: "v0.13.0" })).toHaveAttribute("href", releaseUrl("0.13.0"));
+    const sw = within(card).getByRole("switch", { name: "Automatic updates" });
+    expect(sw).not.toBeChecked();
+    expect(within(card).getByText("Node.js and Python patches").nextElementSibling).toHaveTextContent("Automatic");
+    await userEvent.setup().click(sw);
+    expect(await screen.findByText(/Automatic updates are on/)).toBeInTheDocument();
+    expect(within(card).getByRole("switch", { name: "Automatic updates" })).toBeChecked();
+    expect(calls.some((c) => c.method === "PUT" && c.path === "/api/v1/system/auto-update" && JSON.stringify(c.body) === '{"on":true}')).toBe(true);
+  });
+
+  it("has no updates card without the package", async () => {
+    mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
+    render(<System />);
+    await screen.findByRole("region", { name: "Server" });
+    expect(screen.queryByRole("region", { name: "Updates" })).toBeNull();
+  });
+
   it("shows the server's settings and the pending reboot", async () => {
     mockFetch({ "GET /api/v1/system": { body: info }, "GET /api/v1/system/timezones": { body: zones } });
     render(<System />);
@@ -92,7 +139,30 @@ describe("System", () => {
     expect(server).toHaveTextContent("3 d 4 h");
     expect(server).toHaveTextContent("Reboot needed");
     expect(server).toHaveTextContent("linux-image-6.12");
+    // The cloud-init note belongs to changing the hostname.
+    expect(screen.queryByText(/cloud-init is installed/)).toBeNull();
+    await userEvent.setup().click(within(server).getByRole("button", { name: "Change hostname" }));
     expect(screen.getByText(/cloud-init is installed/)).toBeInTheDocument();
+  });
+
+  it("holds the panel's certificate and real visitor address", async () => {
+    mockFetch({
+      "GET /api/v1/system": { body: info },
+      "GET /api/v1/system/timezones": { body: zones },
+      "GET /api/v1/panel/tls": {
+        body: { enabled: true, domain: "panel.example.com", active: true, domains: ["panel.example.com"], notAfter: "2099-01-01T00:00:00Z", source: "letsencrypt", certSource: "letsencrypt" },
+      },
+      "GET /api/v1/panel/tls/certificate": {
+        body: { certificate: { domains: ["panel.example.com"], issuer: "R11", notBefore: "2026-11-01T00:00:00Z", notAfter: "2099-01-01T00:00:00Z", fingerprint: "ab12cd", trusted: true } },
+      },
+      "GET /api/v1/settings/panel-real-ip": {
+        body: { realIp: {}, headers: ["X-Forwarded-For"], cloudflare: [], cloudflareDate: "2026-11-22", maxRanges: 256 },
+      },
+    });
+    render(<System />);
+
+    expect(await screen.findByRole("region", { name: "Panel certificate (panel.example.com)" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Real visitor address of the panel" })).toBeInTheDocument();
   });
 
   it("saves a valid hostname only", async () => {
@@ -104,7 +174,8 @@ describe("System", () => {
     });
     render(<System />);
 
-    const card = await screen.findByRole("region", { name: "Hostname" });
+    await user.click(await screen.findByRole("button", { name: "Change hostname" }));
+    const card = screen.getByRole("region", { name: "Hostname" });
     const input = within(card).getByLabelText("Hostname");
     const save = within(card).getByRole("button", { name: "Save hostname" });
     expect(save).toBeDisabled();
@@ -120,6 +191,8 @@ describe("System", () => {
 
     expect(await screen.findByText("The hostname is now web3.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ hostname: "web3" });
+    // The form closes after the save; the fact shows the new name.
+    expect(screen.queryByRole("region", { name: "Hostname" })).toBeNull();
   });
 
   it("refuses an unknown time zone and saves a known one", async () => {
@@ -131,7 +204,8 @@ describe("System", () => {
     });
     render(<System />);
 
-    const card = await screen.findByRole("region", { name: "Time zone" });
+    await user.click(await screen.findByRole("button", { name: "Change time zone" }));
+    const card = screen.getByRole("region", { name: "Time zone" });
     const input = within(card).getByLabelText("Time zone");
     const save = within(card).getByRole("button", { name: "Save time zone" });
 

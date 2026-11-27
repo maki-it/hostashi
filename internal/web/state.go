@@ -33,6 +33,14 @@ type Site struct {
 	// HSTS adds Strict-Transport-Security to the HTTPS responses (one year,
 	// without includeSubDomains or preload). Ignored without a certificate.
 	HSTS bool `json:"hsts,omitempty"`
+	// WWWRedirect sends one name of each www pair of Domains to the other
+	// with 301 (ADR-0065), in server blocks of their own; empty serves
+	// every domain. A redirect site has none.
+	WWWRedirect string `json:"wwwRedirect,omitempty"`
+	// RedirectDomains are names of Domains that answer with 301 to the
+	// first name the site serves (ADR-0068), in the same server blocks as
+	// the www redirect.
+	RedirectDomains []string `json:"redirectDomains,omitempty"`
 	// Disabled answers every request with 503 and never serves Root.
 	// ACME challenges, the health check and the HTTPS redirect stay.
 	Disabled bool `json:"disabled,omitempty"`
@@ -57,11 +65,19 @@ type Site struct {
 	// Headers are the site's security headers (ADR-0056), sent on every
 	// answer of the site. A snippet must not set one of them as well.
 	Headers agentapi.WebHeaders `json:"headers,omitzero"`
+	// Hardening are the site's hardening rules (ADR-0017 Part 4), for
+	// static and PHP sites; the zero value keeps the fixed hidden-file
+	// rule only.
+	Hardening agentapi.WebHardening `json:"hardening,omitzero"`
 	// RealIP takes the client address from a header of trusted proxies
 	// (ADR-0059), rendered into every server block of the site; the zero
 	// value trusts nobody. The agent has already refused ranges that hold
 	// one of its own addresses.
 	RealIP agentapi.WebRealIP `json:"realIp,omitzero"`
+	// Access is the site's IP rule and password protection (ADR-0066),
+	// rendered into every server block of the site; the zero value lets
+	// everybody in. A snippet must not use the same directives.
+	Access agentapi.WebAccess `json:"access,omitzero"`
 	// BodyMax is the site's client_max_body_size in bytes, a whole number
 	// of MiB, and FastCGIReadTimeout its fastcgi_read_timeout in seconds;
 	// both follow the site's PHP settings (ADR-0049) and need PHPSocket.
@@ -214,6 +230,22 @@ func (d Desired) Validate() error {
 	for _, s := range d.Sites {
 		req.Sites = append(req.Sites, agentapi.WebSite{User: s.User, Domains: s.Domains})
 
+		if err := agentapi.ValidateWWWRedirect(s.WWWRedirect); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if s.WWWRedirect != agentapi.WWWRedirectOff && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no www redirect", s.User)
+		}
+
+		if err := agentapi.ValidateRedirectDomains(s.Domains, s.RedirectDomains); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if len(s.RedirectDomains) > 0 && s.Redirect != nil {
+			return fmt.Errorf("site %q: a redirect site has no redirect domains", s.User)
+		}
+
 		if m := s.Maintenance; m != nil {
 			if err := (agentapi.WebMaintenance{Page: m.Page, Digest: m.Digest, AllowIPs: m.AllowIPs}).Validate(); err != nil {
 				return fmt.Errorf("site %q: maintenance: %w", s.User, err)
@@ -279,7 +311,25 @@ func (d Desired) Validate() error {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 
+		if !s.Hardening.IsZero() {
+			if s.Redirect != nil || s.Proxy != nil || s.App != nil {
+				return fmt.Errorf("site %q: hardening rules are for static and PHP sites", s.User)
+			}
+
+			if err := s.Hardening.Validate(s.PHPSocket != ""); err != nil {
+				return fmt.Errorf("site %q: %w", s.User, err)
+			}
+		}
+
 		if err := s.RealIP.Validate(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.Access.Validate(); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
+		if err := s.Access.Conflict(s.Snippets.Server, s.Snippets.Root); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
 		}
 

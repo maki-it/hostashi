@@ -330,7 +330,7 @@ func chosenDomains(site store.Site, in []string) ([]string, error) {
 
 	out := make([]string, 0, len(want))
 
-	for _, d := range site.Domains {
+	for _, d := range site.AllDomains() {
 		if want[d] {
 			out = append(out, d)
 			delete(want, d)

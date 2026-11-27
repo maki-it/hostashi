@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Power } from "@phosphor-icons/react";
+import { PencilSimple, Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { PanelCertificate } from "./Certificate";
+import { LogRetentionCard } from "./Logs";
+import { MalwareEngineCard } from "./Malware";
+import { PanelRealIPCard } from "./RealIP";
 import { formatHash } from "./routes";
 import { serviceMessage } from "./services";
 import {
@@ -9,21 +13,28 @@ import {
   getSystem,
   hostnameError,
   listTimezones,
+  pinsDate,
   rebootServer,
+  releaseUrl,
+  setAutoUpdate,
   setHostname,
   setTimezone,
   uptime,
+  versionLabel,
   waitForPanel,
   type SystemInfo,
+  type SystemUpdates,
 } from "./system";
-import { Badge, Button, Card, Field, Notice, PageHead } from "./ui";
+import { Badge, Button, Card, Field, Notice, PageHead, Switch } from "./ui";
 
 type RebootState = { phase: "idle" } | { phase: "going-down" | "starting" } | { phase: "back" } | { phase: "lost" };
 
 /**
  * System shows the server's hostname, time zone, clock and uptime, lets an
  * admin change the first two and reboot the server after typing its
- * hostname (ADR-0060).
+ * hostname (ADR-0060). The panel's certificate (ADR-0039) and its real
+ * visitor address (ADR-0059) are settings too and live here; Health only
+ * warns about the certificate.
  */
 export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
@@ -73,7 +84,10 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
 
   return (
     <>
-      <PageHead title="System" description="The server's name, time zone and clock. A reboot stops every site until the server is back." />
+      <PageHead
+        title="System"
+        description="The server's name, time zone and clock, and the panel's own address. A reboot stops every site until the server is back."
+      />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       {reboot.phase !== "idle" && <RebootProgress state={reboot} />}
@@ -81,9 +95,18 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
         !error && <p aria-busy="true">Loading the server settings…</p>
       ) : (
         <>
-          <Overview info={info} />
-          <HostnameCard info={info} onDone={(n) => changed(n, `The hostname is now ${n.hostname}.`)} onError={setError} />
-          <TimezoneCard info={info} zones={zones} onDone={(n) => changed(n, `The time zone is now ${n.timezone}.`)} onError={setError} />
+          <Overview
+            info={info}
+            zones={zones}
+            onHostname={(n) => changed(n, `The hostname is now ${n.hostname}.`)}
+            onTimezone={(n) => changed(n, `The time zone is now ${n.timezone}.`)}
+            onError={setError}
+          />
+          <UpdatesCard updates={info.updates} onChanged={changed} onError={setError} />
+          <PanelCertificate />
+          <PanelRealIPCard />
+          <LogRetentionCard />
+          <MalwareEngineCard />
           <RebootCard info={info} busy={reboot.phase === "going-down" || reboot.phase === "starting"} onReboot={(c) => void startReboot(c)} />
         </>
       )}
@@ -91,7 +114,28 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
   );
 }
 
-function Overview({ info }: { info: SystemInfo }) {
+// Overview shows the server's facts once; hostname and time zone open
+// their form in place instead of repeating the value in a card of its own.
+function Overview({
+  info,
+  zones,
+  onHostname,
+  onTimezone,
+  onError,
+}: {
+  info: SystemInfo;
+  zones: string[];
+  onHostname: (i: SystemInfo) => void;
+  onTimezone: (i: SystemInfo) => void;
+  onError: (m: string) => void;
+}) {
+  const [edit, setEdit] = useState<"" | "hostname" | "timezone">("");
+  const change = (what: "hostname" | "timezone", label: string) =>
+    edit !== what && (
+      <Button small icon={<PencilSimple size={16} aria-hidden />} aria-label={`Change ${label}`} onClick={() => setEdit(what)}>
+        Change
+      </Button>
+    );
   return (
     <Card
       title="Server"
@@ -100,14 +144,20 @@ function Overview({ info }: { info: SystemInfo }) {
       <div className="ui-stack">
         <dl className="ui-facts">
           <dt>Hostname</dt>
-          <dd>
-            <code>{info.hostname}</code>
-            {info.transientHostname && info.transientHostname !== info.hostname && (
-              <span className="ui-hint"> (the kernel still uses {info.transientHostname})</span>
-            )}
+          <dd className="ui-row">
+            <span>
+              <code>{info.hostname}</code>
+              {info.transientHostname && info.transientHostname !== info.hostname && (
+                <span className="ui-hint"> (the kernel still uses {info.transientHostname})</span>
+              )}
+            </span>
+            {change("hostname", "hostname")}
           </dd>
           <dt>Time zone</dt>
-          <dd>{info.timezone || "not set"}</dd>
+          <dd className="ui-row">
+            <span>{info.timezone || "not set"}</span>
+            {change("timezone", "time zone")}
+          </dd>
           <dt>Server time</dt>
           <dd>
             {clockIn(info.time, info.timezone || "UTC") || info.time}{" "}
@@ -116,6 +166,29 @@ function Overview({ info }: { info: SystemInfo }) {
           <dt>Uptime</dt>
           <dd>{uptime(info.uptimeSeconds)}</dd>
         </dl>
+        {edit === "hostname" && (
+          <HostnameForm
+            info={info}
+            onDone={(i) => {
+              setEdit("");
+              onHostname(i);
+            }}
+            onCancel={() => setEdit("")}
+            onError={onError}
+          />
+        )}
+        {edit === "timezone" && (
+          <TimezoneForm
+            info={info}
+            zones={zones}
+            onDone={(i) => {
+              setEdit("");
+              onTimezone(i);
+            }}
+            onCancel={() => setEdit("")}
+            onError={onError}
+          />
+        )}
         {info.rebootRequired && (
           <p className="ui-flush">
             Updates wait for a reboot
@@ -128,14 +201,112 @@ function Overview({ info }: { info: SystemInfo }) {
   );
 }
 
-function HostnameCard({ info, onDone, onError }: { info: SystemInfo; onDone: (i: SystemInfo) => void; onError: (m: string) => void }) {
+// UpdatesCard says which Hostashi version runs and whether a newer one is
+// out, and switches the automatic installation of new versions
+// (--auto-update, ADR-0050) on and off.
+function UpdatesCard({
+  updates,
+  onChanged,
+  onError,
+}: {
+  updates: SystemUpdates | undefined;
+  onChanged: (i: SystemInfo, text: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!updates) return null;
+  const version = (v: string) => (
+    <a href={releaseUrl(v)} target="_blank" rel="noopener noreferrer" title="Release notes">
+      {versionLabel(v)}
+    </a>
+  );
+  async function toggle(on: boolean) {
+    setBusy(true);
+    try {
+      const next = await setAutoUpdate(on);
+      onChanged(
+        next,
+        on
+          ? "Automatic updates are on. New Hostashi versions install with the next daily security updates."
+          : "Automatic updates are off. New Hostashi versions wait for sudo apt upgrade.",
+      );
+    } catch (err) {
+      onError(serviceMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card
+      title="Updates"
+      actions={updates.update ? <Badge tone="warn">Update available</Badge> : updates.available ? <Badge tone="ok">Up to date</Badge> : undefined}
+    >
+      <div className="ui-stack">
+        <dl className="ui-facts">
+          <dt>Hostashi</dt>
+          <dd>
+            {version(updates.installed)}
+            {updates.update && updates.available && <> (newest: {version(updates.available)})</>}
+          </dd>
+          <dt>Node.js and Python patches</dt>
+          <dd>
+            {updates.runtimes && updates.runtimesAuto ? (
+              <>
+                <Badge tone="ok">Automatic</Badge>{" "}
+                <span className="ui-hint">pins of {pinsDate(updates.runtimes) || updates.runtimes}, always on</span>
+              </>
+            ) : (
+              <>
+                <Badge tone="warn">Not set up</Badge> <span className="ui-hint">the installer sets them up on its next run</span>
+              </>
+            )}
+          </dd>
+          {updates.listedAt && (
+            <>
+              <dt>Last checked</dt>
+              <dd>{new Date(updates.listedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd>
+            </>
+          )}
+        </dl>
+        <Switch
+          checked={updates.auto}
+          disabled={busy}
+          hint={
+            updates.auto ? (
+              "unattended-upgrades installs new Hostashi versions with the daily security updates, after a copy of the panel database."
+            ) : (
+              <>
+                New Hostashi versions wait for <code>sudo apt upgrade</code>. Health and an email say when one is out.
+              </>
+            )
+          }
+          onChange={(on) => void toggle(on)}
+        >
+          Automatic updates
+        </Switch>
+      </div>
+    </Card>
+  );
+}
+
+function HostnameForm({
+  info,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  info: SystemInfo;
+  onDone: (i: SystemInfo) => void;
+  onCancel: () => void;
+  onError: (m: string) => void;
+}) {
   const [name, setName] = useState(info.hostname);
   const [busy, setBusy] = useState(false);
   const problem = hostnameError(name);
   const same = name === info.hostname;
 
   return (
-    <Card title="Hostname">
+    <section className="ui-edit" aria-label="Hostname">
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -166,21 +337,26 @@ function HostnameCard({ info, onDone, onError }: { info: SystemInfo; onDone: (i:
           <Button variant="primary" type="submit" disabled={busy || same || problem !== ""}>
             Save hostname
           </Button>
+          <Button disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 
-function TimezoneCard({
+function TimezoneForm({
   info,
   zones,
   onDone,
+  onCancel,
   onError,
 }: {
   info: SystemInfo;
   zones: string[];
   onDone: (i: SystemInfo) => void;
+  onCancel: () => void;
   onError: (m: string) => void;
 }) {
   const [zone, setZone] = useState(info.timezone);
@@ -190,7 +366,7 @@ function TimezoneCard({
   const preview = known && !same ? clockIn(info.time, zone) : "";
 
   return (
-    <Card title="Time zone">
+    <section className="ui-edit" aria-label="Time zone">
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -234,9 +410,12 @@ function TimezoneCard({
           <Button variant="primary" type="submit" disabled={busy || same || !known || zone === ""}>
             Save time zone
           </Button>
+          <Button disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }
 

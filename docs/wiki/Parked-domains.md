@@ -29,7 +29,7 @@ The parking page ends when the site is live. The site gets its own certificate; 
 
 This deletes the site with its files, databases, cron jobs and SSH logins, like **Delete**, and parks the domains you choose in the same step, so they keep answering.
 
-1. Open the site. On the **Overview** tab, under **Delete site**, choose **Delete and park domains**.
+1. Open the site. On the **Overview** tab, in the **Danger zone** under **Delete site**, choose **Delete and park domains**.
 2. All domains of the site are checked. Uncheck the ones you do not want to park; they are free afterwards. At least one must stay checked.
 3. Pick a parking page and choose whether the parked domains get HTTPS.
 4. Type the site's name and choose **Delete *site* and park**.

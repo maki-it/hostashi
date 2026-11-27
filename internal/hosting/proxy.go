@@ -66,7 +66,7 @@ func (s *Service) proxyWeb(ctx context.Context, site store.Site) (*agentapi.WebP
 		return nil, nil
 	}
 
-	addrs, err := s.proxyAddrs(ctx, p.Target, site.Domains)
+	addrs, err := s.proxyAddrs(ctx, p.Target, site.AllDomains())
 	if err != nil {
 		s.log.WarnContext(ctx, "proxy target", "site", site.Name, "target", p.Target, "err", err)
 	}
@@ -74,10 +74,24 @@ func (s *Service) proxyWeb(ctx context.Context, site store.Site) (*agentapi.WebP
 	return &agentapi.WebProxy{Target: p.Target, TargetHost: p.TargetHost, Insecure: p.Insecure}, addrs
 }
 
+// privateProxyAddr returns the first of addrs ("ip:port") that lies in a
+// private network, or "".
+func privateProxyAddr(addrs []string) string {
+	for _, a := range addrs {
+		ap, err := netip.ParseAddrPort(a)
+		if err != nil || agentapi.ProxyAddrPrivate(ap.Addr()) {
+			return a
+		}
+	}
+
+	return ""
+}
+
 // SetProxy changes the target of an active reverse proxy site (ADR-0054).
-// If the web server does not accept it, the previous target is stored
-// again.
-func (s *Service) SetProxy(ctx context.Context, actor int64, name string, p store.SiteProxy) (store.Site, error) {
+// Without private, a target that is or resolves to an address in a
+// private network is ErrProxyPrivate. If the web server does not accept
+// it, the previous target is stored again.
+func (s *Service) SetProxy(ctx context.Context, actor int64, name string, p store.SiteProxy, private bool) (store.Site, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -94,8 +108,13 @@ func (s *Service) SetProxy(ctx context.Context, actor int64, name string, p stor
 		return store.Site{}, ErrSiteType
 	}
 
-	if err := s.checkProxy(ctx, p, site.Domains); err != nil {
-		return store.Site{}, err
+	addrs, err := s.proxyAddrs(ctx, p.Target, site.AllDomains())
+	if err != nil {
+		return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	if a := privateProxyAddr(addrs); a != "" && !private {
+		return store.Site{}, fmt.Errorf("%w: %s", ErrProxyPrivate, a)
 	}
 
 	old, err := s.st.SetSiteProxy(ctx, name, p, s.now())

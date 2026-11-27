@@ -73,15 +73,24 @@ func read(t *testing.T, r *Reader, req agentapi.SiteLogsReadRequest) agentapi.Si
 }
 
 func TestPaths(t *testing.T) {
-	r := &Reader{SiteLogDir: "/var/log/nginx/sites", PHPLogDir: "/var/log/hostashi/php"}
+	r := &Reader{SiteLogDir: "/var/log/nginx/sites", PHPLogDir: "/var/log/hostashi/php", AppLogDir: "/var/log/hostashi/app"}
 
 	for kind, want := range map[agentapi.LogKind]string{
-		agentapi.LogAccess: "/var/log/nginx/sites/blog/access.log",
-		agentapi.LogError:  "/var/log/nginx/sites/blog/error.log",
-		agentapi.LogPHP:    "/var/log/hostashi/php/blog/error.log",
+		agentapi.LogAccess:    "/var/log/nginx/sites/blog/access.log",
+		agentapi.LogError:     "/var/log/nginx/sites/blog/error.log",
+		agentapi.LogPHP:       "/var/log/hostashi/php/blog/error.log",
+		agentapi.LogApp:       "/var/log/hostashi/app/blog/app.log",
+		agentapi.LogWordPress: "/var/log/hostashi/app/blog/wordpress.log",
 	} {
 		if p, err := r.Path("blog", kind); err != nil || p != want {
 			t.Errorf("%s: %q %v", kind, p, err)
+		}
+	}
+
+	// Without the app directory there is no app or WordPress log.
+	for _, kind := range []agentapi.LogKind{agentapi.LogApp, agentapi.LogWordPress} {
+		if _, err := (&Reader{SiteLogDir: "/x", PHPLogDir: "/y"}).Path("blog", kind); err == nil {
+			t.Errorf("%s without AppLogDir accepted", kind)
 		}
 	}
 

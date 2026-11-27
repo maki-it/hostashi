@@ -11,20 +11,79 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/php"
 	"github.com/maki-it/hostashi/internal/sites"
+	"github.com/maki-it/hostashi/internal/siteslice"
 	"github.com/maki-it/hostashi/internal/sitestats"
+	"github.com/maki-it/hostashi/internal/sitetraffic"
 )
 
-// statsOps serves metrics.snapshot (ADR-0022).
+// statsOps serves metrics.snapshot (ADR-0022) and sites.stats (ADR-0063).
 type statsOps struct {
 	h          *siteOps
 	disk       *sitestats.DiskCache
 	cgroupRoot string
+	traffic    *sitetraffic.Counter // nil: no site logs (tests)
 }
 
 func (o *statsOps) register(s *agentrpc.Server) {
 	agentrpc.Handle(s, agentapi.MetricsSnapshot, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.MetricsSnapshotRequest) (agentapi.MetricsSnapshotResponse, error) {
 		return o.snapshot(ctx), nil
 	})
+	agentrpc.Handle(s, agentapi.SitesStats, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.SitesStatsRequest) (agentapi.SitesStatsResponse, error) {
+		return o.usage(ctx), nil
+	})
+}
+
+// usage reads the counters of every site's slice and its user slice
+// (ADR-0063). A cgroup that cannot be read is logged and counts as empty,
+// so one odd site never hides the others.
+func (o *statsOps) usage(ctx context.Context) agentapi.SitesStatsResponse {
+	all := o.h.m.List()
+	if len(all) > agentapi.MaxSites {
+		all = all[:agentapi.MaxSites]
+	}
+
+	out := agentapi.SitesStatsResponse{At: time.Now().UTC(), Sites: make([]agentapi.SiteUsage, 0, len(all))}
+	keep := make(map[string]bool, len(all))
+
+	for _, site := range all {
+		u, err := sitestats.ReadUsage(sitestats.SliceCgroup(o.cgroupRoot, site.User))
+		if err != nil {
+			o.h.log.WarnContext(ctx, "usage: read site slice", "site", site.User, "err", err)
+		}
+
+		if site.UID >= siteslice.MinUserUID {
+			s, err := sitestats.ReadUsage(sitestats.UserSliceCgroup(o.cgroupRoot, site.UID))
+			if err != nil {
+				o.h.log.WarnContext(ctx, "usage: read user slice", "site", site.User, "err", err)
+			}
+
+			u = u.Add(s)
+		}
+
+		su := agentapi.SiteUsage{
+			Name: site.User, CPUUsec: u.CPUUsec, MemoryBytes: u.MemoryBytes, CacheBytes: u.CacheBytes, MemoryKnown: u.MemoryKnown,
+			Tasks: u.Tasks, IOReadBytes: u.IOReadBytes, IOWriteBytes: u.IOWriteBytes, IOKnown: u.IOKnown,
+		}
+
+		if o.traffic != nil {
+			keep[site.User] = true
+
+			t, err := o.traffic.Read(site.User)
+			if err != nil {
+				o.h.log.WarnContext(ctx, "usage: read traffic log", "site", site.User, "err", err)
+			}
+
+			su.HTTPRequests, su.HTTPBytesIn, su.HTTPBytesOut = t.Requests, t.BytesIn, t.BytesOut
+		}
+
+		out.Sites = append(out.Sites, su)
+	}
+
+	if o.traffic != nil {
+		o.traffic.Forget(keep)
+	}
+
+	return out
 }
 
 func (o *statsOps) snapshot(ctx context.Context) agentapi.MetricsSnapshotResponse {

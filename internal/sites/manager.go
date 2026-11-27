@@ -71,6 +71,8 @@ type Manager struct {
 	// trees replaces systemTrees in tests, whose temporary directories
 	// lie in one of them.
 	trees []string
+	// copies are the home copy jobs (ADR-0070).
+	copies copyJobs
 }
 
 // NewManager builds a Manager on a loaded registry.
@@ -89,12 +91,12 @@ func (m *Manager) Create(ctx context.Context, user, pool string) (Site, error) {
 		return Site{}, err
 	}
 
-	if pool == "" {
-		pool = agentapi.DefaultPool
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if pool == "" {
+		pool = m.reg.DefaultPool()
+	}
 
 	p, ok := m.reg.Pool(pool)
 	if !ok {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { ClockClockwise, StopCircle } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { endToolSession, extendToolSession, listToolSessions, toolMessage, type DBToolOpen } from "./dbtool";
-import { Badge, Card, exactTime, IconButton, Notice, RelTime, RowActions } from "./ui";
+import { Badge, Button, Card, exactTime, IconButton, Notice, RelTime, RowActions } from "./ui";
 
 // minutesLeft is the rounded-up time until an ISO date, never below 0.
 export const minutesLeft = (iso: string, now = Date.now()) => Math.max(0, Math.ceil((Date.parse(iso) - now) / 60000));
@@ -73,14 +73,14 @@ export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }
                 <RowActions>
                   <IconButton
                     label="Extend by 30 minutes"
-                    icon={<ClockClockwise size={18} />}
+                    text="Extend" icon={<ClockClockwise size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => extendToolSession(db, s.id))}
                   />
                   <IconButton
                     label="End now"
                     danger
-                    icon={<StopCircle size={18} />}
+                    text="End now" icon={<StopCircle size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => endToolSession(db, s.id))}
                   />
@@ -91,5 +91,79 @@ export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }
         })}
       </ul>
     </Card>
+  );
+}
+
+/** What Adminer's "+30 min" and "Log out" ask the panel to do. */
+export type ToolAction = "extend" | "end";
+
+/** toolAction reads the request from the address; null for none or a malformed one. */
+export function toolAction(query: URLSearchParams): { action: ToolAction; session: string } | null {
+  const action = query.get("tool");
+  const session = query.get("session") ?? "";
+  if ((action !== "extend" && action !== "end") || !/^hostashi_tool_[0-9a-f]{16}$/.test(session)) return null;
+  return { action, session };
+}
+
+// ToolActionDialog carries out "+30 min" or "Log out" from Adminer
+// (ADR-0038 addendum 1): Adminer cannot reach the agent, so it sends the
+// browser here, and one click extends or ends the session.
+export function ToolActionDialog({ db, action, session, onClose }: { db: string; action: ToolAction; session: string; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+
+  async function run() {
+    setBusy(true);
+    setError("");
+    try {
+      if (action === "extend") {
+        const s = await extendToolSession(db, session);
+        setDone(`The session now ends at ${exactTime(new Date(s.expires))}. Go back to the Adminer tab; it shows the new time.`);
+      } else {
+        await endToolSession(db, session);
+        setDone("The temporary database user is gone and its connections are closed.");
+      }
+    } catch (err) {
+      setError(toolMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const extend = action === "extend";
+  return (
+    <section className="ui-card ui-card-body ui-stack" role="dialog" aria-labelledby="dbtool-action-title">
+      <h2 id="dbtool-action-title" className="ui-flush" tabIndex={-1} ref={heading}>
+        {extend ? `Extend the Adminer session on ${db}` : `End the Adminer session on ${db}`}
+      </h2>
+      {done ? (
+        <Notice tone="ok" title={extend ? "Extended by 30 minutes." : "Session ended."}>
+          {done}
+        </Notice>
+      ) : (
+        <p className="ui-flush">
+          {extend
+            ? "The session gets 30 more minutes, up to two hours ahead."
+            : "Adminer logs out, the temporary database user is removed and its open connections are closed. Queries still running stop."}
+        </p>
+      )}
+      {error && <Notice tone="err" title={error} />}
+      <div className="ui-row">
+        {!done && (
+          <Button variant={extend ? "primary" : "danger"} disabled={busy} onClick={() => void run()}>
+            {extend ? "Extend by 30 minutes" : "End session"}
+          </Button>
+        )}
+        <Button disabled={busy} onClick={onClose}>
+          {done ? "Close" : "Cancel"}
+        </Button>
+      </div>
+    </section>
   );
 }

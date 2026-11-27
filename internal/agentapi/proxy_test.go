@@ -125,3 +125,15 @@ func TestWebProxyInSite(t *testing.T) {
 		}
 	}
 }
+
+func TestProxyAddrPrivate(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"10.0.0.5": true, "172.16.0.1": true, "172.31.255.255": true, "192.168.1.1": true, "100.64.0.1": true, "100.127.255.255": true,
+		"fd00::1": true, "fc00::1": true, "::ffff:10.0.0.5": true, "64:ff9b::a00:5": true,
+		"203.0.113.7": false, "172.32.0.1": false, "100.128.0.1": false, "8.8.8.8": false, "2001:db8::1": false, "::ffff:8.8.8.8": false,
+	} {
+		if got := ProxyAddrPrivate(netip.MustParseAddr(addr)); got != want {
+			t.Errorf("%s: %v, want %v", addr, got, want)
+		}
+	}
+}

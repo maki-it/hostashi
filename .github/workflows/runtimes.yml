@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Builds the apt suite "runtimes" of get.hostashi.com (ADR-0077 part 2):
+# the package hostashi-runtimes with the Node.js and CPython pins of main,
+# signed with the runtimes key (environment "runtimes", main only, no
+# approval). Servers trust that key for this suite only, and the binary
+# takes from it only newer patch releases of the lines it knows; the
+# downloads still come from nodejs.org and python-build-standalone and must
+# match the checksum. No Hostashi code ships this way.
+#
+# It runs when the pins change on main, when pin-auto-merge.yml merged a
+# pin pull request (a merge with GITHUB_TOKEN starts no push workflows),
+# and once a week, so the artifact that the Pages job reads never expires.
+# The version is the UTC time of the last commit that changed the pins, so
+# a weekly run builds the same package and servers install nothing new.
+# Then it starts the Pages workflow, which puts the suite next to stable.
+name: Runtimes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/agentapi/node_versions.go"
+      - "internal/agentapi/python_versions.go"
+      - "internal/runtimepins/**"
+      - "tools/runtimepins/**"
+      - "packaging/runtimes/**"
+      - "packaging/apt-repo/build.sh"
+      - ".github/workflows/runtimes.yml"
+  schedule:
+    # Mondays at 03:17 UTC.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: runtimes
+  cancel-in-progress: false
+
+env:
+  # packaging/keyring/hostashi-runtimes-keyring.asc; key-test.sh checks that
+  # both name the same key.
+  RUNTIMES_FINGERPRINT: E304A1592CBDA945EF69AC323BC5F483620A16A2
+
+jobs:
+  build:
+    name: Build and sign the runtimes suite
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Holds RUNTIMES_SIGNING_KEY; deployments from main only.
+    environment: runtimes
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version comes from the history of the pin files.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Tools
+        run: sudo apt-get install -y -qq --no-install-recommends apt-utils gnupg xz-utils >/dev/null
+      - name: Package
+        id: deb
+        run: |
+          set -euo pipefail
+          version=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S -- \
+            internal/agentapi/node_versions.go internal/agentapi/python_versions.go)
+          [[ "$version" =~ ^[0-9]{14}$ ]] || { echo "::error::no commit of the pin files"; exit 1; }
+          at=$(date -u -d "${version:0:8} ${version:8:2}:${version:10:2}:${version:12:2}" +%Y-%m-%dT%H:%M:%SZ)
+          mkdir -p "$RUNNER_TEMP/runtimes"
+          go run ./tools/runtimepins -time "$at" -out "$RUNNER_TEMP/runtimes.json"
+          packaging/runtimes/build-deb.sh "$RUNNER_TEMP/runtimes.json" "$version" "$RUNNER_TEMP/runtimes"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "hostashi-runtimes $version (pins of $at)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Build and sign the suite
+        env:
+          RUNTIMES_SIGNING_KEY: ${{ secrets.RUNTIMES_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$RUNTIMES_SIGNING_KEY" ] || { echo "::error::the environment runtimes has no RUNTIMES_SIGNING_KEY"; exit 1; }
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          trap 'gpgconf --kill all; rm -rf "$GNUPGHOME"' EXIT
+          gpg --batch --quiet --import <<<"$RUNTIMES_SIGNING_KEY"
+          # Only the key that servers trust for this suite.
+          fpr=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          [ "$fpr" = "$RUNTIMES_FINGERPRINT" ] || { echo "::error::RUNTIMES_SIGNING_KEY is $fpr, not $RUNTIMES_FINGERPRINT"; exit 1; }
+          SUITE=runtimes PACKAGE=hostashi-runtimes packaging/apt-repo/build.sh "$RUNNER_TEMP/runtimes" out/apt
+      - name: Check the signature with the key in the repository
+        run: |
+          set -euo pipefail
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          gpg --batch --quiet --dearmor -o "$GNUPGHOME/key.gpg" packaging/keyring/hostashi-runtimes-keyring.asc
+          gpgv --keyring "$GNUPGHOME/key.gpg" out/apt/dists/runtimes/InRelease
+          gpgv --keyring "$GNUPGHOME/key.gpg" out/apt/dists/runtimes/Release.gpg out/apt/dists/runtimes/Release
+          tar -czf apt-runtimes.tar.gz -C out apt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apt-runtimes
+          path: apt-runtimes.tar.gz
+          retention-days: 90
+          if-no-files-found: error
+
+  pages:
+    name: Publish on get.hostashi.com
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the Pages workflow with this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main -f runtimes_run="$GITHUB_RUN_ID"

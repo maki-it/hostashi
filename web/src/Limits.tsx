@@ -36,7 +36,7 @@ import { cacheSizes } from "./objcache";
 import { formatSize } from "./pagecache";
 import { formatHash } from "./routes";
 import type { Site } from "./sites";
-import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, IconButton, IconLink, Notice, PageHead, RelTime, RowActions, Table, UnsavedNote, type Column, type Sort } from "./ui";
 
 const defaultLimits: Limits = {
   diskBytes: 0,
@@ -363,6 +363,15 @@ export function LimitSettings({ site }: { site: Site }) {
     }
   }
 
+  // Saving needs a change, except for a site without limits yet or limits
+  // that did not apply, where saving again is the fix.
+  const savedChoice = state?.set ? state.preset : null;
+  const dirty =
+    !state?.set ||
+    Boolean(state.applyError) ||
+    choice !== savedChoice ||
+    (choice === "" && JSON.stringify(fields) !== JSON.stringify(fieldsOf(state.limits)));
+
   return (
     <Card title="Resource limits">
       <div className="ui-stack">
@@ -412,9 +421,10 @@ export function LimitSettings({ site }: { site: Site }) {
                   .map((p) => <LimitFacts key={p.name} limits={p.limits} label={"Values of preset " + p.name} />)
               )}
               <div className="ui-row">
-                <Button variant="primary" type="submit" disabled={busy}>
+                <Button variant="primary" type="submit" disabled={busy || !dirty}>
                   Save limits
                 </Button>
+                <UnsavedNote dirty={dirty} />
               </div>
             </form>
             {done && <Notice tone="ok" title={done} />}
@@ -609,7 +619,7 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
           {!p.default && (
             <IconButton
               label={`Make ${p.name} the default`}
-              icon={<Star size={16} />}
+              text="Make default" icon={<Star size={16} />}
               disabled={busy}
               onClick={() =>
                 void act(async () => {
@@ -621,11 +631,11 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
               }
             />
           )}
-          <IconLink label={`Change ${p.name}`} icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
+          <IconLink label={`Change ${p.name}`} text="Change" icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
           {!p.default && (
             <IconButton
               label={`Delete ${p.name}`}
-              icon={<Trash size={16} />}
+              text="Delete" icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {

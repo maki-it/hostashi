@@ -8,7 +8,7 @@ With the setting on, nginx takes the visitor's address from a header, but only f
 
 ## Switch it on
 
-1. Open the site and go to the **Domains & HTTPS** tab.
+1. Open the site and go to the **Operations › Visitor address** tab.
 2. Under **Real visitor address**, tick **This site is behind a proxy or CDN**.
 3. Choose the proxies to trust:
    - **Cloudflare** trusts Cloudflare's published edge ranges. The card shows how many there are and from which day the list is.
@@ -51,7 +51,7 @@ fail2ban never bans a trusted proxy, because a ban of one Cloudflare edge would 
 
 ## The panel's own address
 
-If the panel's host name is behind a proxy too, admins set the same on the **Health** page under **Real visitor address of the panel**. The panel's audit log, its login limiter and the panel allowlist then see the visitor's address.
+If the panel's host name is behind a proxy too, admins set the same on the [**System**](System-settings.md) page under **Real visitor address of the panel**. The panel's audit log, its login limiter and the panel allowlist then see the visitor's address.
 
 ## How the Cloudflare list stays current
 

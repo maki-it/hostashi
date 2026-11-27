@@ -13,6 +13,7 @@ import { Firewall } from "./Firewall";
 import { Home } from "./Home";
 import { Invite } from "./Invite";
 import { Presets } from "./Limits";
+import { Profiles } from "./Profiles";
 import { Login } from "./Login";
 import { Mail } from "./Mail";
 import { Migrate } from "./Migrate";
@@ -26,6 +27,7 @@ import { SecondFactor } from "./SecondFactor";
 import { Services } from "./Services";
 import { Setup } from "./Setup";
 import { Sites } from "./Sites";
+import { Pools } from "./Pools";
 import { System } from "./System";
 import { canSee } from "./nav";
 import { formatHash, parseHash, type Page } from "./routes";
@@ -149,7 +151,7 @@ export function App() {
               }}
             />
           ) : (
-            <Sites query={route.query} onQuery={replaceQuery} />
+            <Sites query={route.query} onQuery={replaceQuery} role={user.role} />
           ))}
         {show("databases") && <Databases role={user.role} query={route.query} onQuery={replaceQuery} />}
         {show("backups") && <Backups query={route.query} onQuery={replaceQuery} />}
@@ -157,9 +159,11 @@ export function App() {
         {show("node") && <NodePage />}
         {show("python") && <PythonPage />}
         {show("limits") && <Presets query={route.query} onQuery={replaceQuery} />}
+        {show("profiles") && <Profiles query={route.query} onQuery={replaceQuery} />}
         {show("health") && <Doctor query={route.query} onQuery={replaceQuery} />}
         {show("services") && <Services />}
         {show("system") && <System />}
+        {show("pools") && <Pools />}
         {show("firewall") && <Firewall />}
         {show("parked") && <Parked query={route.query} onQuery={replaceQuery} />}
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
@@ -173,6 +177,18 @@ export function App() {
     );
   }
 
+  // The session check usually answers within a few milliseconds. Until it
+  // does, nothing of the login page shows, so a reload while logged in does
+  // not flash the login brand; a spinner fades in only when the check takes
+  // noticeably long (CSS delay in base.css).
+  if (view.kind === "loading") {
+    return (
+      <main className="ui-root ui-boot" aria-busy="true" aria-label="Loading">
+        <span className="ui-boot-spinner" aria-hidden="true" />
+      </main>
+    );
+  }
+
   return (
     <main className="ui-root ui-auth">
       <header className="app-brand ui-auth-brand">
@@ -182,7 +198,6 @@ export function App() {
           <span className="app-host">{window.location.hostname}</span>
         </span>
       </header>
-      {view.kind === "loading" && <p aria-busy="true">Loading…</p>}
       {view.kind === "error" && (
         <Notice tone="err" title="The server is not reachable.">
           <Button onClick={() => void boot()}>Try again</Button>

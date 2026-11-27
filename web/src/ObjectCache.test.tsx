@@ -41,7 +41,7 @@ describe("ObjectCacheSettings", () => {
     const user = userEvent.setup();
     render(<ObjectCacheSettings site={site} canSize={true} />);
 
-    const box = await screen.findByRole("checkbox", { name: /Run an object cache/ });
+    const box = await screen.findByRole("switch", { name: /Run an object cache/ });
     expect(screen.getByText("Off")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Socket/ })).not.toBeInTheDocument();
 
@@ -82,7 +82,7 @@ describe("ObjectCacheSettings", () => {
   it("cannot be turned on while the site is disabled", async () => {
     mockFetch({ "GET /api/v1/sites/blog/object-cache": { body: off } });
     render(<ObjectCacheSettings site={{ ...site, disabled: true }} canSize={true} />);
-    expect(await screen.findByRole("checkbox", { name: /Run an object cache/ })).toBeDisabled();
+    expect(await screen.findByRole("switch", { name: /Run an object cache/ })).toBeDisabled();
   });
 
   it("reports a cache that did not start", async () => {
@@ -92,7 +92,7 @@ describe("ObjectCacheSettings", () => {
     });
     const user = userEvent.setup();
     render(<ObjectCacheSettings site={site} canSize={true} />);
-    await user.click(await screen.findByRole("checkbox", { name: /Run an object cache/ }));
+    await user.click(await screen.findByRole("switch", { name: /Run an object cache/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The cache did not start.");
   });
 });

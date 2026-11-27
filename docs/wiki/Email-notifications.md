@@ -44,7 +44,7 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 - a second factor added or removed, a passkey added or removed, a new API token,
 - your email address changed.
 
-**Notifications** are about the server and sites. Switch them on or off on **Your account → Notifications**. They are on by default for admins and off for everyone else. You only get notifications about what your role can see: backups and server checks only go to admins; managers get those of every site, users those of their own sites.
+**Notifications** are about the server and sites. Switch them on or off on **Your account → Notifications**. They are on by default for admins and off for everyone else; Git deploys are off for everyone until switched on. You only get notifications about what your role can see: backups and server checks only go to admins; managers get those of every site, users those of their own sites.
 
 | Notification | When |
 |---|---|
@@ -52,6 +52,8 @@ On **Your account → Email**, enter your address. Hostashi sends a link to it; 
 | Certificates | A renewal failed (at most once a day), or a certificate expires in 14 or in 3 days. |
 | Server checks | Once a day, when the checks on the Health page find errors. Also once per new Hostashi version, when the server does not install it by itself (`--auto-update`). |
 | Services | A service is down (systemd gave up restarting it) or crashed 3 times within 15 minutes, or the panel cannot reach the Hostashi agent for about 3 minutes. Another email when it runs again. Server services go to admins; PHP and the object cache of a site also to managers and users of that site. |
+| Malware scan | A malware scan of a site flagged files it had not reported before. Once per run, with up to 10 paths and signatures; files you marked as false positives are not reported again. |
+| Git deploys | A [Git deploy](Git-deploy.md) of a site failed: its build, its switch to the new release, or its start. Once per run, with the commit, who started it and the error; the log stays in the panel. A failed rollback sends none, as the panel shows it right away. |
 | PHP versions | Once a week per site, when a site uses a PHP version that loses security fixes within 60 days or already has. |
 | Disk space | A disk of the server or a site's disk limit is 90 percent full or more, or a site's databases reach 90 percent of their [warning size](Database-limits.md). At most once a day. |
 

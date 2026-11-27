@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ArrowLeft, GearSix, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, Eye, GearSix, Plus, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   createPage,
@@ -11,6 +11,7 @@ import {
   listPages,
   pageMessage,
   pageNameProblem,
+  openPreview,
   updatePage,
   type PageKind,
   type StatusPage,
@@ -31,7 +32,7 @@ const sizeOf = (p: StatusPage) => p.files.reduce((n, f) => n + f.size, 0);
 const nobody = (p: StatusPage) => (p.kind === "parking" ? "No domain" : "No site");
 
 const fileHint =
-  "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself.";
+  "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself. %%DOMAIN%% in the HTML shows the domain the visitor opened.";
 
 // Pages lists the maintenance and parking pages and uploads new ones. Sites
 // choose their maintenance page in their settings.
@@ -220,11 +221,12 @@ export function Pages({ query = new URLSearchParams(), onQuery = () => undefined
       srHeader: true,
       cell: (p) => (
         <RowActions>
-          <IconLink label={`Manage ${p.name}`} icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
+          <IconButton label={`Preview ${p.name}`} text="Preview" icon={<Eye size={16} />} onClick={() => void openPreview(p.id).then(setError)} />
+          <IconLink label={`Manage ${p.name}`} text="Manage" icon={<GearSix size={16} />} href={pagesHash({ page: p.id })} />
           {!p.builtin && (
             <IconButton
               label={`Delete ${p.name}`}
-              icon={<Trash size={16} />}
+              text="Delete" icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {
@@ -408,7 +410,14 @@ function PageView({ page, back, deleteDialog, onDelete, onChanged, done }: ViewP
             {page.builtin && <Badge tone="off">Built-in</Badge>}
           </span>
         }
-        actions={back}
+        actions={
+          <span className="ui-row">
+            <Button icon={<Eye size={16} aria-hidden="true" />} onClick={() => void openPreview(page.id).then(setError)}>
+              Preview
+            </Button>
+            {back}
+          </span>
+        }
       />
       {done && <Notice tone="ok" title={done} />}
       {error && <Notice tone="err" title={error} />}

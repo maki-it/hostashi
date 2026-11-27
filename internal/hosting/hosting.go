@@ -147,6 +147,9 @@ var (
 	ErrSiteType = store.ErrSiteType
 	// ErrNoTLS means the panel has no ACME client configured.
 	ErrNoTLS = errors.New("hosting: certificates are not available")
+	// ErrProxyPrivate: the proxy target lies in a private network, which
+	// only admins and managers may set.
+	ErrProxyPrivate = errors.New("hosting: a proxy target in a private network needs an admin or manager")
 )
 
 // Service manages sites. Changes are serialized: each one ends with the
@@ -158,21 +161,44 @@ type Service struct {
 	now func() time.Time
 	mu  sync.Mutex
 
-	issuer Issuer
-	kick   chan struct{}
-	cron   CronAgent    // nil: no cron jobs
-	limits LimitsAgent  // nil: no resource limits (ADR-0015)
-	ssh    SSHAgent     // nil: no SSH keys (ADR-0032)
-	cache  CacheAgent   // nil: no object caches (ADR-0045)
-	apps   AppAgent     // nil: no Node.js apps (ADR-0054)
-	envBox *secrets.Box // nil: apps have no environment variables
-	dbs    DBServers    // nil: only the local database server (ADR-0041)
+	issuer     Issuer
+	kick       chan struct{}
+	cron       CronAgent      // nil: no cron jobs
+	limits     LimitsAgent    // nil: no resource limits (ADR-0015)
+	ssh        SSHAgent       // nil: no SSH keys (ADR-0032)
+	cache      CacheAgent     // nil: no object caches (ADR-0045)
+	apps       AppAgent       // nil: no Node.js apps (ADR-0054)
+	envBox     *secrets.Box   // nil: apps have no environment variables
+	gitBox     *secrets.Box   // nil: no Git deploy (ADR-0062)
+	deploys    DeployAgent    // nil: no deploy runs (ADR-0062)
+	wp         WordPressAgent // nil: no WordPress installs (ADR-0069)
+	clones     CloneAgent     // nil: no clones (ADR-0070)
+	cloneKick  chan struct{}  // wakes RunClones
+	deployKick chan struct{}  // wakes RunDeploys
+	scans      ScanAgent      // nil: no malware scans (ADR-0064)
+	scanKick   chan struct{}  // wakes RunScans
+	// rtCursor and rtPending belong to RunScans: where the real-time log
+	// was read to (0 after a start: the agent's log is read again, known
+	// findings are not reported twice) and the findings waiting for an
+	// email.
+	rtCursor  int64
+	rtPending map[string]*realtimeMail
+	// deployAgain holds the sites whose webhook fired while a run was
+	// active; RunDeploys starts one more run when it ends. In memory only.
+	deployAgainMu sync.Mutex
+	deployAgain   map[string]bool
+	dbs           DBServers // nil: only the local database server (ADR-0041)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache
 
-	resolver     Resolver   // nil: net.DefaultResolver
-	remoteJobsMu sync.Mutex // serializes dropping the users of remote jobs
+	resolver     Resolver       // nil: net.DefaultResolver
+	hostKeyScan  HostKeyScanner // nil: backup.FetchHostKeyAt
+	remoteJobsMu sync.Mutex     // serializes dropping the users of remote jobs
+
+	// defaultPool names the pool of a site whose request names none
+	// (ADR-0016 addendum 2); nil or an empty answer: agentapi.DefaultPool.
+	defaultPool func(ctx context.Context) (string, error)
 
 	dbTool     DBToolAgent // nil: no web database tool (ADR-0038)
 	dbToolPort int
@@ -192,6 +218,10 @@ type Service struct {
 	panelServed string // panel domain of the last accepted web state; under mu
 
 	onApply func(ok bool, generation int) // nil: nobody listens
+	// onDeployFailed: see ObserveFailedDeploys; nil: nobody listens.
+	onDeployFailed func(ctx context.Context, site string, d store.SiteDeploy)
+	// onMalware: see ObserveMalware; nil: nobody listens.
+	onMalware func(ctx context.Context, site string, run store.ScanRun, found []store.ScanFinding)
 
 	// localAddrs are the server's own addresses, which no trusted proxy
 	// range may hold (ADR-0059); nil reads the interfaces.
@@ -211,12 +241,18 @@ func New(st *store.Store, ag Agent, log *slog.Logger) *Service {
 	return &Service{st: st, ag: ag, log: log, now: time.Now, kick: make(chan struct{}, 1)}
 }
 
+// ResolveDefaultPool sets how Create finds the default pool (ADR-0016
+// addendum 2), normally by asking the agent.
+func (s *Service) ResolveDefaultPool(f func(ctx context.Context) (string, error)) { s.defaultPool = f }
+
 // EnableTLS sets the ACME client. Without one, sites cannot get HTTPS.
 func (s *Service) EnableTLS(i Issuer) { s.issuer = i }
 
 // CreateRequest describes a new site.
 type CreateRequest struct {
-	Name    string
+	Name string
+	// Title is the display name (ADR-0072), empty for none.
+	Title   string
 	Pool    string // empty: the default pool
 	PHP     string // PHP version, empty: no PHP
 	Domains []string
@@ -246,6 +282,10 @@ type CreateRequest struct {
 	// Node makes an app site, which runs a program of its own instead
 	// (addendum 2).
 	App *store.SiteApp
+	// Profile is the application profile of a static or PHP site
+	// (ADR-0069); empty takes the default of the type. Its document root
+	// folder and hardening rules are stored with the site.
+	Profile string
 }
 
 // checkRedirect normalizes and checks the redirect of a site with these
@@ -308,6 +348,51 @@ func (s *Service) List(ctx context.Context) ([]store.Site, error) {
 	return s.st.Sites(ctx)
 }
 
+// SiteMarks is what the list of sites shows beside a site: open virus
+// finds and, for a copy, the site it was copied from.
+type SiteMarks struct {
+	OpenFindings int
+	// CloneOf is the source of a copy, "" when it is none or the source
+	// is gone.
+	CloneOf string
+	Staging bool
+}
+
+// ListMarks returns the marks of every site with any, by site ID.
+func (s *Service) ListMarks(ctx context.Context, sites []store.Site) (map[int64]SiteMarks, error) {
+	open, err := s.st.OpenScanFindings(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	clones, err := s.st.SiteClones(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make(map[int64]string, len(sites))
+	for _, site := range sites {
+		names[site.ID] = site.Name
+	}
+
+	out := make(map[int64]SiteMarks)
+
+	for id, n := range open {
+		m := out[id]
+		m.OpenFindings = n
+		out[id] = m
+	}
+
+	for _, c := range clones {
+		m := out[c.SiteID]
+		m.CloneOf = names[c.SourceID]
+		m.Staging = c.Staging
+		out[c.SiteID] = m
+	}
+
+	return out, nil
+}
+
 // Get returns one site.
 func (s *Service) Get(ctx context.Context, name string) (store.Site, error) {
 	site, err := s.st.SiteByName(ctx, name)
@@ -322,6 +407,15 @@ func (s *Service) Get(ctx context.Context, name string) (store.Site, error) {
 // host (agent). If the virtual host cannot go live, the account and the row
 // are removed again.
 func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (store.Site, error) {
+	if req.Pool == "" && s.defaultPool != nil {
+		name, err := s.defaultPool(ctx)
+		if err != nil {
+			return store.Site{}, fmt.Errorf("find the default storage pool: %w", err)
+		}
+
+		req.Pool = name
+	}
+
 	if req.Pool == "" {
 		req.Pool = agentapi.DefaultPool
 	}
@@ -379,6 +473,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		}
 	}
 
+	if err := s.checkCreateProfile(ctx, req); err != nil {
+		return store.Site{}, err
+	}
+
 	if req.Redirect != nil {
 		r, err := checkRedirect(*req.Redirect, domains)
 		if err != nil {
@@ -396,6 +494,11 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		if err := req.Headers.Validate(); err != nil {
 			return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
+	}
+
+	title, err := NormalizeTitle(req.Title)
+	if err != nil {
+		return store.Site{}, err
 	}
 
 	s.mu.Lock()
@@ -436,6 +539,20 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 
 	// Cleanup must run even when the request was canceled meanwhile.
 	undo := context.WithoutCancel(ctx)
+
+	if title != "" {
+		if _, err := s.st.SetSiteTitle(ctx, req.Name, title, s.now()); err != nil {
+			if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
+				s.log.ErrorContext(ctx, "remove site row after failed create", "site", req.Name, "err", derr)
+			}
+
+			s.parkAgain(undo, actor, req.Name, parked)
+
+			return store.Site{}, err
+		}
+
+		created.Title = title
+	}
 
 	if err := s.storeTLSChoice(ctx, req, created.ID); err != nil {
 		if derr := s.st.DeleteSite(undo, req.Name); derr != nil {
@@ -563,7 +680,7 @@ func (s *Service) storeTLSChoice(ctx context.Context, req CreateRequest, siteID 
 		}
 	}
 
-	return nil
+	return s.storeCreateProfile(ctx, req, siteID)
 }
 
 // parkedAmong returns the parked domains among domains.
@@ -625,86 +742,6 @@ func (s *Service) removeAfterFailure(ctx context.Context, name string) {
 	if err := s.st.DeleteSite(ctx, name); err != nil {
 		s.log.ErrorContext(ctx, "remove site row after failed create", "site", name, "err", err)
 	}
-}
-
-// SetDomains replaces the domains of an active site. If the new virtual host
-// cannot go live, the previous domains are stored again.
-func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in []string) (store.Site, error) {
-	domains, err := NormalizeDomains(in)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if err := s.checkReserved(domains); err != nil {
-		return store.Site{}, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	site, err := s.Get(ctx, name)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if site.State != store.SiteActive {
-		return store.Site{}, ErrState
-	}
-
-	if err := checkOwnCertDomains(site, domains); err != nil {
-		return store.Site{}, err
-	}
-
-	// A redirect or proxy must not point to one of the new domains
-	// (ADR-0054).
-	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
-		if _, err := checkRedirect(*r, domains); err != nil {
-			return store.Site{}, err
-		}
-	}
-
-	if p := site.Proxy; p != nil && site.Type == store.SiteTypeProxy {
-		if _, err := agentapi.ParseProxyTarget(p.Target, domains); err != nil {
-			return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-		}
-	}
-
-	parked, err := s.parkedAmong(ctx, domains)
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	old, err := s.st.ReplaceSiteDomains(ctx, name, domains, s.now())
-	if errors.Is(err, store.ErrDomainTaken) {
-		return store.Site{}, fmt.Errorf("%w: %w", ErrDomainTaken, err)
-	}
-
-	if err != nil {
-		return store.Site{}, err
-	}
-
-	if err := s.applyWeb(ctx); err != nil {
-		if _, rerr := s.st.ReplaceSiteDomains(context.WithoutCancel(ctx), name, old, s.now()); rerr != nil {
-			s.log.ErrorContext(ctx, "restore domains after failed change", "site", name, "err", rerr)
-		} else {
-			s.parkAgain(context.WithoutCancel(ctx), actor, name, parked)
-		}
-
-		return store.Site{}, err
-	}
-
-	s.auditChange(ctx, actor, "site.domains", name, map[string]string{"domains": strings.Join(domains, " ")},
-		map[string]string{"domains": strings.Join(old, " ")}, map[string]string{"domains": strings.Join(domains, " ")})
-
-	site.Domains = domains
-
-	// A certificate for the old names no longer covers the site: the site
-	// is served over HTTP until the new one is there.
-	if site.TLS && site.TLSSource == store.TLSLetsEncrypt {
-		s.Kick()
-	}
-
-	return site, nil
 }
 
 // SetPHP sets the PHP version of an active site; "" turns PHP off. If the
@@ -884,32 +921,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 		return err
 	}
 
-	snippets, err := s.st.AllSiteSnippets(ctx)
-	if err != nil {
-		return err
-	}
-
-	phpSettings, err := s.st.AllSitePHPSettings(ctx)
-	if err != nil {
-		return err
-	}
-
-	headers, err := s.st.AllSiteHeaders(ctx)
-	if err != nil {
-		return err
-	}
-
-	realips, err := s.st.AllSiteRealIP(ctx)
-	if err != nil {
-		return err
-	}
-
-	workers, err := s.st.PHPWorkers(ctx)
-	if err != nil {
-		return err
-	}
-
-	caches, err := s.st.AllPageCaches(ctx)
+	in, err := s.loadWebInputs(ctx)
 	if err != nil {
 		return err
 	}
@@ -926,10 +938,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				php = ""
 			}
 
-			ws := agentapi.WebSite{
-				User: site.Name, Domains: site.Domains, PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
-				Headers: webHeaders(headers, site), RealIP: webRealIP(realips, site),
-			}
+			ws := in.webSite(site, php, tls)
 
 			// Redirect and reverse proxy sites send only their target: no
 			// files, PHP, caches or snippets (ADR-0054).
@@ -957,7 +966,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 			if hasApp(site) {
 				ws.PHP = ""
 				ws.App = &agentapi.WebApp{Port: site.App.Port}
-				ws.Snippets = webSnippets(snippets, site)
+				ws.Snippets = webSnippets(in.snippets, site)
 
 				if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
 					return err
@@ -968,31 +977,7 @@ func (s *Service) applyWeb(ctx context.Context) error {
 				continue
 			}
 
-			// SPA is kept while the site runs PHP and only sent for a
-			// static site; the asset cache serves static and PHP sites
-			// (ADR-0054 addenda 1 and 4).
-			ws.WebDir = site.WebDir
-			if site.Type == store.SiteTypeStatic {
-				ws.SPA = site.SPA
-			}
-
-			if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
-				ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
-			}
-
-			if php != "" {
-				ws.PHPWorkers = phpWorkers(workers, site.ID)
-				ws.PHPPrograms = site.PHPPrograms
-				ws.PHPSettings = webPHPSettings(phpSettings, site)
-			}
-
-			// Sent in maintenance as well, so the agent keeps the cache's
-			// directory; it purges it when the site is served again.
-			ws.PageCache = webPageCache(caches, site, php)
-
-			// The agent leaves them out while the site is disabled or in
-			// maintenance; they are sent anyway so the state stays complete.
-			ws.Snippets = webSnippets(snippets, site)
+			in.addFiles(&ws, site, php)
 
 			if err := s.addLifecycleWeb(ctx, &ws, site, onAgent); err != nil {
 				return err
@@ -1052,6 +1037,123 @@ func (s *Service) applyWeb(ctx context.Context) error {
 	return nil
 }
 
+// webInputs are the per-site settings of the web state, read once for
+// all sites.
+type webInputs struct {
+	snippets    map[int64]store.SiteSnippets
+	phpSettings map[int64]store.SitePHPSettings
+	headers     map[int64]store.SiteHeaders
+	realips     map[int64]store.SiteRealIP
+	access      map[int64]store.SiteAccess
+	authUsers   map[int64][]store.AuthUser
+	workers     map[int64]int64
+	caches      map[int64]store.PageCache
+	profiles    map[int64]store.SiteProfile
+	// profileDefs are the built-in and own profiles (ADR-0069).
+	profileDefs profileSet
+}
+
+func (s *Service) loadWebInputs(ctx context.Context) (webInputs, error) {
+	var (
+		in  webInputs
+		err error
+	)
+
+	if in.snippets, err = s.st.AllSiteSnippets(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.phpSettings, err = s.st.AllSitePHPSettings(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.headers, err = s.st.AllSiteHeaders(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.realips, err = s.st.AllSiteRealIP(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.access, err = s.st.AllSiteAccess(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.authUsers, err = s.st.AllAuthUsers(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.workers, err = s.st.PHPWorkers(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.caches, err = s.st.AllPageCaches(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.profiles, err = s.st.AllSiteProfiles(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	if in.profileDefs, err = s.profileSet(ctx); err != nil {
+		return webInputs{}, err
+	}
+
+	return in, nil
+}
+
+// webSite is what every type of site sends: names, HTTPS and the
+// settings that apply to each of its server blocks.
+func (in webInputs) webSite(site store.Site, php string, tls bool) agentapi.WebSite {
+	ws := agentapi.WebSite{
+		User: site.Name, Domains: site.AllDomains(), PHP: php, TLS: tls, HSTS: site.HSTS, Disabled: site.Disabled,
+		Headers: webHeaders(in.headers, site), RealIP: webRealIP(in.realips, site),
+		Access: webAccess(in.access, in.authUsers, site),
+	}
+
+	// A redirect site sends every name to its target anyway; it keeps the
+	// setting for a later type change (ADR-0065).
+	if site.Type != store.SiteTypeRedirect {
+		ws.WWWRedirect = site.WWWRedirect
+		ws.RedirectDomains = site.RedirectDomains
+	}
+
+	return ws
+}
+
+// addFiles adds what a static or PHP site sends: its document root,
+// hardening, caches, PHP and snippets. php is the PHP version it sends,
+// empty while the site is disabled.
+func (in webInputs) addFiles(ws *agentapi.WebSite, site store.Site, php string) {
+	// SPA is kept while the site runs PHP and only sent for a static site;
+	// the asset cache serves static and PHP sites (ADR-0054 addenda 1 and
+	// 4).
+	ws.WebDir = site.WebDir
+	if site.Type == store.SiteTypeStatic {
+		ws.SPA = site.SPA
+	}
+
+	ws.Hardening = webHardening(in.profileDefs, in.profiles, site, php)
+
+	if site.AssetCache && (site.Type == store.SiteTypeStatic || site.Type == store.SiteTypePHP) {
+		ws.AssetCache, ws.AssetCacheSeconds, ws.AssetCacheExts = true, site.AssetCacheSeconds, site.AssetCacheExts
+	}
+
+	if php != "" {
+		ws.PHPWorkers = phpWorkers(in.workers, site.ID)
+		ws.PHPPrograms = site.PHPPrograms
+		ws.PHPSettings = webPHPSettings(in.phpSettings, site)
+	}
+
+	// Sent in maintenance as well, so the agent keeps the cache's
+	// directory; it purges it when the site is served again.
+	ws.PageCache = webPageCache(in.caches, site, php)
+
+	// The agent leaves them out while the site is disabled or in
+	// maintenance; they are sent anyway so the state stays complete.
+	ws.Snippets = webSnippets(in.snippets, site)
+}
+
 // addLifecycleWeb adds the maintenance page or the page of a disabled site.
 func (s *Service) addLifecycleWeb(ctx context.Context, ws *agentapi.WebSite, site store.Site, onAgent map[string]bool) error {
 	var err error
@@ -1078,7 +1180,13 @@ func (s *Service) audit(ctx context.Context, actor int64, action, target string,
 // auditChange writes an entry for an update with the fields that differ
 // between before and after (store.DiffOf). Neither may hold secrets.
 func (s *Service) auditChange(ctx context.Context, actor int64, action, target string, detail, before, after map[string]string) {
-	if err := s.st.AuditChange(ctx, &actor, action, target, detail, store.DiffOf(before, after)); err != nil {
+	// Actor 0 is no user, such as a webhook.
+	var by *int64
+	if actor != 0 {
+		by = &actor
+	}
+
+	if err := s.st.AuditChange(ctx, by, action, target, detail, store.DiffOf(before, after)); err != nil {
 		s.log.ErrorContext(ctx, "audit log", "action", action, "err", err)
 	}
 }

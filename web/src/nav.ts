@@ -8,22 +8,23 @@ import {
   Code,
   Database,
   EnvelopeSimple,
-  FilePy,
   Gauge,
   GearSix,
+  HardDrives,
   Globe,
   Heartbeat,
-  Hexagon,
   type Icon,
   Pulse,
   ShieldCheck,
   Signpost,
   SquaresFour,
+  Stack,
   UsersThree,
 } from "@phosphor-icons/react";
 import type { Page } from "./routes";
 
-export type NavItem = { page: Page; label: string; icon: Icon; roles: readonly string[] };
+/** also: more pages the entry stands for, such as the tabs of Runtimes. */
+export type NavItem = { page: Page; label: string; icon: Icon; roles: readonly string[]; also?: readonly Page[] };
 export type NavGroup = { label: string | null; items: readonly NavItem[] };
 
 const all = ["admin", "manager", "user"] as const;
@@ -41,6 +42,8 @@ export const navGroups: readonly NavGroup[] = [
       { page: "databases", label: "Databases", icon: Database, roles: all },
       { page: "parked", label: "Parked domains", icon: Signpost, roles: staff },
       { page: "pages", label: "Maintenance pages", icon: Browser, roles: staff },
+      { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
+      { page: "profiles", label: "App profiles", icon: Stack, roles: admin },
     ],
   },
   {
@@ -49,12 +52,10 @@ export const navGroups: readonly NavGroup[] = [
       { page: "health", label: "Health", icon: Heartbeat, roles: admin },
       { page: "services", label: "Services", icon: Pulse, roles: admin },
       { page: "system", label: "System", icon: GearSix, roles: admin },
-      { page: "php", label: "PHP versions", icon: Code, roles: admin },
-      { page: "node", label: "Node.js versions", icon: Hexagon, roles: admin },
-      { page: "python", label: "Python versions", icon: FilePy, roles: admin },
+      { page: "pools", label: "Storage pools", icon: HardDrives, roles: admin },
+      { page: "php", label: "Runtimes", icon: Code, roles: admin, also: ["node", "python"] },
       { page: "backups", label: "Backups", icon: ClockCounterClockwise, roles: admin },
       { page: "firewall", label: "Firewall", icon: ShieldCheck, roles: admin },
-      { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
     ],
   },
   {
@@ -72,7 +73,7 @@ const items = navGroups.flatMap((g) => g.items.map((item) => ({ ...item, group: 
 
 /** navItem returns the entry of a page and the label of its group. */
 export function navItem(page: Page) {
-  return items.find((i) => i.page === page);
+  return items.find((i) => i.page === page || i.also?.includes(page));
 }
 
 /** canSee reports whether a role sees a page in the sidebar. */

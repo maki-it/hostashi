@@ -41,6 +41,7 @@ type apiEnv struct {
 	doctor    *stubDoctor
 	pools     *stubPools
 	firewall  *stubFirewall
+	fail2ban  *stubFail2ban
 	php       *stubPHP
 	pgclient  *stubPGClient
 	node      *stubNode
@@ -99,8 +100,12 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.Doctor = doc.run
 	pl := &stubPools{}
 	deps.Pools = pl.list
+	deps.PoolAdmin = pl
+	deps.PoolSites = st
 	fw := &stubFirewall{enabled: true}
 	deps.Firewall = fw
+	f2b := &stubFail2ban{}
+	deps.Fail2ban = f2b
 	php := &stubPHP{}
 	deps.PHP = php
 	pgc := &stubPGClient{}
@@ -122,8 +127,9 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	deps.NotifyPrefs = st
 	deps.MailHistory = st
 	sa := &stubServerAgent{}
-	mon := &servermon.Monitor{Agent: sa, Store: st}
+	mon := &servermon.Monitor{Agent: sa, Store: st, SiteAgent: sa, SiteStore: st}
 	deps.Monitor = mon
+	deps.Usage = mon
 	sys := newStubSystem()
 	deps.System = sys
 	deps.AuditLog = st
@@ -131,6 +137,16 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 	if ag != nil {
 		deps.Sites = hosting.New(st, ag, nil)
 		deps.Sites.EnableAppEnv(box)
+		deps.Sites.EnableGit(box)
+
+		if da, ok := ag.(hosting.DeployAgent); ok {
+			deps.Sites.EnableDeploys(da)
+		}
+
+		if sa, ok := ag.(hosting.ScanAgent); ok {
+			deps.Sites.EnableScans(sa)
+		}
+
 		deps.CloudPanel = cpmigrate.New(st, box, migrationTarget(deps.Sites), nil)
 		deps.CloudPanel.Connect(siteCreator(deps.Sites, nil), imports)
 		deps.CloudPanel.ConnectPools(cpmigrate.PoolLister(pl.list))
@@ -140,7 +156,7 @@ func newAPIWithAgent(t *testing.T, ag hosting.Agent) *apiEnv {
 
 	return &apiEnv{
 		h: Handler(Config{PublicURL: testPublicURL}, deps), svc: svc, sites: deps.Sites, tokenPath: tokenPath, metrics: deps.Metrics, settings: st, st: st, cp: deps.CloudPanel,
-		imports: imports, doctor: doc, pools: pl, firewall: fw, php: php, pgclient: pgc, node: nd, python: py, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
+		imports: imports, doctor: doc, pools: pl, firewall: fw, fail2ban: f2b, php: php, pgclient: pgc, node: nd, python: py, mail: deps.Mail, mailSent: sent, outbox: outbox, files: fm,
 		monitor: mon, srvAgent: sa, logs: lg, system: sys,
 	}
 }
@@ -556,5 +572,136 @@ func TestTOTPEndpoints(t *testing.T) {
 	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`)
 	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "passkey_required" || len(rec.Result().Cookies()) != 0 {
 		t.Fatalf("password login with only a passkey: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestChangePasswordEndpoint(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	const next = "another long passphrase"
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/password", body: `{"currentPassword":"x","newPassword":"y"}`})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without session: %d", rec.Code)
+	}
+
+	c := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+	other := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"wrong password!!","newPassword":"` + next + `"}`,
+	})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("wrong current password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"` + apiPassword + `","newPassword":"short"}`,
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("weak password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/password", cookie: c,
+		body: `{"currentPassword":"` + apiPassword + `","newPassword":"` + next + `"}`,
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("change: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c}); rec.Code != http.StatusOK {
+		t.Fatalf("own session after the change: %d", rec.Code)
+	}
+
+	if rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: other}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("other session after the change: %d", rec.Code)
+	}
+
+	if rec := e.login(t, `{"username":"kim","password":"`+next+`"}`); rec.Code != http.StatusOK {
+		t.Fatalf("login with the new password: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTOTPReplaceEndpoints(t *testing.T) {
+	e := newAPI(t)
+	e.setupAdmin(t)
+
+	for _, p := range []string{"replace", "replace/confirm"} {
+		rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/" + p, body: `{"code":"123456","password":"x"}`})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without session: %d", p, rec.Code)
+		}
+	}
+
+	c := sessionCookieOf(t, e.login(t, `{"username":"kim","password":"`+apiPassword+`"}`))
+
+	rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/enroll", cookie: c})
+
+	var enr struct {
+		Secret string `json:"secret"`
+		URI    string `json:"uri"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &enr); err != nil {
+		t.Fatal(err)
+	}
+
+	seed, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(enr.Secret)
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/confirm", cookie: c, body: `{"code":"` + auth.TOTPCode(seed, auth.TOTPStep(time.Now())) + `"}`})
+
+	var conf struct {
+		RecoveryCodes []string `json:"recoveryCodes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &conf); err != nil || len(conf.RecoveryCodes) != 8 {
+		t.Fatalf("confirm: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace", cookie: c,
+		body: `{"password":"wrong password!!","code":"` + conf.RecoveryCodes[0] + `"}`,
+	})
+	if rec.Code != http.StatusUnauthorized || errCode(t, rec) != "invalid_credentials" {
+		t.Fatalf("replace with wrong password: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "POST", path: "/api/v1/auth/totp/replace/confirm", cookie: c, body: `{"code":"123456"}`})
+	if rec.Code != http.StatusConflict || errCode(t, rec) != "totp_state" {
+		t.Fatalf("confirm without start: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace", cookie: c,
+		body: `{"password":"` + apiPassword + `","code":"` + conf.RecoveryCodes[1] + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replace: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &enr); err != nil || !strings.HasPrefix(enr.URI, "otpauth://") {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	next, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(enr.Secret)
+
+	rec = e.do(t, reqOpts{
+		method: "POST", path: "/api/v1/auth/totp/replace/confirm", cookie: c,
+		body: `{"code":"` + auth.TOTPCode(next, auth.TOTPStep(time.Now())) + `"}`,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replace confirm: %d %s", rec.Code, rec.Body)
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &conf); err != nil || len(conf.RecoveryCodes) != 8 {
+		t.Fatalf("%s %v", rec.Body, err)
+	}
+
+	// The old recovery codes are gone, the new ones log in.
+	rec = e.login(t, `{"username":"kim","password":"`+apiPassword+`","totp":"`+conf.RecoveryCodes[0]+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login with a new recovery code: %d %s", rec.Code, rec.Body)
 	}
 }

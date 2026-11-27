@@ -3,8 +3,12 @@
 package agentapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,21 +21,40 @@ import (
 var ErrBackupInvalid = errors.New("backup: invalid settings")
 
 var (
-	// Storage Box main and sub-accounts look like u123456 and u123456-sub1.
-	sftpUserRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	// An SFTP login name: letters, digits, dot, underscore and dash, as
+	// Linux, NAS and hosting accounts use them (u123456-sub1, backup_web3,
+	// first.last). Never a leading dash, never @, : or /.
+	sftpUserRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`)
 	hostnameRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
-	// A path below the login directory: segments of plain characters.
-	remotePathRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$`)
+	// A path relative to the login directory, or absolute with a leading
+	// slash: segments of plain characters.
+	remotePathRe = regexp.MustCompile(`^/?[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}){0,7}$`)
 )
 
-// BackupTarget is the SFTP account the repository lives in, shaped for a
-// Hetzner Storage Box (ADR-0008, recommendation 2). It is never a free-form
-// restic URL.
+// BackupTarget is the SFTP account the repository lives in: any SSH server
+// with SFTP and key login, for example a Hetzner Storage Box, a NAS or
+// another Linux server (ADR-0008, recommendation 2). It is never a
+// free-form restic URL.
 type BackupTarget struct {
 	User string `json:"user"`
-	Host string `json:"host"`
+	Host string `json:"host"` // lowercase DNS name or IP address
 	Port int    `json:"port"`
-	Path string `json:"path"` // relative to the login directory
+	Path string `json:"path"` // relative to the login directory, or absolute
+}
+
+// backupHost accepts a lowercase DNS name or a unicast IP address that is
+// not loopback or unspecified.
+func backupHost(h string) bool {
+	if len(h) <= 253 && hostnameRe.MatchString(h) {
+		return true
+	}
+
+	a, err := netip.ParseAddr(h)
+	if err != nil || a.Zone() != "" || a.String() != h {
+		return false
+	}
+
+	return !a.IsLoopback() && !a.IsUnspecified() && !a.IsMulticast() && !a.Is4In6()
 }
 
 // Validate checks every field on its own.
@@ -39,8 +62,8 @@ func (t BackupTarget) Validate() error {
 	switch {
 	case !sftpUserRe.MatchString(t.User):
 		return fmt.Errorf("%w: user", ErrBackupInvalid)
-	case len(t.Host) > 253 || !hostnameRe.MatchString(t.Host):
-		return fmt.Errorf("%w: host must be a lowercase DNS name", ErrBackupInvalid)
+	case !backupHost(t.Host):
+		return fmt.Errorf("%w: host must be a lowercase DNS name or an IP address", ErrBackupInvalid)
 	case t.Port < 1 || t.Port > 65535:
 		return fmt.Errorf("%w: port", ErrBackupInvalid)
 	case !remotePathRe.MatchString(t.Path) || strings.Contains(t.Path, ".."):
@@ -50,9 +73,10 @@ func (t BackupTarget) Validate() error {
 	return nil
 }
 
-// Repository is the restic repository URL of the target.
+// Repository is the restic repository URL of the target. restic drops the
+// first slash after the port, so an absolute path is written with two.
 func (t BackupTarget) Repository() string {
-	return "sftp://" + t.User + "@" + t.Host + ":" + strconv.Itoa(t.Port) + "/" + t.Path
+	return "sftp://" + t.User + "@" + net.JoinHostPort(t.Host, strconv.Itoa(t.Port)) + "/" + t.Path
 }
 
 // KnownHostsName is how ssh names the target in known_hosts.
@@ -65,19 +89,41 @@ func (t BackupTarget) KnownHostsName() string {
 }
 
 // BackupRetention is how many snapshots of each site and kind are kept.
+// Hourly and Yearly were added later (ADR-0008, amendment 2026-11-25);
+// settings written before that have neither and keep none.
 type BackupRetention struct {
+	Hourly  int `json:"hourly"`
 	Daily   int `json:"daily"`
 	Weekly  int `json:"weekly"`
 	Monthly int `json:"monthly"`
+	Yearly  int `json:"yearly"`
 }
 
 // Bounds of the adjustable values (ADR-0008, recommendation 3).
 const (
+	MaxBackupHourly    = 168
 	MaxBackupDaily     = 90
 	MaxBackupWeekly    = 52
 	MaxBackupMonthly   = 120
+	MaxBackupYearly    = 50
 	MaxBackupReadParts = 120
 )
+
+// BackupIntervals are the allowed hours between two scheduled runs: the
+// divisors of 24, so that runs fall on the same hours every day. 24 is the
+// daily run in the window.
+var BackupIntervals = []int{1, 2, 3, 4, 6, 8, 12, 24}
+
+// ValidBackupInterval reports whether h is one of BackupIntervals.
+func ValidBackupInterval(h int) bool {
+	for _, v := range BackupIntervals {
+		if v == h {
+			return true
+		}
+	}
+
+	return false
+}
 
 // BackupSettings is the complete backup configuration of a server. The
 // panel holds the desired state, the agent writes it to its config
@@ -86,26 +132,55 @@ type BackupSettings struct {
 	Version   int             `json:"version"`
 	Target    *BackupTarget   `json:"target,omitempty"` // nil: backups not set up
 	Retention BackupRetention `json:"retention"`
+	// IntervalHours is the time between two scheduled runs, one of
+	// BackupIntervals. Settings without it run daily (24).
+	IntervalHours int `json:"intervalHours"`
 	// WindowStart and WindowEnd (hours, local time) bound the daily start;
-	// the timer picks a random minute between them.
+	// the timer picks a random minute between them. They only apply to
+	// IntervalHours 24.
 	WindowStart int `json:"windowStart"`
 	WindowEnd   int `json:"windowEnd"`
 	// ReadParts: the monthly check reads 1/ReadParts of all data, a
 	// different part each month. 0 turns the data check off.
 	ReadParts int `json:"readParts"`
+	// DeletedSiteDays removes the snapshots of a deleted site once its
+	// newest one is that many days old; 0 keeps them until they are
+	// deleted by hand (ADR-0074).
+	DeletedSiteDays int `json:"deletedSiteDays"`
 }
 
 // BackupSettingsVersion is the current format of the settings.
 const BackupSettingsVersion = 1
 
+// UnmarshalJSON decodes strictly like every request, and fills in the
+// fields that settings from before the hourly schedule lack: such a file
+// or request runs daily.
+func (s *BackupSettings) UnmarshalJSON(data []byte) error {
+	type plain BackupSettings
+
+	p := plain{IntervalHours: 24}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&p); err != nil {
+		return err
+	}
+
+	*s = BackupSettings(p)
+
+	return nil
+}
+
 // DefaultBackupSettings are the defaults Kim decided (2026-11-19).
 func DefaultBackupSettings() BackupSettings {
 	return BackupSettings{
-		Version:     BackupSettingsVersion,
-		Retention:   BackupRetention{Daily: 7, Weekly: 4, Monthly: 6},
-		WindowStart: 1,
-		WindowEnd:   5,
-		ReadParts:   12,
+		Version:       BackupSettingsVersion,
+		Retention:     BackupRetention{Daily: 7, Weekly: 4, Monthly: 6},
+		IntervalHours: 24,
+		WindowStart:   1,
+		WindowEnd:     5,
+		ReadParts:     12,
 	}
 }
 
@@ -116,16 +191,24 @@ func (s BackupSettings) Validate() error {
 	switch {
 	case s.Version != BackupSettingsVersion:
 		return fmt.Errorf("%w: version %d", ErrBackupInvalid, s.Version)
+	case r.Hourly < 0 || r.Hourly > MaxBackupHourly:
+		return fmt.Errorf("%w: hourly must be 0 to %d", ErrBackupInvalid, MaxBackupHourly)
 	case r.Daily < 1 || r.Daily > MaxBackupDaily:
 		return fmt.Errorf("%w: daily must be 1 to %d", ErrBackupInvalid, MaxBackupDaily)
 	case r.Weekly < 0 || r.Weekly > MaxBackupWeekly:
 		return fmt.Errorf("%w: weekly must be 0 to %d", ErrBackupInvalid, MaxBackupWeekly)
 	case r.Monthly < 0 || r.Monthly > MaxBackupMonthly:
 		return fmt.Errorf("%w: monthly must be 0 to %d", ErrBackupInvalid, MaxBackupMonthly)
+	case r.Yearly < 0 || r.Yearly > MaxBackupYearly:
+		return fmt.Errorf("%w: yearly must be 0 to %d", ErrBackupInvalid, MaxBackupYearly)
+	case !ValidBackupInterval(s.IntervalHours):
+		return fmt.Errorf("%w: interval must be 1, 2, 3, 4, 6, 8, 12 or 24 hours", ErrBackupInvalid)
 	case s.WindowStart < 0 || s.WindowStart > 23 || s.WindowEnd < 1 || s.WindowEnd > 24 || s.WindowEnd <= s.WindowStart:
 		return fmt.Errorf("%w: window must be hours 0 to 24 with start before end", ErrBackupInvalid)
 	case s.ReadParts < 0 || s.ReadParts > MaxBackupReadParts:
 		return fmt.Errorf("%w: read parts must be 0 to %d", ErrBackupInvalid, MaxBackupReadParts)
+	case s.DeletedSiteDays < 0 || s.DeletedSiteDays > MaxBackupDeletedSiteDays:
+		return fmt.Errorf("%w: days to keep deleted sites must be 0 to %d", ErrBackupInvalid, MaxBackupDeletedSiteDays)
 	}
 
 	if s.Target != nil {
@@ -222,6 +305,35 @@ type BackupStatus struct {
 	LastReadCheck time.Time          `json:"lastReadCheck,omitzero"`
 	MaintenanceOK bool               `json:"maintenanceOk"`
 	Maintenance   string             `json:"maintenance,omitempty"`
+	// Removed lists the snapshots of deleted sites the run removed, and
+	// RemoveError why removing failed (ADR-0074).
+	Removed     []BackupRemoved `json:"removed,omitempty"`
+	RemoveError string          `json:"removeError,omitempty"`
+}
+
+// overdueMargin is how much later than the interval a run may finish
+// before it counts as missing: 26 hours for the daily run (ADR-0008, 8).
+const overdueMargin = 2 * time.Hour
+
+// OverdueAfter is the age of the last finished run after which a run is
+// missing: the interval plus two hours. A run never starts more than one
+// interval after the previous one finished, as the timer keeps its fixed
+// delay and a run that outlasts the interval only skips starts.
+func (s BackupSettings) OverdueAfter() time.Duration {
+	h := s.IntervalHours
+	if !ValidBackupInterval(h) {
+		h = 24
+	}
+
+	return time.Duration(h)*time.Hour + overdueMargin
+}
+
+// BackupOverdue reports whether a scheduled run is missing at now: backups
+// are set up, none is running, and the last one finished longer ago than
+// OverdueAfter. Before the first run finished there is nothing to compare
+// with, and the status shows "No backup yet" instead.
+func BackupOverdue(s BackupSettings, ready bool, st BackupStatus, now time.Time) bool {
+	return ready && !st.Running && !st.Finished.IsZero() && now.Sub(st.Finished) > s.OverdueAfter()
 }
 
 // BackupSnapshotsRequest asks for the snapshots of one site, or of the
@@ -250,6 +362,70 @@ type BackupSnapshot struct {
 	Files int64 `json:"files,omitempty"`
 }
 
+// BackupSitesRequest asks for every site name that has snapshots.
+type BackupSitesRequest struct{}
+
+// Validate accepts every request.
+func (BackupSitesRequest) Validate() error { return nil }
+
+// BackupSiteSummary is one site name in the snapshot list of the last run.
+// Exists reports whether the agent still has a site of that name.
+type BackupSiteSummary struct {
+	Site      string    `json:"site"`
+	Exists    bool      `json:"exists"`
+	Snapshots int       `json:"snapshots"`
+	Oldest    time.Time `json:"oldest"`
+	Newest    time.Time `json:"newest"`
+}
+
+// BackupSitesResponse lists site names with snapshots, sorted by name,
+// and the snapshots marked for removal.
+type BackupSitesResponse struct {
+	Sites []BackupSiteSummary `json:"sites"`
+	Marks []BackupForgetMark  `json:"marks"`
+}
+
+// MaxBackupDeletedSiteDays bounds DeletedSiteDays: ten years.
+const MaxBackupDeletedSiteDays = 3650
+
+// BackupForgetRequest marks the snapshots of a deleted site for removal by
+// the next backup run (ADR-0074, decided by Kim 2026-11-26). With Before,
+// only those taken before it: an earlier site whose name a newer site
+// took. Cancel drops the mark again.
+type BackupForgetRequest struct {
+	Site   string    `json:"site"`
+	Before time.Time `json:"before,omitzero"`
+	Cancel bool      `json:"cancel,omitempty"`
+}
+
+// Validate checks the site name.
+func (r BackupForgetRequest) Validate() error { return ValidateSiteUser(r.Site) }
+
+// BackupForgetMark is one site whose snapshots the next run removes.
+type BackupForgetMark struct {
+	Site      string    `json:"site"`
+	Before    time.Time `json:"before,omitzero"`
+	Requested time.Time `json:"requested"`
+}
+
+// Covers reports whether the mark takes a snapshot of site taken at t.
+func (m BackupForgetMark) Covers(site string, t time.Time) bool {
+	return m.Site == site && (m.Before.IsZero() || t.Before(m.Before))
+}
+
+// BackupForgetResponse lists the marks after the change.
+type BackupForgetResponse struct {
+	Marks []BackupForgetMark `json:"marks"`
+}
+
+// BackupRemoved is what a run removed of one site's snapshots: marked by
+// hand, or Expired after DeletedSiteDays.
+type BackupRemoved struct {
+	Site      string `json:"site"`
+	Snapshots int    `json:"snapshots"`
+	Expired   bool   `json:"expired,omitempty"`
+}
+
 // BackupSnapshotsResponse lists snapshots, newest first.
 type BackupSnapshotsResponse struct {
 	Snapshots []BackupSnapshot `json:"snapshots"`
@@ -265,6 +441,12 @@ var (
 	BackupRun       = agentrpc.Op[BackupRunRequest, BackupRunResponse]{Name: "backup.run"}
 	BackupStatusGet = agentrpc.Op[BackupStatusRequest, BackupStatus]{Name: "backup.status"}
 	BackupSnapshots = agentrpc.Op[BackupSnapshotsRequest, BackupSnapshotsResponse]{Name: "backup.snapshots"}
+	// BackupSites lists the site names in the snapshot list, also of
+	// deleted sites (ADR-0074).
+	BackupSites = agentrpc.Op[BackupSitesRequest, BackupSitesResponse]{Name: "backup.sites"}
+	// BackupForget marks or unmarks a deleted site's snapshots for removal
+	// by the next run (ADR-0074).
+	BackupForget = agentrpc.Op[BackupForgetRequest, BackupForgetResponse]{Name: "backup.forget"}
 )
 
 var (
@@ -276,15 +458,26 @@ var (
 // database dump) into a new directory restore-<time> in the site's home,
 // owned by the site user. Nothing live is overwritten (ADR-0008,
 // recommendation 7).
+//
+// Target, if set and not Site, restores into another site instead. The
+// agent allows that only for a snapshot whose site no longer exists
+// (ADR-0074).
 type BackupRestoreRequest struct {
 	Site     string `json:"site"`
 	Snapshot string `json:"snapshot"` // the full 64-digit id
+	Target   string `json:"target,omitempty"`
 }
 
-// Validate checks the site name and the id's form.
+// Validate checks the site names and the id's form.
 func (r BackupRestoreRequest) Validate() error {
 	if err := ValidateSiteUser(r.Site); err != nil {
 		return err
+	}
+
+	if r.Target != "" {
+		if err := ValidateSiteUser(r.Target); err != nil {
+			return fmt.Errorf("target: %w", err)
+		}
 	}
 
 	if !snapshotIDRe.MatchString(r.Snapshot) {
@@ -304,8 +497,11 @@ const (
 
 // BackupRestore is one restore and how it went.
 type BackupRestore struct {
-	ID       string `json:"id"`
+	ID string `json:"id"`
+	// Site is the site restored into; Source, when set, is the deleted
+	// site the snapshot was taken of (ADR-0074).
 	Site     string `json:"site"`
+	Source   string `json:"source,omitempty"`
 	Snapshot string `json:"snapshot"`
 	Kind     string `json:"kind"` // files or db
 	Database string `json:"database,omitempty"`

@@ -24,7 +24,7 @@ These commands work as any user and on any machine, not only on the server. They
 | `hostashi api AREA` | Lists the commands of an area with their arguments. |
 | `hostashi api AREA COMMAND -h` | Explains a command: the request it sends, the token scope it needs and its fields. |
 | `hostashi api AREA COMMAND ARGS` | Runs it and prints the answer as JSON, or a download as it is. |
-| `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under your account if it may have leaked. |
+| `hostashi logout` | Removes the stored token. It stays valid until it expires; revoke it in the panel under **Your account → API tokens** if it may have leaked. |
 
 For example, with the token in a password manager:
 
@@ -40,7 +40,7 @@ Every operation of the API is a command of `hostashi api`, so anything the panel
 - the whole body with `-d JSON`, `-d @FILE` or `-d -` for stdin
 - a file for an upload as `key=@FILE`: `hostashi api pages create-status name=sorry kind=maintenance file=@sorry.html`
 
-Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them.
+Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them (see [API tokens](API-tokens.md)).
 
 `HOSTASHI_URL` and `HOSTASHI_TOKEN` override the stored login, for example in CI jobs. Plain `http://` is only accepted for the server itself (`127.0.0.1`, `::1`, `localhost`), so that a token never crosses a network unencrypted.
 
@@ -100,19 +100,28 @@ These commands go through the panel's API like [`hostashi api`](#using-the-api-f
 
 A storage pool is an extra volume for site homes, for example a provider volume for large sites. Hostashi never formats or mounts a volume. You prepare it first:
 
+> **Before you format:** check the device twice.
+> Formatting erases everything on the volume, and `mkfs` does not know whether you still need it. Before step 1, run `lsblk -f` and `cat /etc/fstab` and make sure the device is the new, empty volume: it has no mount point, no label or UUID that `/etc/fstab` still uses, and is not where `/home` lives. Hypervisors and cloud consoles may attach a volume under a name that an earlier disk had (`/dev/sdb`), so go by size and serial (`lsblk -o NAME,SIZE,SERIAL,LABEL,UUID,MOUNTPOINTS`), not by name.
+>
+> If the volume replaces an old one, remove or comment out the old line in `/etc/fstab` and run `systemctl daemon-reload`. A line whose device is gone makes systemd wait 90 seconds for it at every login below that mount point, and without `nofail` the next boot stops in emergency mode. `hostashi doctor` reports such lines (`system.fstab`).
+
 1. Create an ext4 or XFS file system on the volume. For disk limits per site, create it with project quota: `mkfs.ext4 -O quota,project -E quotatype=prjquota /dev/...` (an existing, unmounted ext4 volume: `tune2fs -O project,quota -Q prjquota /dev/...`). XFS needs nothing at this step.
-2. Add it to `/etc/fstab` with `nosuid,nodev,nofail` and, for disk limits, `prjquota`, for example `UUID=... /srv/vol1 ext4 nosuid,nodev,nofail,prjquota 0 2`, and mount it.
+2. Add it to `/etc/fstab` by UUID (from `lsblk -f`, not `/dev/sdX`) with `nosuid,nodev,nofail` and, for disk limits, `prjquota`, for example `UUID=... /srv/vol1 ext4 nosuid,nodev,nofail,prjquota 0 2`, then run `systemctl daemon-reload` and mount it.
 3. Leave it empty (`lost+found` is fine).
 
 Without project quota a pool works, but its sites get no disk limit. The agent switches on the enforcement of the limits on every pool that counts usage, at its start and when a pool is added, so no `quotaon` is needed. `hostashi pool list` and `hostashi doctor` show the quota state of each pool: `enforced`, `counting` (limits are not enforced, doctor reports a failure) or `off`.
 
 | Command | What it does |
 |---------|--------------|
-| `hostashi pool add NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. |
-| `hostashi pool list` | Lists the pools with their path, number of sites and quota state. |
-| `hostashi pool remove NAME` | Removes a pool without sites. Then you can unmount the volume. |
+| `hostashi pool add [-default] NAME PATH` | Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with `nosuid,nodev`, not in `/etc/fstab`, not empty, inside a system directory or overlapping another pool. With `-default`, new sites land on it when they name no pool. |
+| `hostashi pool list` | Lists the pools with their path, number of sites and quota state; the default pool ends with `default`. |
+| `hostashi pool rename NAME NEWNAME` | Gives a pool a new name. Its path, its sites and their files stay where they are. Goes through the panel's API (needs `hostashi login`). |
+| `hostashi pool default NAME` | Makes a pool the default for new sites that name no pool. Goes through the panel's API (needs `hostashi login`). |
+| `hostashi pool remove NAME` | Removes a pool without sites that is not the default. Then you can unmount the volume. |
 
-`hostashi doctor` fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without `nosuid,nodev` or has no `/etc/fstab` entry. While a volume is missing, its sites do not start and cannot be changed; mount it and restart `hostashi-agent`.
+The panel shows the same under **Server → Storage pools**, where admins can also rename a pool and make it the default. Adding and removing a pool stay on the command line, because they need a mounted volume on the server.
+
+`hostashi doctor` fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without `nosuid,nodev` or has no `/etc/fstab` entry. It also checks every block device in `/etc/fstab`: a device that does not exist fails without `nofail` and warns with it. While a volume is missing, its sites do not start and cannot be changed; mount it and restart `hostashi-agent`.
 
 A site gets its pool when it is created and stays there. Its databases stay in MariaDB's own directory.
 
@@ -144,6 +153,10 @@ These commands go through the panel's API and need `hostashi login`, except `bac
 | `hostashi backup status` | Shows the state of the last backup. |
 | `hostashi backup restore SITE SNAPSHOT` | Restores a snapshot into a new folder `restore-<time>` in the site's home. Nothing existing is overwritten. |
 | `hostashi backup restore-status ID` | Shows the state of a restore. |
+| `hostashi backup deleted [SITE]` | Lists deleted sites that still have snapshots, or the snapshots of one. A site name that a newer site took again shows the snapshots from before that site was created. Administrators only. |
+| `hostashi backup restore-deleted SITE SNAPSHOT TARGET` | Restores a snapshot of a deleted site into a new folder `restore-<time>` in the home of the existing site `TARGET`. Administrators only. |
+| `hostashi backup delete-deleted SITE` | Marks all snapshots of a deleted site, or of an earlier site of a reused name, for removal by the next backup run. Administrators only. |
+| `hostashi backup keep-deleted SITE` | Takes the mark back before the next backup run. Administrators only. |
 | `hostashi backup key show` | Prints the backup repository password and the panel key. Store them outside the server: without them, backups cannot be restored on a new server. |
 
 ## Moving from CloudPanel
@@ -157,3 +170,5 @@ The rest of the move is done in the panel. A full guide follows.
 ## All commands
 
 `hostashi help` prints every command, including the ones the panel and the system services use internally.
+
+The package also installs a manual page with the same list, so `man hostashi` works on the server. It is made from the same text as `hostashi help` and changes with it.

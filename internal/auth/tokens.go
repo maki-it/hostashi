@@ -416,6 +416,10 @@ func (s *Service) SetIPAllowlist(ctx context.Context, userID int64, entries []st
 	return norm, nil
 }
 
+var loopback4 = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+
+// tokenIPAllowed reports whether a token may be used from ip. An empty
+// allowlist allows every address; 127.0.0.1 and ::1 are always allowed.
 func (s *Service) tokenIPAllowed(ctx context.Context, ip string) (bool, error) {
 	list, err := s.IPAllowlist(ctx)
 	if err != nil {
@@ -432,6 +436,15 @@ func (s *Service) tokenIPAllowed(ctx context.Context, ip string) (bool, error) {
 	}
 
 	addr = addr.Unmap()
+
+	// The server itself is always allowed: the hostashi command on it talks
+	// to http://127.0.0.1:8080 (Kim, 2026-11-24). Only nginx's X-Real-IP or
+	// a TCP peer sets the address, and a trusted proxy range may never hold
+	// loopback (agentapi.checkRealIPRange), so a remote client cannot claim
+	// it. Local users of the server still need a valid token.
+	if addr == loopback4 || addr == netip.IPv6Loopback() {
+		return true, nil
+	}
 
 	for _, e := range list {
 		p, err := netip.ParsePrefix(e)

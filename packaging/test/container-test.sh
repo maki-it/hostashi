@@ -15,22 +15,19 @@
 # PEBBLE_DIR (optional): a directory with the pebble and pebble-challtestsrv
 # binaries (v2.10.3). With it, a site gets a certificate from Pebble, a
 # local test CA; the test never talks to the real Let's Encrypt.
-# STORAGEBOX_USER and STORAGEBOX_PASSWORD (optional): a Hetzner Storage Box
-# (sub-)account to back up to instead of a local SFTP server. The host needs
-# ssh, sftp and sshpass. The password installs the agent's key, and the test
-# writes only to a new folder hostashi-ci-<pid>; on exit it removes that
-# folder and puts the account's authorized_keys back as it was.
+# PART (optional): core or runtimes runs one half of the checks after the
+# common setup, so CI can run the halves side by side; default all.
 set -euo pipefail
 
+PART=${PART:-all}
+case "$PART" in all | core | runtimes) ;; *) echo "PART must be all, core or runtimes" >&2; exit 2;; esac
 IMG=$1
 BINARY=$(realpath "$2")
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 NAME=hostashi-install-test-$$
 BASE=hostashi-test-base-$$
 
-SB_TMP=""
 cleanup() {
-  [ -n "$SB_TMP" ] && sb_cleanup
   [ -n "${KEEP:-}" ] && return
   docker rm -f "$NAME" "$NAME-prep" "$NAME-pg" >/dev/null 2>&1 || true; docker rmi -f "$BASE" >/dev/null 2>&1 || true
 }
@@ -72,6 +69,11 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 echo "systemd: $state"
+# On a server systemd makes / a shared mount at boot; in a container with
+# --tmpfs /run it stays private, and systemd 257 (Debian 13) then mounts
+# a unit's credentials (LoadCredential=, the WordPress install) where the
+# unit never sees them. Make it shared, like a real server.
+docker exec "$NAME" mount --make-rshared /
 
 docker exec "$NAME" mkdir -p /opt/hostashi
 docker cp "$HERE/." "$NAME:/opt/hostashi/"
@@ -153,9 +155,9 @@ if out=$(x /opt/hostashi/install.sh apply --yes --no-apt --binary /opt/hostashi/
 fi
 grep -q 'missing package(s) with --no-apt: restic' <<<"$out" || fail "--no-apt did not name restic: $out"
 x grep -q 'missing package(s) with --no-apt: restic' /var/log/hostashi-install.log || fail "--no-apt did not log restic"
-x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep -q 'install ok installed' && fail "--no-apt installed restic"
+x dpkg-query -W -f "\${Status}" restic 2>/dev/null | grep 'install ok installed' >/dev/null && fail "--no-apt installed restic"
 x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain panel.example.com >/dev/null || fail "apply did not bring restic back"
-x dpkg-query -W -f "\${Status}" restic | grep -q 'install ok installed' || fail "restic not reinstalled"
+x dpkg-query -W -f "\${Status}" restic | grep 'install ok installed' >/dev/null || fail "restic not reinstalled"
 
 step "apply saves its options, upgrade reuses them (ADR-0050)"
 [ "$(x stat -c '%a %U:%G' /etc/hostashi/install.options)" = "600 root:root" ] || fail "install.options owner or mode"
@@ -194,7 +196,8 @@ for o in $origins; do
   o=${o%,}
   # sury.org (more PHP versions, ADR-0019) has no security archive of its own.
   # Neither has apt.postgresql.org (PostgreSQL client tools, ADR-0051).
-  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
+  # The Hostashi suite runtimes holds only the pinned runtimes (ADR-0077).
+  case "$o" in *-security* | "origin=deb.sury.org,archive=$codename" | "origin=apt.postgresql.org,archive=$codename-pgdg" | "origin=Hostashi,codename=runtimes") ;; *) fail "unattended-upgrades allows a non-security origin: $o";; esac
 done
 [ "$(x apt-config dump --format '%v%n' Unattended-Upgrade::Automatic-Reboot)" = false ] || fail "automatic reboot is on"
 for t in apt-daily.timer apt-daily-upgrade.timer; do
@@ -234,14 +237,14 @@ for id in system.os system.pool service.panel service.nginx service.mariadb serv
 done
 grep -Eq "^  WARN  system.quota " <<<"$doc" || fail "doctor: no quota warning on an overlay root"
 # system.proc reads PID 1's mounts: the agent's own /proc has no hidepid.
-for id in system.updates system.reboot system.php system.files system.sysctl system.proc; do
+for id in system.updates system.reboot system.php system.files system.sysctl system.proc system.fstab; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"
 done
 # This test passes --no-firewall (the container shares the host's network).
 grep -Eq "^  WARN  system.firewall .*--no-firewall" <<<"$doc" || fail "doctor: no warning for --no-firewall"
 grep -Eq "^  (ok  |WARN)  system.ssh " <<<"$doc" || fail "doctor: no SSH check"
 [ "$rc" = 0 ] || fail "doctor exited $rc"
-x /usr/local/bin/hostashi doctor -json | grep -q '"id": "service.nginx"' || fail "doctor -json"
+x /usr/local/bin/hostashi doctor -json | grep '"id": "service.nginx"' >/dev/null || fail "doctor -json"
 
 expect_mode() {
   local got
@@ -336,20 +339,25 @@ who=$(x /usr/local/bin/hostashi whoami) || fail "whoami: $who"
 grep -qx 'kim (admin) at http://127.0.0.1:8080' <<<"$who" || fail "whoami: $who"
 expect_mode /root/.config/hostashi/credentials.json "600 root:root"
 
+# PART=core runs everything up to here and then the panel, sites,
+# databases, backups and imports; PART=runtimes the extra PHP versions,
+# runtimes and app sites. Both end with the account recovery.
+if [ "$PART" != runtimes ]; then
+
 step "services and restarts (ADR-0052)"
 svc=$(x /usr/local/bin/hostashi service list)
 echo "$svc"
 for id in nginx mariadb fail2ban panel agent adminer; do
   grep -Eq "^$id +- +active " <<<"$svc" || fail "service list: $id is not active"
 done
-x /usr/local/bin/hostashi service list -json | grep -q '"unit": "hostashi-agent.service"' || fail "service list -json"
+x /usr/local/bin/hostashi service list -json | grep '"unit": "hostashi-agent.service"' >/dev/null || fail "service list -json"
 for u in nginx.service mariadb.service; do
   [ "$(x systemctl show -p Restart --value $u)" = on-failure ] || fail "$u does not restart after a failure"
 done
 expect_mode /etc/systemd/system/mariadb.service.d/hostashi.conf "644 root:root"
 x /usr/local/bin/hostashi service nginx reload >/dev/null || fail "nginx reload through the API"
-x /usr/local/bin/hostashi service nginx restart | grep -q '"active": "active"' || fail "nginx restart through the API"
-x /usr/local/bin/hostashi service mariadb restart | grep -q '"active": "active"' || fail "mariadb restart through the API"
+x /usr/local/bin/hostashi service nginx restart | grep '"active": "active"' >/dev/null || fail "nginx restart through the API"
+x /usr/local/bin/hostashi service mariadb restart | grep '"active": "active"' >/dev/null || fail "mariadb restart through the API"
 for a in "nginx stop" "agent restart" "panel stop" "ssh stop" "firewall stop"; do
   # shellcheck disable=SC2086 # two words on purpose
   if x /usr/local/bin/hostashi service $a >/dev/null 2>&1; then fail "service $a was allowed"; fi
@@ -395,7 +403,7 @@ grep -q '"timezone":' <<<"$info" || fail "system info has no time zone"
 zones=$(x /usr/local/bin/hostashi system timezones) || fail "system timezones"
 grep -qx Europe/Berlin <<<"$zones" || fail "time zone list has no Europe/Berlin"
 old_tz=$(x timedatectl show -p Timezone --value)
-x /usr/local/bin/hostashi system timezone Europe/Berlin | grep -q '"timezone": "Europe/Berlin"' || fail "time zone not set"
+x /usr/local/bin/hostashi system timezone Europe/Berlin | grep '"timezone": "Europe/Berlin"' >/dev/null || fail "time zone not set"
 [ "$(x readlink -f /etc/localtime)" = /usr/share/zoneinfo/Europe/Berlin ] || fail "/etc/localtime does not point to Europe/Berlin"
 if x /usr/local/bin/hostashi system timezone Europe/Atlantis >/dev/null 2>&1; then fail "unknown time zone accepted"; fi
 if x /usr/local/bin/hostashi system timezone ../../etc/passwd >/dev/null 2>&1; then fail "path accepted as time zone"; fi
@@ -405,7 +413,7 @@ x /usr/local/bin/hostashi system timezone "${old_tz:-UTC}" >/dev/null || fail "t
 # agent then rewrites /etc/hosts in place.
 host=$(x hostname | tr '[:upper:]' '[:lower:]')
 if [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
-  x /usr/local/bin/hostashi system hostname "$host" | grep -q "\"hostname\": \"$host\"" || fail "hostname not set"
+  x /usr/local/bin/hostashi system hostname "$host" | grep "\"hostname\": \"$host\"" >/dev/null || fail "hostname not set"
   [ "$(x cat /etc/hostname)" = "$host" ] || fail "/etc/hostname is not $host"
   x grep -Eq "^127\.0\.1\.1[[:space:]]+$host\$" /etc/hosts || fail "/etc/hosts has no 127.0.1.1 line for $host"
 else
@@ -427,7 +435,7 @@ expect_mode /home/blog "750 blog:www-data"
 expect_mode /home/blog/htdocs "755 blog:blog"
 
 step "site users log in over SSH with keys from the agent's file only"
-x id -nG blog | grep -qw hostashi-sites || fail "site user is not in hostashi-sites"
+x id -nG blog | grep -w hostashi-sites >/dev/null || fail "site user is not in hostashi-sites"
 expect_mode /etc/hostashi-ssh/keys "755 root:root"
 expect_mode /etc/ssh/sshd_config.d/10-hostashi.conf "644 root:root"
 site_sshd=$(x /usr/sbin/sshd -T -C user=blog,host=client,addr=127.0.0.1)
@@ -446,13 +454,13 @@ x sh -c 'install -d -o blog -g blog -m 700 /home/blog/.ssh && install -o blog -g
 x /usr/sbin/sshd -p 2297 -o ListenAddress=127.0.0.1
 sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 x sh -c 'echo pwd >/root/t/batch'
-x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep -q '/home/blog' || fail "SFTP with the site's key failed"
-if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /root/t/batch blog@127.0.0.1 | grep '/home/blog' >/dev/null || fail "SFTP with the site's key failed"
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k blog@127.0.0.1 id 2>/dev/null | grep uid= >/dev/null; then fail "an SFTP-only key ran a command"; fi
 if x sftp "${sshopt[@]}" -P 2297 -i /root/t/r -b /root/t/batch blog@127.0.0.1 >/dev/null 2>&1; then fail "a key from the site's home was accepted"; fi
 # Hardening that comes with SSH (ADR-0032): the pool cannot be listed, and
 # /proc shows a site user only its own processes.
 expect_mode /home "711 root:root"
-x findmnt -no OPTIONS /proc | tr , '\n' | grep -qx hidepid=invisible || fail "/proc without hidepid: $(x findmnt -no OPTIONS /proc)"
+x findmnt -no OPTIONS /proc | tr , '\n' | grep -x hidepid=invisible >/dev/null || fail "/proc without hidepid: $(x findmnt -no OPTIONS /proc)"
 x grep -qE '^proc[[:space:]]+/proc[[:space:]]+proc[[:space:]]+defaults,hidepid=invisible,gid=[0-9]+' /etc/fstab || fail "no /proc line in fstab"
 x runuser -u blog -- ls /home >/dev/null 2>&1 && fail "a site user can list /home"
 x runuser -u blog -- test -d /home/blog/htdocs || fail "a site user cannot reach its own home"
@@ -533,7 +541,7 @@ sock=$(x /usr/local/bin/hostashi site files blog)
 expect_mode "$sock" "660 root:hostashi"
 expect_mode /etc/systemd/system/hostashi-files@blog.service.d/50-hostashi-site.conf "644 root:root"
 fm() { x curl -fsS --unix-socket "$sock" "http://files$1" "${@:2}"; }
-fm '/v1/list?path=htdocs' | grep -q '"name":"index.html"' || fail "helper does not list the web root"
+fm '/v1/list?path=htdocs' | grep '"name":"index.html"' >/dev/null || fail "helper does not list the web root"
 [ "$(fm '/v1/file?path=htdocs/index.html')" = "hello from blog" ] || fail "helper download differs"
 fm /v1/mkdir -X POST -d '{"path":"htdocs/fm"}' >/dev/null || fail "helper mkdir failed"
 fm '/v1/file?path=htdocs/fm/new.txt' -X PUT --data-binary 'from the panel' >/dev/null || fail "helper write failed"
@@ -560,6 +568,178 @@ x systemd-analyze security hostashi-agent.service | tail -1
 exposure hostashi.service 2.0
 exposure hostashi-agent.service 4.5
 exposure hostashi-files@blog.service 1.0
+exposure hostashi-scan@blog.service 1.5
+
+step "malware scan: script and units only (ADR-0064)"
+# Without --malware-scan nothing of ClamAV is installed; the panel starts
+# the install unit when an admin switches the scan on.
+expect_mode /usr/local/lib/hostashi/clamav-install "755 root:root"
+expect_mode /var/lib/hostashi-agent/clamav-install "700 root:root"
+expect_mode /var/log/hostashi/scan "700 root:root"
+expect_mode /etc/systemd/system/hostashi-scan@.service "644 root:root"
+expect_mode /etc/systemd/system/hostashi-scan.slice "644 root:root"
+! x dpkg-query -W clamav >/dev/null 2>&1 || fail "ClamAV installed without --malware-scan"
+if x systemctl start hostashi-clamav-install@purge.service 2>/dev/null; then fail "the install unit accepted the instance purge"; fi
+x systemctl reset-failed hostashi-clamav-install@purge.service 2>/dev/null || true
+
+step "malware scan: switch on, scan, quarantine and restore through the API (ADR-0064)"
+# freshclam would fetch some 300 MB of signatures: it sleeps instead, and
+# one test signature (the EICAR test file by MD5) is all ClamAV knows.
+x mkdir -p /etc/systemd/system/clamav-freshclam.service.d
+x sh -c 'printf "[Service]\nExecStart=\nExecStart=/bin/sleep infinity\n" >/etc/systemd/system/clamav-freshclam.service.d/90-test.conf'
+x systemctl daemon-reload
+jget() { x cat /tmp/api.out | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
+[ "$(api PUT /api/v1/malware-scan '{"on":true}')" = 202 ] || fail "switch the scan on: $(x cat /tmp/api.out)"
+state=
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  state=$(jget 'd["state"]')
+  case "$state" in on|failed) break;; esac
+  sleep 2
+done
+[ "$state" = on ] || fail "ClamAV not on ($state): $(x cat /tmp/api.out)"
+x dpkg-query -W clamav >/dev/null || fail "clamav not installed"
+x dpkg-query -W clamav-daemon >/dev/null 2>&1 && fail "clamav-daemon installed in the base mode"
+x sh -c 'echo "44d88612fea8a8f36de82e1278abb02f:68:Hostashi.Test.EICAR" >/var/lib/clamav/hostashi-test.hdb; chown clamav:clamav /var/lib/clamav/hostashi-test.hdb'
+# The EICAR test file, built here so no file in the repository is flagged.
+# shellcheck disable=SC2016 # the inner shell expands nothing either
+x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/eicar.com; chown blog:blog /home/blog/htdocs/eicar.com'
+[ "$(x md5sum /home/blog/htdocs/eicar.com | cut -d' ' -f1)" = 44d88612fea8a8f36de82e1278abb02f ] || fail "EICAR file differs"
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+run=
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget 'd["runs"][0]["state"]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "scan did not succeed ($run): $(x cat /tmp/api.out)"
+# A site with nothing unreadable in it scans without a note.
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+# ClamAV names signatures of its own databases NAME.UNOFFICIAL.
+[ "$(jget '[f["path"]+" "+f["signature"].split(".UNOFFICIAL")[0]+" "+f["state"] for f in d["findings"]]')" = "['htdocs/eicar.com Hostashi.Test.EICAR open']" ] ||
+  fail "findings: $(x cat /tmp/api.out)"
+fid=$(jget 'd["findings"][0]["id"]')
+[ "$(x stat -c %U /var/log/hostashi/scan/blog.log)" = root ] || fail "scan log not root's"
+[ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/quarantine")" = 200 ] || fail "quarantine: $(x cat /tmp/api.out)"
+x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the site"
+[ "$(x find /var/lib/hostashi-agent/quarantine/blog -name '*.bin' | wc -l)" = 1 ] || fail "nothing in the quarantine"
+[ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/restore")" = 200 ] || fail "restore: $(x cat /tmp/api.out)"
+[ "$(x stat -c '%U:%G' /home/blog/htdocs/eicar.com)" = blog:blog ] || fail "restored file has the wrong owner"
+x rm -f /home/blog/htdocs/eicar.com
+# Without a flagged file, clamscan's exit code shows any file it could not
+# read (exit 1 for a finding hides exit 2).
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start clean scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget 'd["runs"][0]["state"]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean scan did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget 'd["runs"][0]["error"]')" = "" ] || fail "clean scan reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+
+step "malware scan: real-time mode reports a new file (ADR-0064)"
+# clamd starts only once the official signatures are there; the test has
+# its one test signature, so a test drop-in drops that condition.
+x mkdir -p /etc/systemd/system/clamav-daemon.service.d
+x sh -c 'printf "[Unit]\nConditionPathExistsGlob=\nConditionPathExists=/etc/hostashi/clamav/clamd.conf\n" >/etc/systemd/system/clamav-daemon.service.d/90-test.conf'
+[ "$(api PUT /api/v1/malware-scan '{"realtime":true}')" = 202 ] || fail "switch real-time on: $(x cat /tmp/api.out)"
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  [ "$(jget 'd["realtimeActive"]')" = True ] && break
+  [ "$(jget 'd["realtime"]')" = failed ] && break
+  sleep 2
+done
+[ "$(jget 'd["realtimeActive"]')" = True ] || fail "clamonacc not running: $(x cat /tmp/api.out); $(x journalctl --no-pager -n 30 -u clamav-daemon -u clamav-clamonacc)"
+x grep -q '^OnAccessIncludePath /home/blog$' /etc/hostashi/clamav/clamd.conf || fail "blog not watched"
+# The distribution's AppArmor profile only allows /etc/clamav/clamd.conf;
+# its local include must add the agent's file (web3, Debian 13).
+x grep -qxF '/etc/hostashi/clamav/clamd.conf r,' /etc/apparmor.d/local/usr.sbin.clamd || fail "clamd's AppArmor include lacks the config: $(x cat /etc/apparmor.d/local/usr.sbin.clamd)"
+x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null || fail "clamav-install check after real-time on"
+# The daily upgrade takes only the ClamAV packages and keeps the mode
+# working; the panel shows dpkg's version.
+x systemctl is-enabled --quiet hostashi-clamav-upgrade.timer || fail "ClamAV upgrade timer not enabled"
+[ "$(x systemctl show -p Unit --value hostashi-clamav-upgrade.timer)" = hostashi-clamav-install@upgrade.service ] || fail "upgrade timer starts the wrong unit"
+x systemctl start hostashi-clamav-install@upgrade.service || fail "ClamAV upgrade: $(x cat /var/lib/hostashi-agent/clamav-install/install.log)"
+x grep -q '^clamav-install: done: ClamAV ' /var/lib/hostashi-agent/clamav-install/install.log || fail "upgrade log: $(x cat /var/lib/hostashi-agent/clamav-install/install.log)"
+[ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state after upgrade: $(x cat /tmp/api.out)"
+# shellcheck disable=SC2016 # ${Version} is dpkg-query's field
+[ "$(jget 'd["version"]')" = "$(x dpkg-query -W -f='${Version}' clamav)" ] || fail "panel version is not dpkg's: $(x cat /tmp/api.out)"
+x cp /etc/apparmor.d/local/usr.sbin.clamd /tmp/aa.keep
+x sh -c 'printf "# admin\n" >/etc/apparmor.d/local/usr.sbin.clamd'
+if x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null; then fail "check missed the AppArmor block"; fi
+# The package's postinst runs the upgrade without apt (dpkg holds the
+# lock): it must put the block back without apt and keep the admin's lines
+# (web3, 0.8.0 -> 0.9.0).
+out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || fail "upgrade without the AppArmor block: $out"
+x grep -qxF '/etc/hostashi/clamav/clamd.conf r,' /etc/apparmor.d/local/usr.sbin.clamd || fail "upgrade did not put the AppArmor block back: $(x cat /etc/apparmor.d/local/usr.sbin.clamd)"
+x grep -qxF '# admin' /etc/apparmor.d/local/usr.sbin.clamd || fail "upgrade dropped the admin's AppArmor lines"
+x env HOSTASHI_CLAMAV_STATE_DIR=/var/lib/hostashi-agent/clamav-install /usr/local/lib/hostashi/clamav-install check >/dev/null || fail "clamav-install check after the upgrade repair"
+# A missing package still needs apt: the upgrade names it.
+x dpkg --remove --force-depends clamdscan >/dev/null 2>&1 || fail "cannot remove clamdscan for the test"
+rc=0; out=$(x /opt/hostashi/install.sh upgrade --binary /opt/hostashi/hostashi 2>&1) || rc=$?
+{ [ "$rc" != 0 ] && grep -q 'clamdscan not installed' <<<"$out"; } || fail "upgrade without clamdscan did not name it (rc $rc): $out"
+x apt-get -o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends install clamdscan >/dev/null || fail "cannot reinstall clamdscan"
+x cp /tmp/aa.keep /etc/apparmor.d/local/usr.sbin.clamd
+# The unit systemd runs, after all drop-ins, must not move files.
+onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
+case "$onacc_exec" in *--fdpass*) ;; *) fail "clamonacc does not run from the Hostashi drop-in: $onacc_exec";; esac
+case "$onacc_exec" in *--move*) fail "clamonacc would move files: $onacc_exec";; esac
+# shellcheck disable=SC2016 # the inner shell expands nothing either
+x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/new.com; chown blog:blog /home/blog/htdocs/new.com'
+found=
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  found=$(jget '[f["state"] for f in d["findings"] if f["path"] == "htdocs/new.com"]')
+  [ "$found" = "['open']" ] && break
+  sleep 2
+done
+[ "$found" = "['open']" ] || fail "real-time mode did not report the new file: $(x cat /tmp/api.out); $(x cat /var/log/hostashi/scan/realtime.log)"
+[ "$(jget 'd["runs"][0]["source"]')" = realtime ] || fail "no real-time run: $(x cat /tmp/api.out)"
+x test -e /home/blog/htdocs/new.com || fail "the real-time mode moved the file"
+# A scan now goes through clamd with clamdscan.
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["found"] for r in d["runs"] if r["source"] == "panel"][0]')" = 1 ] ||
+  fail "clamdscan run did not flag new.com: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+expect_mode /etc/hostashi-scan "711 root:root"
+expect_mode /etc/hostashi-scan/blog.conf "644 root:root"
+x grep -q 'clamdscan .*--stream' /etc/systemd/system/hostashi-scan@blog.service.d/60-hostashi-scan.conf || fail "scan did not stream through clamdscan"
+# Without a flagged file, a scan through clamd reports no error either.
+x rm -f /home/blog/htdocs/new.com
+[ "$(api POST /api/v1/sites/blog/malware-scans)" = 202 ] || fail "start scan: $(x cat /tmp/api.out)"
+for _ in $(seq 1 60); do
+  [ "$(api GET /api/v1/sites/blog/malware-scan)" = 200 ] || fail "site scan: $(x cat /tmp/api.out)"
+  run=$(jget '[r["state"] for r in d["runs"] if r["source"] == "panel"][0]')
+  case "$run" in succeeded|failed) break;; esac
+  sleep 2
+done
+[ "$run" = succeeded ] || fail "clean clamdscan run did not succeed ($run): $(x cat /tmp/api.out)"
+[ "$(jget '[r["error"] for r in d["runs"] if r["source"] == "panel"][0]')" = "" ] ||
+  fail "clean clamdscan run reported an error: $(x cat /tmp/api.out); log: $(x cat /var/log/hostashi/scan/blog.log)"
+x rm -f /etc/systemd/system/clamav-daemon.service.d/90-test.conf
+[ "$(api PUT /api/v1/malware-scan '{"on":false}')" = 202 ] || fail "switch the scan off: $(x cat /tmp/api.out)"
+for _ in $(seq 1 120); do
+  [ "$(api GET /api/v1/malware-scan)" = 200 ] || fail "engine state: $(x cat /tmp/api.out)"
+  state=$(jget 'd["state"]')
+  case "$state" in off|failed) break;; esac
+  sleep 2
+done
+[ "$state" = off ] || fail "ClamAV not off ($state): $(x cat /tmp/api.out)"
+# shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
+! x dpkg-query -W -f='${Status}' clamav 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav still installed"
+# shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
+! x dpkg-query -W -f='${Status}' clamav-daemon 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav-daemon still installed"
+x test ! -e /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf || fail "clamonacc drop-in left"
+x rm -rf /etc/systemd/system/clamav-freshclam.service.d
+x systemctl daemon-reload
 
 step "changed setting is applied and the panel restarts"
 out=$(x /opt/hostashi/install.sh apply --yes --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com)
@@ -581,7 +761,7 @@ x test ! -e /etc/systemd/system/hostashi-files@blog.service.d || fail "file mana
 x test ! -e /run/hostashi-files/blog.sock || fail "file manager socket left"
 
 step "fail2ban reads the panel's failed logins"
-for j in sshd hostashi-panel recidive; do
+for j in sshd hostashi-panel hostashi-site-auth recidive; do
   x fail2ban-client status "$j" >/dev/null || fail "fail2ban jail $j is not running"
 done
 expect_mode /etc/fail2ban/jail.d/hostashi.conf "644 root:root"
@@ -816,10 +996,18 @@ sshopt=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/
 out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'id -un; cat /proc/self/cgroup') || fail "shell login with the panel's key failed"
 grep -qx wp <<<"$out" || fail "shell login ran as someone else: $out"
 grep -q "/user.slice/user-$wpuid.slice/" <<<"$out" || fail "SSH session not in user-$wpuid.slice: $out"
+# The wp command (ADR-0069) runs WP-CLI with the site's PHP; without the
+# phar it says how to get it. It never runs as root.
+expect_mode /usr/local/bin/wp "755 root:root"
+expect_mode /etc/hostashi-php "711 root:root"
+[ "$(x cat /etc/hostashi-php/wp)" = "$ver" ] || fail "PHP version file of wp: $(x cat /etc/hostashi-php/wp)"
+out=$(x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 'wp --version 2>&1' || true)
+grep -Eq '^WP-CLI [0-9]|WP-CLI is not installed' <<<"$out" || fail "wp over SSH: $out"
+x /usr/local/bin/wp --version >/dev/null 2>&1 && fail "wp ran as root"
 # Back to SFTP only: no shell, and commands are refused.
 [ "$(api PUT "/api/v1/sites/wp/ssh-keys/$keyid" '{"label":"laptop","access":"sftp"}')" = 200 ] || fail "change SSH key: $(x cat /tmp/api.out)"
 [ "$(x getent passwd wp | cut -d: -f7)" = /usr/sbin/nologin ] || fail "wp kept its login shell without a shell key"
-if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 id 2>/dev/null | grep -q uid=; then fail "an SFTP-only key ran a command"; fi
+if x ssh "${sshopt[@]}" -p 2297 -i /root/t/k wp@127.0.0.1 id 2>/dev/null | grep uid= >/dev/null; then fail "an SFTP-only key ran a command"; fi
 [ "$(api DELETE "/api/v1/sites/wp/ssh-keys/$keyid")" = 204 ] || fail "delete SSH key: $(x cat /tmp/api.out)"
 x grep -q '^restrict' /etc/hostashi-ssh/keys/wp && fail "deleted key still in the key file"
 if x sftp "${sshopt[@]}" -P 2297 -i /root/t/k -b /dev/null wp@127.0.0.1 >/dev/null 2>&1; then fail "a deleted key still logs in"; fi
@@ -912,7 +1100,7 @@ x mariadb -e 'CREATE TABLE wp_ext.t (i INT); INSERT INTO wp_ext.t VALUES (11)'
 api_job wp_ext
 expect_mode /home/wp/ext.sql.gz "600 wp:wp"
 # mariadb-dump 11 writes the rows of an INSERT on lines of their own.
-x sh -c 'zcat /home/wp/ext.sql.gz | grep -q "CREATE TABLE .t." && zcat /home/wp/ext.sql.gz | grep -q "(11)"' ||
+x sh -c 'zcat /home/wp/ext.sql.gz | grep "CREATE TABLE .t." >/dev/null && zcat /home/wp/ext.sql.gz | grep "(11)" >/dev/null' ||
   fail "external export lacks the table or its row: $(x sh -c 'zcat /home/wp/ext.sql.gz | grep -v "^/\*" | head -n 40')"
 x mariadb -e 'DROP TABLE wp_ext.t'
 [ "$(api POST /api/v1/databases/wp_ext/import '{"path":"ext.sql.gz"}')" = 202 ] || fail "external import: $(x cat /tmp/api.out)"
@@ -922,7 +1110,7 @@ api_job wp_ext
 ! x sh -c 'grep -rq password /var/lib/hostashi-agent/dbjobs/' || fail "a job record kept the password"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User LIKE 'hostashi\\_job\\_%'")" ] || fail "temporary job user left behind"
 # The unit reached the server only through its drop-in.
-x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf | grep -qx 'IPAddressAllow=$ext_ip'" ||
+x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf | grep -x 'IPAddressAllow=$ext_ip' >/dev/null" ||
   fail "job drop-in: $(x sh -c 'cat /etc/systemd/system/hostashi-dbjob@*.service.d/job.conf')"
 [ "$(api DELETE /api/v1/databases/wp_ext)" = 204 ] || fail "delete external database: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/db-servers/ext)" = 204 ] || fail "remove external server: $(x cat /tmp/api.out)"
@@ -954,6 +1142,11 @@ x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/shop/access.log || fail
 if x grep -q 'hostashi-log-probe=shop' /var/log/nginx/sites/wp/access.log 2>/dev/null; then fail "shop's request in wp's access log"; fi
 [ "$(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)" = "root:root 750" ] || fail "shop's log directory: $(x stat -c '%U:%G %a' /var/log/nginx/sites/shop)"
 if x runuser -u shop -- sh -c 'echo x >>/var/log/nginx/sites/shop/access.log' 2>/dev/null; then fail "shop writes its own access log"; fi
+# Web traffic per site (ADR-0063): nginx flushes the compact log within 5 s;
+# a line is "msec status request_length bytes_sent", without address or path.
+for _ in $(seq 20); do x test -s /var/log/nginx/sites/shop/traffic.log && break; sleep 0.5; done
+x grep -Eq '^[0-9]+\.[0-9]{3} 200 [0-9]+ [0-9]+$' /var/log/nginx/sites/shop/traffic.log || fail "shop's traffic log: $(x tail -n 3 /var/log/nginx/sites/shop/traffic.log 2>&1)"
+if x grep -q 'hostashi-log-probe' /var/log/nginx/sites/shop/traffic.log; then fail "shop's traffic log holds a path"; fi
 # PHP's errors land in shop's own file (ADR-0053).
 xi runuser -u shop -- sh -c 'cat >/home/shop/htdocs/warn.php' <<'PHP'
 <?php error_log("hostashi-log-probe"); echo "ok";
@@ -966,7 +1159,7 @@ if as_wp cat /var/log/hostashi/php/shop/error.log >/dev/null 2>&1; then fail "wp
 if x runuser -u shop -- sh -c 'echo x >>/var/log/hostashi/php/shop/error.log' 2>/dev/null; then fail "shop writes its PHP log directly"; fi
 x logrotate --debug /etc/logrotate.d/hostashi >/tmp/logrotate.out 2>&1 || fail "logrotate rejects its file: $(x cat /tmp/logrotate.out)"
 x grep -q '^    rotate 7$' /etc/logrotate.d/hostashi || fail "logrotate retention is not the default 7 days"
-for log in /var/log/nginx/hostashi/access.log /var/log/nginx/hostashi/error.log /var/log/nginx/sites/shop/access.log /var/log/nginx/sites/shop/error.log; do
+for log in /var/log/nginx/hostashi/access.log /var/log/nginx/hostashi/error.log /var/log/nginx/sites/shop/access.log /var/log/nginx/sites/shop/error.log /var/log/nginx/sites/shop/traffic.log; do
   x test -f "$log" || fail "no $log"
   if as_wp cat "$log" >/dev/null 2>&1; then fail "wp reads $log"; fi
   if as_wp sh -c "echo x >>$log" 2>/dev/null; then fail "wp writes $log"; fi
@@ -990,14 +1183,14 @@ for sock in /run/hostashi-php/shop/php-fpm.sock /run/hostashi-panel.sock /run/ho
   [ "$rc" = 7 ] || fail "wp connects to $sock (curl exit $rc)"
 done
 # Processes: hidepid hides shop's processes from wp.
-pid=$(x pgrep -u shop -x sleep | head -1)
+pid=$(x pgrep -o -u shop -x sleep)
 [ -n "$pid" ] || fail "no process of shop to look for"
 if as_wp pgrep -u shop >/dev/null; then fail "wp sees shop's processes"; fi
 if as_wp test -e "/proc/$pid"; then fail "wp sees /proc/$pid of shop"; fi
 # Databases: wp's own login reaches only its own database, and the socket
 # does not let the system user wp in.
 if x mariadb -u wp_api "-p$dbpw" -Nse 'SELECT 1' shop_db 2>/dev/null; then fail "wp's database user opens shop_db"; fi
-x mariadb -u wp_api "-p$dbpw" -Nse 'SHOW DATABASES' | grep -qx shop_db && fail "wp's database user lists shop_db"
+x mariadb -u wp_api "-p$dbpw" -Nse 'SHOW DATABASES' | grep -x shop_db >/dev/null && fail "wp's database user lists shop_db"
 if as_wp mariadb -Nse 'SELECT 1' 2>/dev/null; then fail "system user wp logs in to MariaDB over the socket"; fi
 # The same from wp's PHP code.
 xi runuser -u wp -- sh -c 'cat >/home/wp/htdocs/iso.php' <<'PHP'
@@ -1015,6 +1208,240 @@ body=$(x curl -fsS -H 'Host: wp.example.com' http://127.0.0.1/iso.php)
 x rm -f /home/wp/htdocs/iso.php
 x pkill -u shop -x sleep || true
 [ "$(api DELETE /api/v1/sites/shop)" = 204 ] || fail "delete site shop: $(x cat /tmp/api.out)"
+
+step "WordPress quick install through the panel API (ADR-0069)"
+# A new site with the WordPress profile: the hardening rules come with it,
+# the panel creates the database, WP-CLI downloads and installs WordPress
+# as the site user. Needs wordpress.org, like a real server.
+[ "$(api POST /api/v1/sites "{\"name\":\"wpq\",\"php\":\"$ver\",\"profile\":\"wordpress\",\"domains\":[\"wpq.example.com\"]}")" = 201 ] ||
+  fail "create WordPress site: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/wpq/profile)" = 200 ] || fail "site profile: $(x cat /tmp/api.out)"
+x grep -q '"profile":"wordpress"' /tmp/api.out || fail "profile not stored: $(x cat /tmp/api.out)"
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"state":"none"' /tmp/api.out || fail "new site has an install: $(x cat /tmp/api.out)"
+# Refusals change nothing: the user name admin, a short own password.
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Quick","adminUser":"kim","adminEmail":"kim@example.com","adminPassword":"short"}')" = 422 ] ||
+  fail "short admin password: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Quick","adminUser":"kim","adminEmail":"kim@example.com","discourage":true}')" = 202 ] ||
+  fail "start WordPress install: $(x cat /tmp/api.out)"
+wppass=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["adminPassword"])')
+wpdb=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["database"])')
+[ "$wpdb" = wpq_wp ] || fail "database of the install: $wpdb"
+[ ${#wppass} -ge 24 ] || fail "generated admin password too short: ${#wppass}"
+state=running
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+  state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+  [ "$state" = running ] || break
+  sleep 2
+done
+if [ "$state" != succeeded ]; then
+  x systemctl --version | head -n 1
+  x journalctl --no-pager -o short-precise -u hostashi-wp@wpq.service -u hostashi-wpcli-install.service -n 60 || true
+  x ls -la /run/hostashi-wp /run/hostashi-wp/wpq 2>&1 || true
+  fail "WordPress install ended '$state': $(x cat /tmp/api.out)"
+fi
+# The pinned WP-CLI belongs to root; nobody else may change it.
+phar=$(x sh -c 'ls /opt/hostashi/wp-cli/*/wp-cli.phar')
+expect_mode "$phar" "644 root:root"
+# WordPress belongs to the site user, with file editing off.
+[ "$(x stat -c %U /home/wpq/htdocs/wp-config.php)" = wpq ] || fail "wp-config.php not owned by wpq"
+[ -z "$(x find /home/wpq/htdocs ! -user wpq | head -n 5)" ] || fail "files of WordPress not owned by wpq: $(x find /home/wpq/htdocs ! -user wpq | head -n 5)"
+x grep -q "define( 'DISALLOW_FILE_EDIT', true )" /home/wpq/htdocs/wp-config.php || fail "DISALLOW_FILE_EDIT missing"
+[ "$(x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='blog_public'")" = 0 ] || fail "search engines not discouraged"
+# The front page and the login page load through nginx and the site's PHP.
+body=$(x curl -fsS -H 'Host: wpq.example.com' http://127.0.0.1/) || fail "front page of WordPress"
+grep -q '<title>Quick' <<<"$body" || fail "front page without the site title: $(head -c 300 <<<"$body")"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-login.php)
+[ "$code" = 200 ] || fail "wp-login.php answered $code"
+# nginx reads the files itself: the admin folder and the style sheets.
+# The install once left them 0750/0640 in the site's group, and nginx
+# answered 403 for /wp-admin/.
+expect_mode /home/wpq/htdocs/wp-admin "755 wpq:wpq"
+expect_mode /home/wpq/htdocs/wp-includes/css/dashicons.min.css "644 wpq:wpq"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-admin/)
+[ "$code" = 302 ] || fail "/wp-admin/ answered $code"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-includes/css/dashicons.min.css)
+[ "$code" = 200 ] || fail "a style sheet of WordPress answered $code"
+# The admin logs in with the password that was shown once.
+# The login page sets WordPress's test cookie first.
+x rm -f /tmp/wpq.jar
+x curl -fsS -o /dev/null -c /tmp/wpq.jar -H 'Host: wpq.example.com' http://127.0.0.1/wp-login.php || fail "wp-login.php for the test cookie"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -b /tmp/wpq.jar -c /tmp/wpq.jar -H 'Host: wpq.example.com' \
+  --data-urlencode log=kim --data-urlencode "pwd=$wppass" --data-urlencode testcookie=1 \
+  http://127.0.0.1/wp-login.php)
+[ "$code" = 302 ] || fail "admin login with the generated password answered $code"
+x grep -q wordpress_logged_in /tmp/wpq.jar || fail "admin login set no session cookie"
+x rm -f /tmp/wpq.jar
+# The profile's hardening: xmlrpc.php blocked, no PHP in uploads.
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/xmlrpc.php)
+[ "$code" = 404 ] || fail "xmlrpc.php answered $code"
+x runuser -u wpq -- sh -c 'mkdir -p /home/wpq/htdocs/wp-content/uploads && echo "<?php echo 1;" >/home/wpq/htdocs/wp-content/uploads/x.php'
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-content/uploads/x.php)
+[ "$code" = 404 ] || fail "PHP in wp-content/uploads answered $code"
+x rm -f /home/wpq/htdocs/wp-content/uploads/x.php
+# The password is in no file, log or journal of the server.
+found=$(x grep -rlsF -- "$wppass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system || true)
+[ -z "$found" ] || fail "the admin password is stored in: $found"
+if x journalctl --no-pager -o cat | grep -F -- "$wppass" >/dev/null; then fail "the admin password is in the journal"; fi
+# A second install never writes over the site.
+[ "$(api POST /api/v1/sites/wpq/wordpress '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com"}')" = 409 ] ||
+  fail "second install over WordPress: $(x cat /tmp/api.out)"
+x grep -q 'not empty' /tmp/api.out || fail "second install refusal: $(x cat /tmp/api.out)"
+[ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'wpq\\_wp_'")" = 0 ] || fail "a refused install left a database"
+
+step "WordPress staging copy and refresh (ADR-0070)"
+# A staging copy of wpq: files and database copied, WordPress pointed at
+# its own database and domain, password protection and noindex on.
+[ "$(api POST /api/v1/sites/wpq/clone '{"name":"wpqs","domain":"wpqs.example.com","staging":true}')" = 202 ] ||
+  fail "clone wpq: $(x cat /tmp/api.out)"
+stpass=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"]["password"])')
+stuser=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"]["user"])')
+[ ${#stpass} -ge 20 ] || fail "generated staging password too short: ${#stpass}"
+wait_clone() {
+  local state=copying
+  for _ in $(seq 1 150); do
+    if [ "$(api GET /api/v1/sites/wpqs/clone)" != 200 ]; then
+      # A first copy that fails is deleted; the reason stays in the audit log.
+      api GET '/api/v1/audit?action=site.clone.failed&limit=1' >/dev/null
+      fail "clone state: $(x cat /tmp/api.out)"
+    fi
+    state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+    [ "$state" = copying ] || break
+    sleep 2
+  done
+  if [ "$state" != "done" ]; then
+    x journalctl --no-pager -o short-precise -u hostashi-wp@wpqs.service -n 60 || true
+    fail "clone ended '$state': $(x cat /tmp/api.out)"
+  fi
+  x grep -q '"config":"done"' /tmp/api.out || fail "clone without configuration step: $(x cat /tmp/api.out)"
+}
+wait_clone
+# The copy uses its own database; the source's stays as it was.
+x grep -q "define( 'DB_NAME', 'wpqs_wp' )" /home/wpqs/htdocs/wp-config.php || fail "clone's DB_NAME: $(x grep DB_NAME /home/wpqs/htdocs/wp-config.php)"
+x grep -q "WP_ENVIRONMENT_TYPE', 'staging'" /home/wpqs/htdocs/wp-config.php || fail "clone without WP_ENVIRONMENT_TYPE staging"
+x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'" | grep '//wpqs.example.com$' >/dev/null ||
+  fail "clone's siteurl: $(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='siteurl'")"
+x mariadb -Nse "SELECT option_value FROM wpq_wp.wp_options WHERE option_name='siteurl'" | grep '//wpq.example.com$' >/dev/null || fail "source's siteurl changed"
+[ -z "$(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)" ] || fail "files of the clone not owned by wpqs: $(x find /home/wpqs/htdocs ! -user wpqs | head -n 5)"
+# Visitors need the generated login; search engines are asked to stay away.
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpqs.example.com' http://127.0.0.1/)
+[ "$code" = 401 ] || fail "staging copy without login answered $code"
+x curl -sS -D /tmp/wpqs.head -o /tmp/wpqs.body -w '%{http_code}' -u "$stuser:$stpass" -H 'Host: wpqs.example.com' http://127.0.0.1/ >/tmp/wpqs.code
+[ "$(cat /tmp/wpqs.code)" = 200 ] || fail "front page of the staging copy answered $(cat /tmp/wpqs.code) (a redirect to the source?): $(x grep -i '^location' /tmp/wpqs.head)"
+x grep -q '<title>Quick' /tmp/wpqs.body || fail "staging front page without the site title"
+x grep -qi '^x-robots-tag: noindex, nofollow' /tmp/wpqs.head || fail "staging copy without X-Robots-Tag"
+if x grep -q '//wpq\.example\.com' /tmp/wpqs.body; then fail "staging front page links to the source"; fi
+# Refresh: a post written on the copy is gone, the copy works again.
+x mariadb -e "UPDATE wpqs_wp.wp_options SET option_value='Changed' WHERE option_name='blogname'"
+[ "$(api POST /api/v1/sites/wpqs/clone/refresh)" = 202 ] || fail "refresh clone: $(x cat /tmp/api.out)"
+wait_clone
+[ "$(x mariadb -Nse "SELECT option_value FROM wpqs_wp.wp_options WHERE option_name='blogname'")" = Quick ] || fail "refresh kept the copy's database"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -u "$stuser:$stpass" -H 'Host: wpqs.example.com' http://127.0.0.1/)
+[ "$code" = 200 ] || fail "staging copy after refresh answered $code"
+
+step "a log rotation keeps nginx's logs and fail2ban's site-auth jail working (ADR-0053, ADR-0066)"
+# A real rotation: nginx's workers must write to the new files. On USR1
+# they reopened them themselves and, as www-data, could not enter the
+# root-only directories; they stayed on the rotated files and the jail
+# saw nothing.
+out=$(x logrotate -f /etc/logrotate.d/hostashi 2>&1) || fail "logrotate run: $out"
+for _ in $(seq 20); do [ -z "$(x pgrep -f 'nginx: worker process is shutting down')" ] && break; sleep 0.5; done
+if x grep -h 'Permission denied' /var/log/nginx/hostashi/error.log /var/log/nginx/hostashi/error.log.1 2>/dev/null | grep -F '[emerg]' >/dev/null; then
+  fail "nginx cannot reopen its logs: $(x grep -h '\[emerg\]' /var/log/nginx/hostashi/error.log /var/log/nginx/hostashi/error.log.1 | tail -n 3)"
+fi
+for log in /var/log/nginx/hostashi/error.log /var/log/nginx/sites/wpqs/access.log /var/log/nginx/sites/wpqs/error.log; do
+  [ "$(x stat -c '%U:%G' "$log")" = root:root ] || fail "$log after the rotation: $(x stat -c '%U:%G %a' "$log")"
+done
+# fail2ban never bans loopback; for this check the jail takes it, and a
+# ban lasts at most a minute in case the test stops before the unban.
+x fail2ban-client set hostashi-site-auth ignoreself false >/dev/null
+x fail2ban-client set hostashi-site-auth delignoreip 127.0.0.0/8 >/dev/null
+x fail2ban-client set hostashi-site-auth bantime 60 >/dev/null
+f2b_restore() {
+  x fail2ban-client set hostashi-site-auth unbanip 127.0.0.1 >/dev/null 2>&1 || true
+  x fail2ban-client reload hostashi-site-auth >/dev/null 2>&1 || true
+}
+for _ in $(seq 10); do
+  code=$(x curl -sS -o /dev/null -w '%{http_code}' -u "$stuser:wrong-password" -H 'Host: wpqs.example.com' http://127.0.0.1/ || true)
+  [ "$code" = 401 ] || { f2b_restore; fail "wrong staging password answered $code"; }
+done
+x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/hostashi/error.log || { f2b_restore; fail "failed login not in the server error log after the rotation: $(x tail -n 3 /var/log/nginx/hostashi/error.log)"; }
+x grep -q "user \"$stuser\": password mismatch" /var/log/nginx/sites/wpqs/error.log || { f2b_restore; fail "failed login not in the site's error log after the rotation"; }
+x grep -q '" 401 ' /var/log/nginx/sites/wpqs/access.log || { f2b_restore; fail "request not in the site's access log after the rotation"; }
+for _ in $(seq 30); do x fail2ban-client status hostashi-site-auth | grep 'Banned IP list:.*127\.0\.0\.1' >/dev/null && break; sleep 1; done
+f2b=$(x fail2ban-client status hostashi-site-auth)
+grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail counted no failed login: $f2b"; }
+grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
+# The panel shows the ban and lifts it (ADR-0078). The panel itself is on
+# 127.0.0.1:8080 and not behind the site jail, so the ban does not block it.
+[ "$(api GET /api/v1/firewall/bans)" = 200 ] || { f2b_restore; fail "bans through the panel: $(x cat /tmp/api.out)"; }
+x cat /tmp/api.out | python3 -c 'import json,sys
+j = {x["name"]: x for x in json.load(sys.stdin)["jails"]}["hostashi-site-auth"]
+assert j["running"] and j["totalFailed"] > 0, j
+assert "127.0.0.1" in [b["address"] for b in j["bans"]], j' || { f2b_restore; fail "panel does not show the ban: $(x cat /tmp/api.out)"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 200 ] || { f2b_restore; fail "unblock through the panel: $(x cat /tmp/api.out)"; }
+x grep -q '"hostashi-site-auth"' /tmp/api.out || { f2b_restore; fail "unblock did not name the jail: $(x cat /tmp/api.out)"; }
+f2b=$(x fail2ban-client status hostashi-site-auth)
+grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" && { f2b_restore; fail "address still banned after the unblock: $f2b"; }
+[ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 404 ] || { f2b_restore; fail "second unblock answered: $(x cat /tmp/api.out)"; }
+f2b_restore
+# recidive reads fail2ban's own Ban notices from the journal; the ban above
+# is one. fail2ban-regex ignores ignoreip, so loopback counts here.
+f2b=$(x fail2ban-regex systemd-journal recidive)
+grep -Eq '^Lines: [0-9]+ lines, [0-9]+ ignored, [1-9][0-9]* matched' <<<"$f2b" || fail "recidive does not see the ban: $(grep -E '^Lines: ' <<<"$f2b")"
+x fail2ban-client get hostashi-site-auth ignoreself | grep -x True >/dev/null || fail "jail does not ignore own addresses again"
+[ "$(api GET '/api/v1/sites/wpqs/logs/access?lines=5')" = 200 ] || fail "access log through the panel after the rotation: $(x cat /tmp/api.out)"
+unset f2b
+
+# The staging password is in no file, log or journal of the server.
+found=$(x grep -rlsF -- "$stpass" /var/lib/hostashi /var/lib/hostashi-agent /var/log/hostashi /run/hostashi-wp /etc/hostashi /etc/systemd/system || true)
+[ -z "$found" ] || fail "the staging password is stored in: $found"
+if x journalctl --no-pager -o cat | grep -F -- "$stpass" >/dev/null; then fail "the staging password is in the journal"; fi
+x rm -f /tmp/wpqs.head /tmp/wpqs.body
+rm -f /tmp/wpqs.code
+[ "$(api DELETE /api/v1/databases/wpqs_wp)" = 204 ] || fail "delete clone database: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/sites/wpqs)" = 204 ] || fail "delete site wpqs: $(x cat /tmp/api.out)"
+unset stpass stuser
+
+step "WordPress reinstall and a deleted WordPress (ADR-0069)"
+# The panel sees the WordPress in the document root and its database.
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"installed":true' /tmp/api.out || fail "installed WordPress not seen: $(x cat /tmp/api.out)"
+x grep -q '"database":"wpq_wp"' /tmp/api.out || fail "database of wp-config.php not seen: $(x cat /tmp/api.out)"
+# Reinstall: only with the site's name typed; then the document root is
+# emptied as the site user, WordPress gets a new database and the old one
+# goes.
+x runuser -u wpq -- sh -c 'echo stray >/home/wpq/htdocs/stray.txt'
+[ "$(api POST /api/v1/sites/wpq/wordpress/reinstall '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com","confirm":"wpq.example.com"}')" = 422 ] ||
+  fail "reinstall with a wrong confirmation: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/wpq/wordpress/reinstall '{"locale":"en_US","title":"Again","adminUser":"kim","adminEmail":"kim@example.com","confirm":"wpq"}')" = 202 ] ||
+  fail "start WordPress reinstall: $(x cat /tmp/api.out)"
+x grep -q '"database":"wpq_wp2"' /tmp/api.out || fail "database of the reinstall: $(x cat /tmp/api.out)"
+x grep -q '"droppedDatabase":"wpq_wp"' /tmp/api.out || fail "old database not dropped: $(x cat /tmp/api.out)"
+state=running
+for _ in $(seq 1 150); do
+  [ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+  state=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')
+  [ "$state" = running ] || break
+  sleep 2
+done
+[ "$state" = succeeded ] || fail "WordPress reinstall ended '$state': $(x cat /tmp/api.out)"
+x test ! -e /home/wpq/htdocs/stray.txt || fail "reinstall left the old files"
+x grep -q "'DB_NAME', 'wpq_wp2'" /home/wpq/htdocs/wp-config.php || fail "wp-config.php of the reinstall"
+[ "$(x mariadb -Nse "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'wpq_wp'")" = 0 ] || fail "old WordPress database still there"
+body=$(x curl -fsS -H 'Host: wpq.example.com' http://127.0.0.1/) || fail "front page after the reinstall"
+grep -q '<title>Again' <<<"$body" || fail "front page after the reinstall: $(head -c 300 <<<"$body")"
+code=$(x curl -sS -o /dev/null -w '%{http_code}' -H 'Host: wpq.example.com' http://127.0.0.1/wp-admin/)
+[ "$code" = 302 ] || fail "/wp-admin/ after the reinstall answered $code"
+# WordPress deleted in the file manager: the install is offered again.
+x runuser -u wpq -- find /home/wpq/htdocs -mindepth 1 -delete
+[ "$(api GET /api/v1/sites/wpq/wordpress)" = 200 ] || fail "WordPress state: $(x cat /tmp/api.out)"
+x grep -q '"state":"none"' /tmp/api.out || fail "deleted WordPress still reported: $(x cat /tmp/api.out)"
+x grep -q '"empty":true' /tmp/api.out || fail "empty document root not seen: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/databases/wpq_wp2)" = 204 ] || fail "delete WordPress database: $(x cat /tmp/api.out)"
+[ "$(api DELETE /api/v1/sites/wpq)" = 204 ] || fail "delete site wpq: $(x cat /tmp/api.out)"
+unset wppass
 
 step "a second storage pool on its own volume (ADR-0016, spike S9)"
 # An ext4 file system on a loop device inside the container stands in for
@@ -1053,7 +1480,7 @@ done
 x /usr/local/bin/hostashi pool add vol1 /srv/vol1 || fail "pool add"
 expect_mode /srv/vol1 "711 root:root"
 expect_mode /srv/vol1/.hostashi-pool "644 root:root"
-x /usr/local/bin/hostashi pool list | grep -q "^vol1	/srv/vol1	sites=0	quota=$volquota$" || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
+x /usr/local/bin/hostashi pool list | grep "^vol1	/srv/vol1	sites=0	quota=$volquota$" >/dev/null || fail "pool list: $(x /usr/local/bin/hostashi pool list)"
 # The running PHP master of wp got the new pool hidden right away.
 wpunit="hostashi-php-$ver@wp.service"
 x grep -qx 'TemporaryFileSystem=/srv/vol1:ro' "/etc/systemd/system/$wpunit.d/50-hostashi-slice.conf" || fail "wp's drop-in does not hide vol1"
@@ -1064,8 +1491,8 @@ expect_mode /srv/vol1/big "750 big:www-data"
 xi runuser -u big -- sh -c 'cat >/srv/vol1/big/htdocs/index.php' <<<'<?php echo "big on vol1";'
 [ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "site on vol1 does not answer"
 bigunit="hostashi-php-$ver@big.service"
-x systemctl show -p RequiresMountsFor --value "$bigunit" | grep -qw /srv/vol1/big || fail "big's PHP unit does not require its volume"
-x systemctl show -p After --value "$bigunit" | grep -qw srv-vol1.mount || fail "big's PHP unit is not ordered after its volume"
+x systemctl show -p RequiresMountsFor --value "$bigunit" | grep -w /srv/vol1/big >/dev/null || fail "big's PHP unit does not require its volume"
+x systemctl show -p After --value "$bigunit" | grep -w srv-vol1.mount >/dev/null || fail "big's PHP unit is not ordered after its volume"
 # Each master sees only its own home, on either pool.
 seen=$(x sh -c "ls -A /proc/\$(systemctl show -p MainPID --value $wpunit)/root/srv/vol1")
 [ -z "$seen" ] || fail "wp's PHP master sees on vol1: $seen"
@@ -1078,6 +1505,22 @@ if x /usr/local/bin/hostashi pool remove vol1 >/dev/null 2>&1; then fail "a pool
 doc=$(x /usr/local/bin/hostashi doctor || true)
 grep -Eq "^  ok    system.pool.volume +pool vol1 \(/srv/vol1\) is mounted with its marker" <<<"$doc" || fail "doctor on vol1: $doc"
 grep -Eq "^  ok    system.quota +/srv/vol1: disk limits are enforced" <<<"$doc" || [ "$volquota" = off ] || fail "doctor quota on vol1: $doc"
+# Rename and default (ADR-0016 addendum 2): through the API, so the
+# panel's site follows; the path and the home stay.
+x /usr/local/bin/hostashi pool rename vol1 fast >/dev/null || fail "pool rename"
+pl=$(x /usr/local/bin/hostashi pool list)
+grep "^fast	/srv/vol1	sites=1	" <<<"$pl" >/dev/null || fail "pool list after rename: $pl"
+[ "$(api GET /api/v1/sites/big)" = 200 ] || fail "get big: $(x cat /tmp/api.out)"
+x grep '"pool":"fast"' /tmp/api.out >/dev/null || fail "big after rename: $(x cat /tmp/api.out)"
+[ "$(x curl -fsS -H 'Host: big.example.com' http://127.0.0.1/)" = "big on vol1" ] || fail "big does not answer after the rename"
+x /usr/local/bin/hostashi pool default fast >/dev/null || fail "pool default"
+pl=$(x /usr/local/bin/hostashi pool list)
+grep "^fast	/srv/vol1	sites=1	quota=[a-z]*	default$" <<<"$pl" >/dev/null || fail "pool list after default: $pl"
+[ "$(api POST /api/v1/sites '{"name":"dflt","domains":["dflt.example.com"]}')" = 201 ] || fail "create site on the default pool: $(x cat /tmp/api.out)"
+x test -d /srv/vol1/dflt || fail "a site without a pool did not land on the default pool"
+[ "$(api DELETE /api/v1/sites/dflt)" = 204 ] || fail "delete site dflt: $(x cat /tmp/api.out)"
+x /usr/local/bin/hostashi pool default default >/dev/null || fail "pool default back"
+[ "$(api POST /api/v1/pools/fast/rename '{"name":"vol1"}')" = 200 ] || fail "rename back: $(x cat /tmp/api.out)"
 [ "$(api DELETE /api/v1/sites/big)" = 204 ] || fail "delete site big: $(x cat /tmp/api.out)"
 # A missing volume (as after a boot without it): doctor fails the pool and
 # does not report the root disk's free space for its path.
@@ -1140,6 +1583,110 @@ x test ! -e /home/wp || fail "PHP site home still there"
 [ -z "$(x mariadb -Nse "SELECT 1 FROM mysql.user WHERE User='wp_api'")" ] || fail "database user of a deleted site still there"
 [ -z "$(x mariadb -Nse "SHOW DATABASES LIKE 'wp\_api'")" ] || fail "database of a deleted site still there"
 
+step "Git deploy of a site (ADR-0062)"
+[ "$(api POST /api/v1/sites '{"name":"gitsite","domains":["gitsite.example.com"]}')" = 201 ] || fail "create Git site: $(x cat /tmp/api.out)"
+x sh -c 'echo before > /home/gitsite/htdocs/before.txt && chown gitsite:gitsite /home/gitsite/htdocs/before.txt' || fail "seed the deploy directory"
+# A small public repository on GitHub, fetched with depth 1 by go-git.
+[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"shared":[".env"],"commands":["test -f README","echo built > built.txt","cat /proc/self/cgroup > cgroup.txt"]}')" = 200 ] ||
+  fail "set Git: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 202 ] || fail "start deploy: $(x cat /tmp/api.out)"
+did=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 409 ] || fail "second deploy while one runs: $(x cat /tmp/api.out)"
+dstate=""
+for _ in $(seq 1 90); do
+  [ "$(api GET /api/v1/sites/gitsite/deploys)" = 200 ] || fail "list deploys: $(x cat /tmp/api.out)"
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["state"])')
+  case $dstate in succeeded | failed) break ;; esac
+  sleep 2
+done
+[ "$dstate" = succeeded ] || fail "deploy $did ended $dstate: $(x cat /tmp/api.out); log: $(x cat "/var/log/hostashi/app/gitsite/deploy-$did.log")"
+x grep -q '"commit":"[0-9a-f]\{40\}"' /tmp/api.out || fail "deploy without a commit: $(x cat /tmp/api.out)"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "htdocs is not the link to release $did: $(x ls -la /home/gitsite)"
+x test -f /home/gitsite/htdocs/README || fail "README not deployed"
+[ "$(x stat -c '%U' "/home/gitsite/.deploy/releases/$did/built.txt")" = gitsite ] || fail "build command did not run as the site user"
+# The build runs in its own unit, which has no credentials, not in the
+# deploy unit that fetched with the token or key.
+x grep -q 'hostashi-build@gitsite.service' "/home/gitsite/.deploy/releases/$did/cgroup.txt" ||
+  fail "build did not run in hostashi-build@: $(x cat "/home/gitsite/.deploy/releases/$did/cgroup.txt")"
+[ "$(x stat -c '%U' /home/gitsite/htdocs)" = gitsite ] || fail "the deploy link is not the site user's"
+x test -f /home/gitsite/.deploy/releases/0-initial/before.txt || fail "the files from before the first deploy were not kept"
+x test -L /home/gitsite/htdocs/.env || fail "shared .env is no link"
+x test ! -e /home/gitsite/htdocs/.git || fail "release has a .git"
+body=$(x curl -fsS -H 'Host: gitsite.example.com' http://127.0.0.1/built.txt) || fail "nginx does not serve the release"
+[ "$body" = built ] || fail "release served '$body'"
+# The web server's settings apply again with the deploy link in place.
+[ "$(api PUT /api/v1/sites/gitsite/disabled '{"disabled":true}')" = 200 ] || fail "disable Git site: $(x cat /tmp/api.out)"
+[ "$(api PUT /api/v1/sites/gitsite/disabled '{"disabled":false}')" = 200 ] || fail "enable Git site: $(x cat /tmp/api.out)"
+expect_mode /var/lib/hostashi-deploy/gitsite/build.sh "640 root:gitsite"
+x test ! -e /run/hostashi-deploy/gitsite/token || fail "credentials left after the run"
+# systemd releases a unit's credentials only when it stops; the agent stops
+# a finished run, which RemainAfterExit= would otherwise keep active.
+[ "$(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)" = inactive ] ||
+  fail "the finished deploy unit is still $(x systemctl show -p ActiveState --value hostashi-deploy@gitsite.service)"
+[ "$(x systemctl show -p ActiveState --value hostashi-build@gitsite.service)" = inactive ] ||
+  fail "the finished build unit is still $(x systemctl show -p ActiveState --value hostashi-build@gitsite.service)"
+[ "$(api GET "/api/v1/sites/gitsite/deploys/$did/log")" = 200 ] || fail "deploy log: $(x cat /tmp/api.out)"
+x grep -q 'echo built' /tmp/api.out || fail "log without the build command: $(x cat /tmp/api.out)"
+# Rollback to the files from before is not offered; back to the deploy
+# itself is a switch without a build.
+[ "$(api POST "/api/v1/sites/gitsite/deploys/$did/rollback")" = 200 ] || fail "rollback: $(x cat /tmp/api.out)"
+x grep -q '"kind":"rollback"' /tmp/api.out || fail "rollback answer: $(x cat /tmp/api.out)"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "rollback moved the link"
+# The webhook: a push to the branch deploys, a wrong secret is refused and
+# logged for fail2ban.
+[ "$(api POST /api/v1/sites/gitsite/git/webhook)" = 200 ] || fail "webhook on: $(x cat /tmp/api.out)"
+hpath=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])')
+hsecret=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["secret"])')
+hcode=$(x curl -sS -o /tmp/hook.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Gitlab-Event: Push Hook' \
+  -H 'X-Gitlab-Token: wrong' --data '{"ref":"refs/heads/master"}' "http://127.0.0.1:8080$hpath")
+[ "$hcode" = 401 ] || fail "webhook with a wrong token: $hcode $(x cat /tmp/hook.out)"
+hcode=$(x curl -sS -o /tmp/hook.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Gitlab-Event: Push Hook' \
+  -H "X-Gitlab-Token: $hsecret" --data '{"ref":"refs/heads/master"}' "http://127.0.0.1:8080$hpath")
+[ "$hcode" = 202 ] || fail "webhook push: $hcode $(x cat /tmp/hook.out)"
+x grep -q '"started"' /tmp/hook.out || fail "webhook push did not start a deploy: $(x cat /tmp/hook.out)"
+for _ in $(seq 1 90); do
+  api GET /api/v1/sites/gitsite/deploys >/dev/null
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; print(d["state"] if d["source"]=="webhook" else "none")')
+  case $dstate in succeeded | failed | none) break ;; esac
+  sleep 2
+done
+[ "$dstate" = succeeded ] || fail "webhook deploy ended $dstate: $(x cat /tmp/api.out)"
+did=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "the webhook deploy did not go live"
+x journalctl -u hostashi.service --no-pager -o cat | grep -F '"msg":"auth.failed","kind":"webhook"' >/dev/null ||
+  fail "no fail2ban line for the wrong webhook token"
+# A failing build never goes live.
+[ "$(api PUT /api/v1/sites/gitsite/git '{"url":"https://github.com/octocat/Hello-World.git","branch":"master","auth":"none","deployDir":"htdocs","keep":2,"buildTimeoutMinutes":5,"commands":["false"]}')" = 200 ] ||
+  fail "set failing build: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 202 ] || fail "start failing deploy: $(x cat /tmp/api.out)"
+for _ in $(seq 1 90); do
+  api GET /api/v1/sites/gitsite/deploys >/dev/null
+  dstate=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["state"])')
+  case $dstate in succeeded | failed) break ;; esac
+  sleep 2
+done
+[ "$dstate" = failed ] || fail "failing build ended $dstate"
+[ "$(x readlink /home/gitsite/htdocs)" = ".deploy/releases/$did" ] || fail "a failed build went live"
+# The host key of an SSH repository: the panel reads what the server
+# presents (here a second sshd on the machine's own address) and pins the
+# key the administrator confirms.
+x sh -c "mkdir -p /run/sshd && /usr/sbin/sshd -p 2296 -o ListenAddress=$ext_ip"
+[ "$(api PUT /api/v1/sites/gitsite/git "{\"url\":\"ssh://git@$ext_ip:2296/acme/site.git\",\"branch\":\"master\",\"auth\":\"ssh\",\"deployDir\":\"htdocs\",\"keep\":2,\"buildTimeoutMinutes\":5}")" = 200 ] ||
+  fail "set SSH Git: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/deploys)" = 409 ] || fail "deploy without a confirmed host key: $(x cat /tmp/api.out)"
+x grep -q host_key_unconfirmed /tmp/api.out || fail "deploy without host key: $(x cat /tmp/api.out)"
+[ "$(api POST /api/v1/sites/gitsite/git/hostkey/scan)" = 200 ] || fail "scan host key: $(x cat /tmp/api.out)"
+hkfp=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["fingerprint"])')
+hkey=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
+[ "$hkfp" = "$(x ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub | awk '{print $2}')" ] || fail "scanned fingerprint $hkfp is not the server's"
+[ "$(api PUT /api/v1/sites/gitsite/git/hostkey "{\"key\":\"$hkey\"}")" = 200 ] || fail "confirm host key: $(x cat /tmp/api.out)"
+x grep -q "\"hostKeyFingerprint\":\"$hkfp\"" /tmp/api.out || fail "confirmed host key not shown: $(x cat /tmp/api.out)"
+x pkill -f 'sshd -p 2296' || true
+[ "$(api DELETE /api/v1/sites/gitsite)" = 204 ] || fail "delete Git site: $(x cat /tmp/api.out)"
+x test ! -e /etc/systemd/system/hostashi-deploy@gitsite.service.d || fail "deploy drop-ins left after delete"
+x test ! -e /etc/systemd/system/hostashi-build@gitsite.service.d || fail "build drop-ins left after delete"
+x test ! -e /var/lib/hostashi-deploy/gitsite || fail "build script left after delete"
+
 step "backups with restic (ADR-0008)"
 [ "$(x restic version | cut -d' ' -f1)" = restic ] || fail "restic not installed"
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = disabled ] || fail "backup timer on without a target"
@@ -1148,37 +1695,11 @@ if x systemctl start hostashi-backup.service; then fail "backup without a target
 x grep -q '"error": "no backup target is set up"' /var/lib/hostashi-agent/backup/status.json ||
   fail "status without a target: $(x cat /var/lib/hostashi-agent/backup/status.json)"
 expect_mode /var/lib/hostashi-agent/backup "700 root:root"
-if [ -n "${STORAGEBOX_USER:-}" ]; then
-  # A real Storage Box. Only the test's own folder and the key it adds are
-  # touched, and cleanup takes both away again.
-  : "${STORAGEBOX_PASSWORD:?STORAGEBOX_PASSWORD is needed with STORAGEBOX_USER}"
-  bk_user=$STORAGEBOX_USER bk_host=$STORAGEBOX_USER.your-storagebox.de bk_port=23 bk_path=hostashi-ci-$$
-  SB_TMP=$(mktemp -d)
-  # Commands come on stdin: sftp -b would turn password logins off.
-  sb_sftp() { SSHPASS=$STORAGEBOX_PASSWORD sshpass -e sftp -q -P 23 -o PubkeyAuthentication=no -o PreferredAuthentications=password \
-    -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$SB_TMP/known_hosts" "$bk_user@$bk_host"; }
-  sb_ssh() { SSHPASS=$STORAGEBOX_PASSWORD sshpass -e ssh -p 23 -o PubkeyAuthentication=no -o PreferredAuthentications=password \
-    -o "UserKnownHostsFile=$SB_TMP/known_hosts" "$bk_user@$bk_host" "$@"; }
-  sb_cleanup() {
-    echo "=== storage box cleanup"
-    sb_ssh rm -r "$bk_path" || echo "WARN: could not remove $bk_path"
-    if [ -s "$SB_TMP/authorized_keys" ]; then
-      printf 'put %s .ssh/authorized_keys\n' "$SB_TMP/authorized_keys" | sb_sftp >/dev/null || echo "WARN: authorized_keys not restored"
-    else
-      printf -- '-rm .ssh/authorized_keys\n' | sb_sftp >/dev/null || echo "WARN: authorized_keys not removed"
-    fi
-    rm -rf "$SB_TMP"
-    SB_TMP=""
-  }
-  printf -- '-get .ssh/authorized_keys %s\n' "$SB_TMP/authorized_keys" | sb_sftp >/dev/null || fail "storage box login"
-  x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client >/dev/null'
-else
-  # A local SFTP server stands in for the Storage Box. sftp.test resolves to it.
-  bk_user=u1 bk_host=sftp.test bk_port=2299 bk_path=hostashi
-  x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
-  x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
-  x useradd -m -s /bin/sh u1
-fi
+# A local SFTP server stands in for the Storage Box. sftp.test resolves to it.
+bk_user=u1 bk_host=sftp.test bk_port=2299 bk_path=hostashi
+x sh -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-server >/dev/null'
+x sh -c 'echo "127.0.0.1 sftp.test" >>/etc/hosts'
+x useradd -m -s /bin/sh u1
 # The agent creates the password and the SSH key with the target.
 xi /usr/local/bin/hostashi backup set <<JSON >/tmp/bk.$$ || fail "backup set"
 {"version":1,"target":{"user":"$bk_user","host":"$bk_host","port":$bk_port,"path":"$bk_path"},
@@ -1191,14 +1712,9 @@ expect_mode /etc/hostashi-agent/backup "700 root:root"
 expect_mode /etc/hostashi-agent/backup/password "600 root:root"
 expect_mode /etc/hostashi-agent/backup/id_ed25519 "600 root:root"
 if xi /usr/local/bin/hostashi backup start </dev/null; then fail "run started without a host key"; fi
-if [ -n "$SB_TMP" ]; then
-  # What the administrator does in the Hetzner console or with install-ssh-key.
-  sb_ssh install-ssh-key <<<"$pub" || fail "install-ssh-key"
-else
-  x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
-  xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
-  x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
-fi
+x install -d -m 0700 -o u1 -g u1 /home/u1/.ssh
+xi sh -c 'cat >/home/u1/.ssh/authorized_keys && chown u1:u1 /home/u1/.ssh/authorized_keys && chmod 600 /home/u1/.ssh/authorized_keys' <<<"$pub"
+x sh -c 'mkdir -p /run/sshd && /usr/sbin/sshd -p 2299 -o ListenAddress=127.0.0.1'
 # The panel reads the host key; the administrator compares the fingerprint
 # (here with ssh-keyscan) and confirms it.
 code=""
@@ -1212,7 +1728,7 @@ want=$(x sh -c "ssh-keyscan -p $bk_port -t ed25519 $bk_host 2>/dev/null | grep -
 x grep -q '"ready":true' /tmp/api.out || fail "not ready after the host key: $(x cat /tmp/api.out)"
 rm -f /tmp/bk.$$
 [ "$(x systemctl is-enabled hostashi-backup.timer)" = enabled ] || fail "backup timer not on after setup"
-x systemctl cat hostashi-backup.timer | grep -q '^OnCalendar=\*-\*-\* 02:00:00$' || fail "timer window not applied"
+x systemctl cat hostashi-backup.timer | grep '^OnCalendar=\*-\*-\* 02:00:00$' >/dev/null || fail "timer window not applied"
 x /usr/local/bin/hostashi backup key show | grep '^restic password: ' >/dev/null || fail "backup key show"
 r() { x env "RESTIC_REPOSITORY=sftp://$bk_user@$bk_host:$bk_port/$bk_path" RESTIC_PASSWORD_FILE=/etc/hostashi-agent/backup/password \
   restic -o 'sftp.args=-F /dev/null -i /etc/hostashi-agent/backup/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/hostashi-agent/backup/known_hosts' --no-cache "$@"; }
@@ -1264,8 +1780,8 @@ restore() {
   x grep -o '"dir":"restore-[0-9-]*"' /tmp/api.out | cut -d'"' -f4
 }
 [ "$(api GET /api/v1/sites/bk/backups)" = 200 ] || fail "snapshot list"
-files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | head -1 | cut -d'"' -f4)
-db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | head -1 | cut -d'"' -f4)
+files_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"files"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
+db_snap=$(x grep -o '"id":"[0-9a-f]\{64\}","time":"[^"]*","kind":"db"' /tmp/api.out | sed -n 1p | cut -d'"' -f4)
 [ -n "$files_snap" ] && [ -n "$db_snap" ] || fail "no snapshot ids in $(x cat /tmp/api.out)"
 dir=$(restore "$files_snap")
 [ "$(x cat "/home/bk/$dir/htdocs/index.html")" = "backed up" ] || fail "restored file"
@@ -1487,9 +2003,9 @@ UNIT
   [ "$(api PUT /api/v1/sites/secure/hsts '{"enabled":true}')" = 200 ] || fail "HSTS on: $(x cat /tmp/api.out)"
   [ "$(hdr strict-transport-security)" = "strict-transport-security: max-age=31536000" ] ||
     fail "HSTS header: '$(hdr strict-transport-security)'"
-  if x sh -c 'nginx -V 2>&1' | grep -q -- --with-http_v3_module; then
+  if x sh -c 'nginx -V 2>&1' | grep -- --with-http_v3_module >/dev/null; then
     [ "$(hdr alt-svc)" = 'alt-svc: h3=":443"; ma=86400' ] || fail "Alt-Svc header: '$(hdr alt-svc)'"
-    if x curl -V | grep -q 'Features:.* HTTP3'; then
+    if x curl -V | grep 'Features:.* HTTP3' >/dev/null; then
       out=$(x curl -fsSk --http3-only -o /tmp/h3.out -w '%{http_version}' --resolve www.secure.example.com:443:127.0.0.1 https://www.secure.example.com/)
       [ "$out" = 3 ] && [ "$(x cat /tmp/h3.out)" = "hello over https" ] || fail "HTTP/3 answered '$out' '$(x cat /tmp/h3.out)'"
       # Unknown names over QUIC get no certificate either.
@@ -1563,7 +2079,7 @@ UNIT
   grep -q '"agent":"ok"' <<<"$health" || fail "panel on 443: $health"
   # Browsers switch to HTTP/3 after the Alt-Svc header; those requests have
   # no Host header, and the panel answered 400 (v0.2.0).
-  if x curl -V | grep -q 'Features:.* HTTP3'; then
+  if x curl -V | grep 'Features:.* HTTP3' >/dev/null; then
     out=$(p443 --http3-only -o /tmp/h3.out -w '%{http_code} %{http_version}' https://other.example.com/api/v1/health) || true
     if [ "$out" != "200 3" ] || ! x grep -q '"agent":"ok"' /tmp/h3.out; then
       fail "panel over HTTP/3: '$out' '$(x cat /tmp/h3.out)'"
@@ -1618,7 +2134,7 @@ UNIT
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/tool.php)" = 404 ] || fail "tool.php reachable"
   x test -z "$(x ls -A /run/hostashi-adminer/tickets)" || fail "used ticket kept"
   [ "$(p8444 -o /dev/null -w '%{http_code}' https://other.example.com:8444/adminer.php)" = 404 ] || fail "adminer.php reachable"
-  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | grep -i '^referrer-policy:' | head -n1)
+  rp=$(p8444 -o /dev/null -D - "https://other.example.com:8444/?username=$user&db=tooldb_wp" | tr -d '\r' | awk 'tolower($0) ~ /^referrer-policy:/ && !n++')
   [ "$rp" = "referrer-policy: no-referrer" ] || fail "tool referrer policy: '$rp'"
   if x curl -sSk -o /dev/null --resolve unknown.example.com:8444:127.0.0.1 https://unknown.example.com:8444/ 2>/dev/null; then
     fail "tool port answered an unknown name"
@@ -1627,7 +2143,8 @@ UNIT
   # an open tab learns both.
   [ "$(api GET /api/v1/databases/tooldb_wp/tool/sessions)" = 200 ] || fail "list tool sessions: $(x cat /tmp/api.out)"
   x grep -q "\"id\":\"$user\"" /tmp/api.out || fail "session not listed: $(x cat /tmp/api.out)"
-  grep -q "id='hostashi-extend'" <<<"$page" || fail "no way to extend the session from the tool"
+  grep -q "id='hostashi-extend' href='https://other.example.com/#/databases?db=tooldb_wp&amp;tool=extend&amp;session=$user'" <<<"$page" ||
+    fail "no way to extend the session from the tool: $(grep -o "id='hostashi-extend'[^>]*" <<<"$page")"
   before=$(x cat "/run/hostashi-adminer/sessions/$user") || fail "no session file"
   [ "$(api POST "/api/v1/databases/tooldb_wp/tool/sessions/$user/extend")" = 200 ] || fail "extend tool session: $(x cat /tmp/api.out)"
   after=$(x cat "/run/hostashi-adminer/sessions/$user")
@@ -1639,8 +2156,15 @@ UNIT
   [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept an ended session"
   # Deleting the database ends any other session: the user is gone.
   [ "$(api POST /api/v1/databases/tooldb_wp/tool '{"minutes":30}')" = 201 ] || fail "open tool again: $(x cat /tmp/api.out)"
+  url=$(x sed -n 's/.*"url":"\([^"]*\)".*/\1/p' /tmp/api.out)
   user=$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User LIKE 'hostashi\_tool\_%'")
   [ -n "$user" ] || fail "no temporary database user"
+  # Adminer's logout sends the browser to the panel, which ends the
+  # session; the tool itself forgets the login.
+  p8444 -L -o /dev/null "$url&panel=443" || fail "tool did not answer the second ticket"
+  loc=$(p8444 -o /dev/null -w '%{http_code} %{redirect_url}' -d logout=1 "https://other.example.com:8444/?username=$user&db=tooldb_wp")
+  [ "$loc" = "303 https://other.example.com/#/databases?db=tooldb_wp&tool=end&session=$user" ] || fail "tool logout: '$loc'"
+  [ "$(p8444 -o /dev/null -w '%{http_code}' "https://other.example.com:8444/?username=$user&db=tooldb_wp")" = 403 ] || fail "the tool kept the login after the logout"
   [ "$(api DELETE /api/v1/sites/tooldb)" = 204 ] || fail "delete site: $(x cat /tmp/api.out)"
   [ -z "$(x mariadb -N -e "SELECT User FROM mysql.user WHERE User = '$user'")" ] || fail "temporary user outlived its database"
 
@@ -1680,6 +2204,13 @@ UNIT
   x systemctl restart mariadb.service
 fi
 
+fi # core
+
+if [ "$PART" != core ]; then
+# The container shares the host network; its first address is the
+# external server address for the PostgreSQL part below.
+ext_ip=${ext_ip:-$(x sh -c "hostname -I | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1")}
+
 step "more PHP versions from sury.org (ADR-0019)"
 inst() { x /opt/hostashi/install.sh "$@" --binary /opt/hostashi/hostashi --no-firewall --panel-domain other.example.com; }
 if inst plan --php-versions 8.0 2>/dev/null; then fail "PHP 8.0 accepted"; fi
@@ -1708,15 +2239,32 @@ origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins ar
 grep -qF "origin=deb.sury.org,archive=$codename" <<<"$origins" || fail "sury.org not in unattended-upgrades: $origins"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run without --php-versions changed something"; }
-# New Hostashi versions automatically only with --auto-update (ADR-0050),
-# kept in the saved options for upgrade; a run without it turns it off.
+# New Hostashi versions automatically with --auto-update or the panel's
+# switch (ADR-0050): both write 53hostashi-auto-update, which a later run
+# without the option leaves as it is and the saved options do not hold.
+uu_allowed() { x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1; }
 inst apply --yes --auto-update >/dev/null || fail "apply with --auto-update failed"
-origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
-grep -qF "origin=Hostashi,codename=stable" <<<"$origins" || fail "--auto-update: Hostashi not in unattended-upgrades: $origins"
-x grep -qx -- --auto-update /etc/hostashi/install.options || fail "--auto-update not saved: $(x cat /etc/hostashi/install.options)"
+origins=$(uu_allowed)
+grep -F "origin=Hostashi,codename=stable" <<<"$origins" >/dev/null || fail "--auto-update: Hostashi not in unattended-upgrades: $origins"
+expect_mode /etc/apt/apt.conf.d/53hostashi-auto-update "644 root:root"
+! x grep -x -- --auto-update /etc/hostashi/install.options >/dev/null || fail "--auto-update saved: $(x cat /etc/hostashi/install.options)"
 inst apply --yes >/dev/null || fail "apply without --auto-update failed"
-origins=$(x unattended-upgrade --dry-run -d 2>&1 | sed -n 's/^Allowed origins are: //p' | head -1)
-! grep -qF "origin=Hostashi" <<<"$origins" || fail "Hostashi still in unattended-upgrades without --auto-update: $origins"
+grep -F "origin=Hostashi,codename=stable" <<<"$(uu_allowed)" >/dev/null || fail "apply without --auto-update turned it off"
+# The panel's switch removes the file; the installer then leaves it off.
+x rm /etc/apt/apt.conf.d/53hostashi-auto-update
+out=$(inst apply --yes)
+grep 'changes=0' <<<"$out" >/dev/null || { echo "$out"; fail "a run after the switch went off changed something"; }
+origins=$(uu_allowed)
+! grep -F "origin=Hostashi,codename=stable" <<<"$origins" >/dev/null || fail "Hostashi still in unattended-upgrades after the switch went off: $origins"
+# The runtime pins (ADR-0077) stay on, whatever the switch says.
+grep -F "origin=Hostashi,codename=runtimes" <<<"$origins" >/dev/null || fail "the suite runtimes is not in unattended-upgrades: $origins"
+# A server set up before the switch named the suite in the installer's own
+# file; the next run moves it to 53hostashi-auto-update.
+x sed -i 's|^\(\t"origin=apt.postgresql.org.*\)$|\1\n\t"origin=Hostashi,codename=stable";|' /etc/apt/apt.conf.d/52hostashi-unattended-upgrades
+inst apply --yes >/dev/null || fail "apply on an old auto-update server failed"
+x test -f /etc/apt/apt.conf.d/53hostashi-auto-update || fail "the old auto-update setting was not moved"
+! x grep -F "codename=stable" /etc/apt/apt.conf.d/52hostashi-unattended-upgrades >/dev/null || fail "52hostashi-unattended-upgrades still names stable"
+x rm /etc/apt/apt.conf.d/53hostashi-auto-update
 # The unit the panel starts (ADR-0036): the script refuses what is not on
 # its list, and installs what is.
 expect_mode /usr/local/lib/hostashi/php-install "755 root:root"
@@ -1725,7 +2273,7 @@ x systemctl start hostashi-php-install@8.2.service || { x journalctl -u hostashi
 x /usr/local/lib/hostashi/php-install check 8.2 || fail "PHP 8.2 not set up after the unit ran"
 # The agent reads this log for the panel (ADR-0036).
 expect_mode /var/lib/hostashi-agent/php-install "700 root:root"
-x tail -n 1 /var/lib/hostashi-agent/php-install/8.2.log | grep -q '^php-install: done:' || fail "no final line in the unit's log: $(x tail -n 5 /var/lib/hostashi-agent/php-install/8.2.log)"
+x tail -n 1 /var/lib/hostashi-agent/php-install/8.2.log | grep '^php-install: done:' >/dev/null || fail "no final line in the unit's log: $(x tail -n 5 /var/lib/hostashi-agent/php-install/8.2.log)"
 x grep -qx 'Package: php-common php7.4\* php8.1\* php8.2\*' /etc/apt/preferences.d/hostashi-sury-php || fail "pin does not cover 8.2: $(x cat /etc/apt/preferences.d/hostashi-sury-php)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the panel's install changed something"; }
@@ -1830,7 +2378,7 @@ done
 [ "$state" = succeeded ] || fail "PostgreSQL client from the panel: $(x cat /tmp/api.out)"
 x grep -q "\"installed\":\\[\"$PG_NEWEST\"\\]" /tmp/api.out || fail "PostgreSQL client $PG_NEWEST not listed: $(x cat /tmp/api.out)"
 for b in pg_dump pg_restore psql; do
-  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep -q "(PostgreSQL) $PG_NEWEST\." || fail "$b is not from PostgreSQL $PG_NEWEST"
+  x "/usr/lib/postgresql/$PG_NEWEST/bin/$b" --version | grep "(PostgreSQL) $PG_NEWEST\." >/dev/null || fail "$b is not from PostgreSQL $PG_NEWEST"
 done
 expect_mode /usr/share/keyrings/hostashi-pgdg.asc "644 root:root"
 expect_mode /etc/apt/preferences.d/hostashi-pgdg "644 root:root"
@@ -1839,7 +2387,7 @@ for p in "postgresql-client-$PG_NEWEST" libpq5; do
   case "$(origin "$p")" in *apt.postgresql.org*) ;; *) fail "$p does not come from apt.postgresql.org: $(origin "$p")";; esac
 done
 # shellcheck disable=SC2016 # a dpkg-query format
-! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep -q 'install ok installed' || fail "the PostgreSQL server was installed"
+! x dpkg-query -W -f='${Status}' "postgresql-$PG_NEWEST" 2>/dev/null | grep 'install ok installed' >/dev/null || fail "the PostgreSQL server was installed"
 [ "$(api POST /api/v1/db-servers/postgresql-client '{}')" = 409 ] || fail "second pg client install: $(x cat /tmp/api.out)"
 out=$(inst apply --yes)
 grep -q 'changes=0' <<<"$out" || { echo "$out"; fail "a run after the PostgreSQL client install changed something"; }
@@ -2212,7 +2760,7 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
     grep -o "class='error'>[^<]*" <<<"$page" || true
     docker logs --tail 30 "$pgname" 2>&1 || true
     x journalctl -u hostashi-adminer.service --no-pager -n 30 || true
-    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' | head -n 1)
+    pgca=$(x find /etc/hostashi-adminer/servers -name 'ca-*.pem' -print -quit)
     pgconn="host=$ext_ip port=55433 dbname=toolpg_db user=pgadmin sslmode=verify-full sslrootcert=$pgca gssencmode=disable"
     x env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
     x runuser -u hostashi-adminer -- env PGPASSWORD=Pg-admin-pw-1234 "/usr/lib/postgresql/$PG_NEWEST/bin/psql" "$pgconn" -c 'SELECT 1' || true
@@ -2241,6 +2789,8 @@ if [ -n "${PEBBLE_DIR:-}" ]; then
   rm -rf "$pgcerts"
 fi
 
+fi # runtimes
+
 step "root gets an account back (ADR-0035)"
 out=$(x /usr/local/bin/hostashi user recover kim) || fail "user recover: $out"
 echo "$out"
@@ -2254,4 +2804,4 @@ cookie=""
 [ "$(api POST /api/v1/invitations/accept "{\"token\":\"$inv\",\"password\":\"$pw-new\"}")" = 200 ] || fail "accept: $(x cat /tmp/api.out)"
 x grep -q '"secondFactorRequired":true' /tmp/api.out || fail "recovered admin without the second factor demand: $(x cat /tmp/api.out)"
 
-echo "PASS: installer test on $IMG"
+echo "PASS: installer test on $IMG ($PART)"

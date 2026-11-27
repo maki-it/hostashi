@@ -226,3 +226,22 @@ func TestRewrite(t *testing.T) {
 		t.Error("rewrite without the list")
 	}
 }
+
+func TestPatchOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rep  Report
+		want bool
+	}{
+		{"nothing", Report{}, false},
+		{"patch", Report{Changes: []Change{{Line: "3.13", From: "3.13.18+20261110", To: "3.13.19+20261124"}}}, true},
+		{"new build", Report{Changes: []Change{{Line: "3.13", From: "3.13.18+20261110", To: "3.13.18+20261124"}}}, true},
+		{"new line", Report{Changes: []Change{{Line: "3.15", To: "3.15.0+20261124", End: "2031-10-31"}}}, false},
+		{"patch and new line", Report{Changes: []Change{{Line: "3.13", From: "3.13.18+20261110", To: "3.13.19+20261124"}, {Line: "3.15", To: "3.15.0+20261124"}}}, false},
+		{"end of life changed", Report{Changes: []Change{{Line: "3.11", From: "3.11.18+20261124", To: "3.11.18+20261124", End: "2027-11-30"}}}, false},
+	} {
+		if got := tc.rep.PatchOnly(); got != tc.want {
+			t.Errorf("%s: PatchOnly() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

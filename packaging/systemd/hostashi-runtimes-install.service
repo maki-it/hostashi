@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installs the package hostashi-runtimes from the apt suite runtimes
+# (ADR-0077), or brings it to the newest version. unattended-upgrades only
+# upgrades installed packages, and an upgrade of the hostashi package runs
+# the installer while dpkg holds the lock, so a server that got the suite
+# that way installs the package here: the installer starts this unit
+# without waiting after such an upgrade, and apt-get waits for dpkg's lock.
+# On a server that has it, apt-get changes nothing. Started by
+# hostashi-runtimes-install.timer too.
+#
+# The suite's source may be new and its list not fetched yet, so the unit
+# fetches that one list first (only this source, the other lists stay); a
+# failed fetch still lets apt-get try with the list it has.
+
+[Unit]
+Description=Install the Hostashi runtime pins
+Documentation=https://github.com/maki-it/hostashi
+ConditionPathExists=/etc/apt/sources.list.d/hostashi-runtimes.sources
+After=apt-daily.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=DEBIAN_FRONTEND=noninteractive
+ExecStartPre=-/usr/bin/apt-get update -q -o Dir::Etc::SourceList=/etc/apt/sources.list.d/hostashi-runtimes.sources -o Dir::Etc::SourceParts=- -o APT::Get::List-Cleanup=0
+ExecStart=/usr/bin/apt-get install -y -q --no-install-recommends -o DPkg::Lock::Timeout=600 hostashi-runtimes

@@ -116,9 +116,9 @@ describe("siteStatus and phpChoices", () => {
 });
 
 // ListHarness keeps the address query in state, as the app does.
-function ListHarness({ initial = "" }: { initial?: string }) {
+function ListHarness({ initial = "", role = "admin" }: { initial?: string; role?: string }) {
   const [query, setQuery] = useState(new URLSearchParams(initial));
-  return <Sites query={query} onQuery={setQuery} />;
+  return <Sites query={query} onQuery={setQuery} role={role} />;
 }
 
 const shop: Site = { ...blog, name: "shop", php: "", domains: ["shop.example.com"], tls: { ...noTLS, enabled: true, error: "no DNS record" } };
@@ -136,13 +136,16 @@ describe("Sites", () => {
     const table = await screen.findByRole("table", { name: "Sites" });
     const b = within(within(table).getByRole("link", { name: "blog" }).closest("tr")!);
     expect(b.getByText("PHP 8.4")).toBeInTheDocument();
+    // An active site has no state mark; Status shows HTTPS.
+    expect(b.queryByText("Disabled")).toBeNull();
     expect(b.getByText("HTTPS")).toBeInTheDocument();
-    expect(b.getByText("Active")).toBeInTheDocument();
     expect(b.getByText("blog.example.com")).toBeInTheDocument();
-    expect(b.getByRole("link", { name: "Settings of blog" })).toHaveAttribute("href", "#/sites/blog");
+    expect(b.getByRole("link", { name: "blog" })).toHaveAttribute("href", "#/sites/blog");
     const s = within(within(table).getByRole("link", { name: "shop" }).closest("tr")!);
     expect(s.getByText("Static")).toBeInTheDocument();
     expect(s.getByText("Certificate failed")).toBeInTheDocument();
+    // A failed certificate still says that the site is not on HTTPS.
+    expect(s.getByText("HTTP only")).toBeInTheDocument();
   });
 
   it("filters by text and state and sorts by a column", async () => {
@@ -166,6 +169,60 @@ describe("Sites", () => {
     expect(rowNames()).toEqual(["wiki"]);
     await user.type(screen.getByRole("searchbox", { name: "Filter sites" }), "nothing");
     expect(screen.getByText("No site matches the filter.")).toBeInTheDocument();
+  });
+
+  it("shows disk, backup, virus finds, failing cron jobs and staging, and filters what needs attention", async () => {
+    const user = userEvent.setup();
+    const GiB = 1024 ** 3;
+    const usage = (bytes: number, level: string) => ({ enforced: true, bytes, inodes: 10, bytesPercent: Math.round((bytes * 100) / (10 * GiB)), inodesPercent: 0, level });
+    const lim = (u: object) => ({ body: { set: true, preset: "", limits: { diskBytes: 10 * GiB }, appliedAt: 1, applyError: "", updatedAt: 1, usage: u } });
+    const stage = { ...blog, name: "stage", domains: ["stage.example.com"] };
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog, shop, stage], marks: { blog: { openFindings: 2, cloneOf: "", staging: false }, stage: { openFindings: 0, cloneOf: "blog", staging: true } } } },
+      "GET /api/v1/sites/blog/limits": lim(usage(2 * GiB, "ok")),
+      "GET /api/v1/sites/shop/limits": lim(usage(9.6 * GiB, "critical")),
+      "GET /api/v1/sites/stage/limits": lim(usage(1 * GiB, "ok")),
+      "GET /api/v1/sites/stage/cron": {
+        body: { statusKnown: true, jobs: [{ id: 1, schedule: "@daily", command: "./x.sh", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", exitStatus: 3, lastStart: 1795600000 } }] },
+      },
+      "GET /api/v1/backups": {
+        body: { ready: true, overdue: false, status: { running: false, ok: true, finished: new Date(Date.now() - 2 * 3600e3).toISOString(), items: [{ kind: "files", site: "blog" }, { kind: "files", site: "shop", error: "disk read" }], maintenanceOk: true } },
+      },
+    });
+    render(<ListHarness />);
+    const table = await screen.findByRole("table", { name: "Sites" });
+    const row = (name: string) => within(within(table).getByRole("link", { name }).closest("tr")!);
+
+    expect(await row("blog").findByText("2 GiB of 10 GiB")).toBeInTheDocument();
+    expect(row("blog").getByRole("link", { name: "2 virus finds" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(row("blog").getByText("2 hours ago")).toBeInTheDocument();
+    expect(await row("shop").findByText("Failed")).toBeInTheDocument();
+    expect(row("stage").getByText("Staging of blog")).toBeInTheDocument();
+    expect(await row("stage").findByRole("link", { name: "1 cron job fails" })).toHaveAttribute("href", "#/sites/stage/cron");
+    expect(row("blog").getByText("HTTPS")).toHaveClass("ui-https");
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "attention");
+    // blog has virus finds, shop a full disk and a failed backup, stage a failing cron job.
+    expect(rowNames()).toEqual(["blog", "shop", "stage"]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "State" }), "staging");
+    expect(rowNames()).toEqual(["stage"]);
+  });
+
+  it("shows the display name with the system name and filters by it", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...shop, title: "Müller Online-Shop" }, blog] } } });
+    render(<ListHarness />);
+    const table = await screen.findByRole("table", { name: "Sites" });
+    const row = within(within(table).getByRole("link", { name: "Müller Online-Shop" }).closest("tr")!);
+    expect(row.getByTitle("System name")).toHaveTextContent("shop");
+    expect(row.getByRole("link", { name: "Müller Online-Shop" })).toHaveAttribute("href", "#/sites/shop");
+    // A site without a display name shows its name alone.
+    expect(within(table).getByRole("link", { name: "blog" })).toBeInTheDocument();
+    expect(within(within(table).getByRole("link", { name: "blog" }).closest("tr")!).queryByTitle("System name")).toBeNull();
+
+    await user.type(screen.getByRole("searchbox", { name: "Filter sites" }), "müller");
+    expect(rowNames()).toEqual(["Müller Online-Shop"]);
   });
 
   it("reads filter and sort from the address", async () => {
@@ -199,8 +256,8 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^HSTS/));
     await user.click(screen.getByRole("button", { name: "Create site" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("served over HTTP until its certificate is there");
-    expect(screen.getByRole("link", { name: "Open blog" })).toHaveAttribute("href", "#/sites/blog");
+    // Straight to the new site.
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       name: "blog",
       php: "8.4",
@@ -208,7 +265,78 @@ describe("Sites", () => {
       tls: true,
       hsts: true,
     });
-    expect(screen.getByLabelText(/^Name/)).toHaveValue("");
+    window.location.hash = "";
+  });
+
+  it("creates a Laravel site and warns about an older PHP", async () => {
+    const user = userEvent.setup();
+    const profiles = [
+      { name: "php", title: "Generic PHP", type: "php", hardening: {}, builtin: true },
+      { name: "laravel", title: "Laravel", type: "php", minPhp: "8.3", webDir: "public", hardening: {}, builtin: true },
+      { name: "static", title: "Static site", type: "static", hardening: {}, builtin: true },
+    ];
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/profiles": { body: { profiles, configFileSuffixes: [], limitPerMinute: 12, limitBurst: 10, maxPaths: 20 } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+    await waitFor(() => expect(screen.getByLabelText("PHP version")).toHaveValue("8.4"));
+
+    const app = await screen.findByRole("combobox", { name: /^Application/ });
+    expect(screen.queryByRole("option", { name: "Static site" })).not.toBeInTheDocument();
+    await user.selectOptions(app, "laravel");
+    expect(screen.getByText(/Serves the public folder/)).toBeInTheDocument();
+    expect(screen.queryByText("Laravel needs PHP 8.3 or newer.")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("PHP version"), "8.2");
+    expect(screen.getByText("Laravel needs PHP 8.3 or newer.")).toBeInTheDocument();
+
+    // Not sent while the PHP version is too old.
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    // With a new enough version, the profile goes along.
+    await user.selectOptions(screen.getByLabelText("PHP version"), "8.4");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "8.4", profile: "laravel" });
+    window.location.hash = "";
+  });
+
+  it("offers own profiles, also for a static site", async () => {
+    const user = userEvent.setup();
+    const profiles = [
+      { name: "static", title: "Static site", type: "static", hardening: {}, builtin: true },
+      { name: "php", title: "Generic PHP", type: "php", hardening: {}, builtin: true },
+      { name: "agency", title: "Agency PHP", type: "php", hardening: {}, builtin: false },
+      { name: "landing", title: "Landing pages", type: "static", webDir: "dist", hardening: {}, builtin: false },
+    ];
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/profiles": { body: { profiles, configFileSuffixes: [], limitPerMinute: 12, limitBurst: 10, maxPaths: 20 } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, php: "", tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "blog");
+    await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
+
+    const app = await screen.findByRole("combobox", { name: /^Application/ });
+    expect(within(app).getByRole("option", { name: "Agency PHP" })).toBeInTheDocument();
+    expect(within(app).queryByRole("option", { name: "Landing pages" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/^Static/));
+    const staticApp = screen.getByRole("combobox", { name: /^Application/ });
+    expect(staticApp).toHaveValue("static");
+    await user.selectOptions(staticApp, "landing");
+    expect(screen.getByText(/Serves the dist folder/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "", profile: "landing" });
+    window.location.hash = "";
   });
 
   it("puts a site on a second storage pool", async () => {
@@ -237,8 +365,26 @@ describe("Sites", () => {
     await user.type(screen.getByLabelText(/^Name/), "blog");
     await user.type(screen.getByLabelText(/^Domains/), "blog.example.com");
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByText("Site blog created.")).toBeInTheDocument();
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", pool: "vol1" });
+  });
+
+  it("preselects the pool the server marks as default", async () => {
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/pools": {
+        body: {
+          pools: [
+            { name: "default", path: "/home", sites: 3, available: true, quota: "enforced", default: false },
+            { name: "fast", path: "/srv/vol1", sites: 0, available: true, quota: "enforced", default: true },
+          ],
+        },
+      },
+    });
+    render(<ListHarness initial="new=1" />);
+    const select = await screen.findByLabelText(/^Storage pool/);
+    await waitFor(() => expect(select).toHaveValue("fast"));
   });
 
   it("shows no pool choice with only the default pool", async () => {
@@ -268,7 +414,7 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^HTTPS with/));
     expect(screen.queryByLabelText(/^HSTS/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ php: "8.2", tls: false, hsts: false });
   });
 
@@ -332,7 +478,7 @@ describe("Sites", () => {
     await user.click(screen.getByLabelText(/^Static/));
     expect(screen.queryByLabelText("PHP version")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site blog created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/blog"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ name: "blog", php: "" });
   });
 });
@@ -375,7 +521,7 @@ describe("redirect sites", () => {
     await user.type(screen.getByLabelText(/^Redirect to/), "https://new.example.com");
     await user.selectOptions(screen.getByLabelText(/^Status code/), "308");
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site old created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/old"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "old",
       php: "",
@@ -401,7 +547,7 @@ describe("redirect sites", () => {
     await user.type(screen.getByLabelText(/^Arguments/), "--listen{Enter}a b");
     expect(screen.getByText("Runs: ~/bin/server --listen 'a b'")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site svc created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/svc"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "svc",
       php: "",
@@ -428,7 +574,7 @@ describe("redirect sites", () => {
     await user.click(await screen.findByLabelText(/WSGI with gunicorn/));
     expect(screen.getByText("Runs: ~/.venv/bin/gunicorn --bind 127.0.0.1:PORT mysite.wsgi:application")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site dj created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/dj"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "dj",
       php: "",
@@ -447,10 +593,10 @@ describe("redirect sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Security", "Operations"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("https://new.example.com")).toBeInTheDocument();
 
-    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
     const card = within(screen.getByRole("region", { name: "Redirect" }));
     expect(card.getByRole("button", { name: "Save redirect" })).toBeDisabled();
     await user.click(card.getByLabelText(/^Keep the path/));
@@ -503,7 +649,7 @@ describe("reverse proxy sites", () => {
     await user.click(screen.getByLabelText(/^Do not verify/));
     expect(screen.getByText(/encrypted but not verified/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create site" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Site app created.");
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/app"));
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       name: "app",
       php: "",
@@ -522,12 +668,14 @@ describe("reverse proxy sites", () => {
     });
     render(<PageHarness />);
     const tabs = await screen.findByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "Web", "Logs"]);
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Security", "Operations"]);
     expect(within(screen.getByLabelText("Details of blog")).getByText("http://10.0.0.5:8080")).toBeInTheDocument();
     // The type sits next to the status and HTTPS in the page head.
     expect(within(screen.getByRole("heading", { name: "blog", level: 1 }).parentElement!).getByText("Reverse proxy")).toBeInTheDocument();
 
-    await user.click(within(tabs).getByRole("tab", { name: "Web" }));
+    await user.click(within(tabs).getByRole("tab", { name: "Security" }));
+    expect(within(screen.getByRole("tablist", { name: "Security" })).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Access", "Security headers"]);
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
     const card = within(screen.getByRole("region", { name: "Reverse proxy" }));
     expect(card.getByRole("button", { name: "Save reverse proxy" })).toBeDisabled();
     await user.click(card.getByLabelText(/^Send the target's host/));
@@ -538,12 +686,36 @@ describe("reverse proxy sites", () => {
 });
 
 // PageHarness switches tabs as the app does with the address.
-function PageHarness({ tab = "overview" }: { tab?: SiteTab }) {
+function PageHarness({ tab = "overview", role = "admin" }: { tab?: SiteTab; role?: string }) {
   const [t, setT] = useState<SiteTab>(tab);
-  return <SitePage name="blog" tab={t} onTab={setT} />;
+  return <SitePage name="blog" tab={t} onTab={setT} role={role} />;
 }
 
 describe("SitePage", () => {
+  it("shows open virus finds and failing cron jobs beside the name", async () => {
+    const f = { path: "x.php", signature: "S", sha256: "", size: 1, firstSeen: "", lastSeen: "", decidedAt: "" };
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "GET /api/v1/sites/blog/malware-scan": {
+        body: { engine: "on", schedule: "off", nextScheduled: "", runs: [], findings: [{ ...f, id: 1, state: "open" }, { ...f, id: 2, state: "open" }, { ...f, id: 3, state: "gone" }] },
+      },
+      "GET /api/v1/sites/blog/cron": {
+        body: {
+          statusKnown: true,
+          jobs: [
+            { id: 1, schedule: "@daily", command: "a", timeoutSec: 0, nice: null, paused: false, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", lastStart: 1 } },
+            { id: 2, schedule: "@daily", command: "b", timeoutSec: 0, nice: null, paused: true, createdAt: 1, updatedAt: 1, status: { running: false, result: "exit-code", lastStart: 1 } },
+          ],
+        },
+      },
+    });
+    render(<PageHarness />);
+    expect(await screen.findByRole("link", { name: "2 virus finds" })).toHaveAttribute("href", "#/sites/blog/malware");
+    expect(await screen.findByRole("link", { name: "1 cron job fails" })).toHaveAttribute("href", "#/sites/blog/cron");
+    expect(screen.getByRole("link", { name: /^blog\.example\.com/ })).toHaveAttribute("href", "https://blog.example.com");
+  });
+
   it("shows the details and the tabs of a site", async () => {
     const user = userEvent.setup();
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
@@ -554,20 +726,52 @@ describe("SitePage", () => {
     expect(d.getByText("HTTPS, HSTS, valid until 2027-02-01")).toBeInTheDocument();
     expect(d.getByText("www.blog.example.com")).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "blog" });
-    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Overview",
-      "Domains & HTTPS",
-      "Web",
-      "Files",
-      "PHP",
-      "Cron",
-      "SSH & SFTP",
-      "Limits",
-      "Logs",
-      "nginx",
-    ]);
-    await user.click(within(tabs).getByRole("tab", { name: "PHP" }));
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Domains & HTTPS", "App", "Files", "Security", "Operations"]);
+    expect(screen.getByLabelText("Section of blog")).toHaveValue("overview");
+    // Destructive actions sit together at the end of the overview.
+    const danger = screen.getByRole("region", { name: "Danger zone" });
+    expect(within(danger).getByRole("region", { name: "Availability" })).toBeInTheDocument();
+    expect(within(danger).getByRole("region", { name: "Delete site" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "App" }));
+    const inner = screen.getByRole("tablist", { name: "App" });
+    expect(within(inner).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Web", "PHP", "Cache", "Cron"]);
+    await user.click(within(inner).getByRole("tab", { name: "PHP" }));
     expect(screen.getByRole("tabpanel", { name: "PHP" })).toHaveTextContent("PHP of blog");
+    expect(within(tabs).getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("sets and removes the display name, keeping the system name visible", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [{ ...blog, title: "Company blog" }] } },
+      "PUT /api/v1/sites/blog/title": { body: { ...blog, title: "News" } },
+    });
+    render(<PageHarness />);
+    expect(await screen.findByRole("heading", { name: "Company blog", level: 1 })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Details of blog")).getByText("Company blog")).toBeInTheDocument();
+    // Renaming is rare: the card shows only once the Actions menu opens it.
+    expect(screen.queryByRole("region", { name: "Rename" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    const card = within(await screen.findByRole("region", { name: "Rename" }));
+    // The hint names the system name that stays, in code style.
+    expect(card.getByText("blog", { selector: "code" })).toBeInTheDocument();
+    const save = card.getByRole("button", { name: "Save display name" });
+    expect(save).toBeDisabled();
+
+    const input = card.getByLabelText("Display name");
+    // The field follows the loaded name; clear it only once it shows it.
+    await waitFor(() => expect(input).toHaveValue("Company blog"));
+    await user.clear(input);
+    await user.type(input, "  News ");
+    await user.click(save);
+    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ title: "News" }));
+
+    await user.click(card.getByRole("button", { name: "Remove display name" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({ title: "" }));
+    expect(input).toHaveAttribute("maxlength", "64");
   });
 
   it("explains a failed certificate", async () => {
@@ -641,11 +845,30 @@ describe("SitePage", () => {
     window.location.hash = "";
   });
 
-  it("offers delete and park only to admins and managers", async () => {
+  it("offers disabling and deleting only to admins and managers", async () => {
     mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
-    render(<PageHarness />);
+    const { unmount } = render(<PageHarness role="manager" />);
     expect(await screen.findByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete and park domains" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disable site" })).toBeInTheDocument();
+    unmount();
+
+    render(<PageHarness role="user" />);
+    expect(await screen.findByRole("region", { name: "Details" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Disable site" })).toBeNull();
+    expect(screen.queryByText("Danger zone")).toBeNull();
+  });
+
+  it("shows a user the domains and HTTPS without letting them change them", async () => {
+    const user = userEvent.setup();
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [blog] } } });
+    render(<PageHarness tab="domains" role="user" />);
+    expect(await screen.findByText("An administrator or manager changes these settings.")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Read only" })).toBeDisabled();
+    await user.click(screen.getByRole("tab", { name: "HTTPS" }));
+    expect(await screen.findByRole("switch", { name: /HTTPS with/ })).toBeDisabled();
+    // HSTS is the site's own choice (ADR-0035).
+    expect(screen.getByRole("switch", { name: /HSTS/ })).toBeEnabled();
   });
 
   it("fills in the new site form from a parked domain", async () => {
@@ -680,18 +903,33 @@ describe("SitePage", () => {
     });
     render(<PageHarness tab="domains" />);
     const domains = within(await screen.findByRole("region", { name: "Domains" }));
-    await user.type(domains.getByLabelText(/^Domains of blog/), "\nWWW.blog.example.com");
+    await user.type(domains.getByLabelText(/^Domains of blog/), "\nShop.example.com");
     await user.click(domains.getByRole("button", { name: "Save domains" }));
     expect(await domains.findByRole("status")).toHaveTextContent("served over HTTP until a certificate for the new domains");
 
+    // Saved, so the switch to the HTTPS tab is not held.
+    await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
     const https = within(screen.getByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HSTS/));
     expect(await https.findByText(/HSTS is off/)).toBeInTheDocument();
+    // HSTS on and HTTPS off are asked again; Cancel sends nothing.
+    await user.click(https.getByLabelText(/^HSTS/));
+    expect(https.getByText("Turn HSTS on?")).toBeInTheDocument();
+    expect(https.getByLabelText(/^HSTS/)).not.toBeChecked();
+    await user.click(https.getByRole("button", { name: "Cancel" }));
+    expect(https.queryByText("Turn HSTS on?")).not.toBeInTheDocument();
+    await user.click(https.getByLabelText(/^HSTS/));
+    await user.click(https.getByRole("button", { name: "Turn HSTS on" }));
+    expect(await https.findByText(/HSTS is on/)).toBeInTheDocument();
     await user.click(https.getByLabelText(/^HTTPS with/));
+    expect(https.getByText("Turn HTTPS off?")).toBeInTheDocument();
+    await user.click(https.getByRole("button", { name: "Turn HTTPS off" }));
     expect(await https.findByText("HTTPS is off. The site is served over HTTP.")).toBeInTheDocument();
+    expect(https.queryByText("Turn HTTPS off?")).not.toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([
-      ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "www.blog.example.com"] }],
+      ["/api/v1/sites/blog/domains", { domains: ["blog.example.com", "shop.example.com"], redirectDomains: [], waitForCertificate: true }],
       ["/api/v1/sites/blog/hsts", { enabled: false }],
+      ["/api/v1/sites/blog/hsts", { enabled: true }],
       ["/api/v1/sites/blog/tls", { enabled: false }],
     ]);
   });
@@ -708,8 +946,17 @@ describe("SitePage", () => {
     await user.clear(domains.getByLabelText(/^Domains of blog/));
     await user.click(domains.getByRole("button", { name: "Save domains" }));
     expect(domains.getByRole("alert")).toHaveTextContent("at least one domain");
-    const https = within(screen.getByRole("region", { name: "HTTPS" }));
+    // The refused change is not saved: switching tabs asks first.
+    await user.click(within(screen.getByRole("tablist", { name: "Domains & HTTPS" })).getByRole("tab", { name: "HTTPS" }));
+    expect(screen.getByText("Unsaved changes").parentElement).toHaveTextContent("Unsaved changes in Domains. Save them first, or drop them to open the other tab.");
+    expect(screen.getByRole("region", { name: "Domains" })).toBeInTheDocument();
+    // The card name jumps to the form.
+    await user.click(screen.getByRole("button", { name: "Domains" }));
+    expect(screen.getByLabelText(/^Domains of blog/)).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Drop changes" }));
+    const https = within(await screen.findByRole("region", { name: "HTTPS" }));
     await user.click(https.getByLabelText(/^HTTPS with/));
+    await user.click(https.getByRole("button", { name: "Turn HTTPS off" }));
     expect(await https.findByRole("alert")).toHaveTextContent("Certificates are not available");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
   });
@@ -767,6 +1014,36 @@ describe("SitePage", () => {
     expect(within(tabs).queryByRole("tab", { name: "PHP" })).not.toBeInTheDocument();
     expect(within(tabs).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("region", { name: "Programs from PHP" })).not.toBeInTheDocument();
+  });
+
+  it("shows both caches on their own tab, not on the PHP tab", async () => {
+    const user = userEvent.setup();
+    mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [blog] } },
+      "GET /api/v1/sites/blog/php/settings": { status: 404, body: { error: "not_found" } },
+      "GET /api/v1/sites/blog/object-cache": { status: 404, body: { error: "not_found" } },
+      "GET /api/v1/sites/blog/page-cache": { status: 404, body: { error: "not_found" } },
+    });
+    render(<PageHarness tab="php" />);
+    await screen.findByRole("region", { name: "PHP version" });
+    expect(screen.queryByRole("region", { name: "Object cache" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Page cache" })).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("tablist", { name: "App" })).getByRole("tab", { name: "Cache" }));
+    const panel = within(screen.getByRole("tabpanel", { name: "Cache" }));
+    expect(await panel.findByRole("region", { name: "Object cache" })).toBeInTheDocument();
+    // The page cache comes first: it works without a plugin in the app.
+    expect(panel.getAllByRole("region").map((r) => r.getAttribute("aria-label") ?? r.querySelector("h2,h3")?.textContent)).toEqual(["Page cache", "Object cache"]);
+    expect(panel.queryByRole("region", { name: "PHP version" })).not.toBeInTheDocument();
+  });
+
+  it("has no cache tab for a static site", async () => {
+    mockFetch({ ...php, "GET /api/v1/sites": { body: { sites: [{ ...blog, php: "", type: "static" }] } } });
+    render(<PageHarness tab="cache" />);
+    const tabs = await screen.findByRole("tablist", { name: "blog" });
+    expect(within(tabs).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    await userEvent.setup().click(within(tabs).getByRole("tab", { name: "App" }));
+    expect(within(screen.getByRole("tablist", { name: "App" })).queryByRole("tab", { name: "Cache" })).not.toBeInTheDocument();
   });
 
   it("keeps a PHP version that is no longer installed selectable, newest first", async () => {
@@ -888,6 +1165,9 @@ describe("SitePage", () => {
     });
     render(<PageHarness />);
     const box = within(await screen.findByRole("region", { name: "Maintenance" }));
+    // The switch applies at once; page and addresses sit behind "Change…".
+    expect(box.getByText(/Page: Built-in maintenance page · Allowed: none/)).toBeInTheDocument();
+    await user.click(box.getByRole("button", { name: "Change…" }));
     const select = await box.findByRole("combobox", { name: "Maintenance page" });
     await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(2));
     expect(within(select).queryByText("Built-in parking page")).not.toBeInTheDocument();
@@ -895,7 +1175,7 @@ describe("SitePage", () => {
 
     const allow = box.getByRole("textbox", { name: /Allowed addresses/ });
     await user.type(allow, "not-an-ip");
-    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(box.getByRole("alert")).toHaveTextContent('"not-an-ip" is not an IP address');
     expect(calls.some((c) => c.method === "PUT")).toBe(false);
 
@@ -903,12 +1183,13 @@ describe("SitePage", () => {
     await user.type(allow, "10.0.0.0/8");
     await user.click(box.getByRole("button", { name: "Add my current IP" }));
     await waitFor(() => expect(allow).toHaveValue("10.0.0.0/8\n198.51.100.7"));
-    await user.click(box.getByRole("button", { name: "Start maintenance" }));
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(await box.findByText("Maintenance is on. The listed addresses still see the site.")).toBeInTheDocument();
     expect(screen.getByText("Maintenance", { selector: ".ui-badge" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Details of blog")).getByText(/except 10.0.0.0\/8, 198.51.100.7/)).toBeInTheDocument();
 
-    await user.click(box.getByRole("button", { name: "End maintenance" }));
+    expect(box.getByRole("switch", { name: "Maintenance mode" })).toBeChecked();
+    await user.click(box.getByRole("switch", { name: "Maintenance mode" }));
     expect(await box.findByText("Maintenance is off. Everybody sees the site again.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
       { enabled: true, page: "p1", allowIps: ["10.0.0.0/8", "198.51.100.7"] },

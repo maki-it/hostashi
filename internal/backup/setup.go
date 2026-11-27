@@ -15,8 +15,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -258,7 +260,7 @@ func (a *Agent) Status() (agentapi.BackupStatus, error) {
 	return agentapi.BackupStatus{
 		Running: Running(a.statusDir()), Started: st.Started, Finished: st.Finished, OK: st.OK, Error: st.Error,
 		Items: items, LastPrune: st.LastPrune, LastCheck: st.LastCheck, LastReadCheck: st.LastReadCheck,
-		MaintenanceOK: st.MaintenanceOK, Maintenance: st.Maintenance,
+		MaintenanceOK: st.MaintenanceOK, Maintenance: st.Maintenance, Removed: st.Removed, RemoveError: st.RemoveError,
 	}, nil
 }
 
@@ -277,6 +279,181 @@ func (a *Agent) Snapshots(site string) ([]agentapi.BackupSnapshot, error) {
 			out = append(out, agentapi.BackupSnapshot{ID: s.ID, Time: s.Time, Kind: s.Kind, Database: s.Database, Bytes: s.Bytes, Files: s.Files})
 		}
 	}
+
+	return out, nil
+}
+
+// Marks returns the sites whose snapshots the next run removes. A mark
+// that a run finished after has done its work once no snapshot of the
+// last list is left for it; it is dropped then.
+func (a *Agent) Marks() ([]agentapi.BackupForgetMark, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.marks()
+}
+
+func (a *Agent) marks() ([]agentapi.BackupForgetMark, error) {
+	all, err := ReadMarks(a.configDir(), owner())
+	if err != nil || len(all) == 0 {
+		return all, err
+	}
+
+	st, err := ReadStatus(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	snaps, err := ReadSnapshots(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	keep := []agentapi.BackupForgetMark{}
+
+	for _, m := range all {
+		done := st.Finished.After(m.Requested)
+
+		for _, s := range snaps {
+			if m.Covers(s.Site, s.Time) {
+				done = false
+			}
+		}
+
+		if !done {
+			keep = append(keep, m)
+		}
+	}
+
+	if len(keep) != len(all) {
+		if err := WriteMarks(a.configDir(), keep); err != nil {
+			return nil, err
+		}
+	}
+
+	return keep, nil
+}
+
+// Forget marks the snapshots of a deleted site for removal by the next
+// run, or drops the mark (ADR-0074). Without Before the site must no
+// longer exist; with it, only snapshots taken before it are marked, those
+// of an earlier site whose name a newer site took. Something must be
+// marked: a site without such snapshots is ErrSnapshotNotFound.
+func (a *Agent) Forget(req agentapi.BackupForgetRequest) ([]agentapi.BackupForgetMark, error) {
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	marks, err := a.marks()
+	if err != nil {
+		return nil, err
+	}
+
+	out := []agentapi.BackupForgetMark{}
+
+	for _, m := range marks {
+		if m.Site != req.Site {
+			out = append(out, m)
+		}
+	}
+
+	if !req.Cancel {
+		if req.Before.IsZero() {
+			live, err := Sites(a.stateDir(), owner())
+			if err != nil {
+				return nil, err
+			}
+
+			for _, s := range live {
+				if s.Name == req.Site {
+					return nil, ErrSourceExists
+				}
+			}
+		}
+
+		snaps, err := ReadSnapshots(a.statusDir(), owner())
+		if err != nil {
+			return nil, err
+		}
+
+		m := agentapi.BackupForgetMark{Site: req.Site, Before: req.Before.UTC(), Requested: time.Now().UTC()}
+		found := false
+
+		for _, s := range snaps {
+			if m.Covers(s.Site, s.Time) {
+				found = true
+			}
+		}
+
+		if !found {
+			return nil, ErrSnapshotNotFound
+		}
+
+		out = append(out, m)
+	}
+
+	if err := ensureDir(a.configDir()); err != nil {
+		return nil, err
+	}
+
+	if err := WriteMarks(a.configDir(), out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// SnapshotSites summarizes the snapshot list of the last run by site
+// name, deleted sites included (ADR-0074). Panel snapshots are left out.
+func (a *Agent) SnapshotSites() ([]agentapi.BackupSiteSummary, error) {
+	all, err := ReadSnapshots(a.statusDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	live, err := Sites(a.stateDir(), owner())
+	if err != nil {
+		return nil, err
+	}
+
+	exists := map[string]bool{}
+	for _, s := range live {
+		exists[s.Name] = true
+	}
+
+	by := map[string]*agentapi.BackupSiteSummary{}
+
+	for _, s := range all {
+		if s.Site == "" {
+			continue
+		}
+
+		e := by[s.Site]
+		if e == nil {
+			e = &agentapi.BackupSiteSummary{Site: s.Site, Exists: exists[s.Site], Oldest: s.Time, Newest: s.Time}
+			by[s.Site] = e
+		}
+
+		e.Snapshots++
+
+		if s.Time.Before(e.Oldest) {
+			e.Oldest = s.Time
+		}
+
+		if s.Time.After(e.Newest) {
+			e.Newest = s.Time
+		}
+	}
+
+	out := make([]agentapi.BackupSiteSummary, 0, len(by))
+	for _, e := range by {
+		out = append(out, *e)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Site < out[j].Site })
 
 	return out, nil
 }
@@ -314,11 +491,23 @@ func (a *Agent) applyTimer(ctx context.Context) (agentapi.BackupInfo, error) {
 	return info, nil
 }
 
-// TimerWindow renders the drop-in: the timer fires at the start of the
-// window plus a random delay that is fixed per server and below the
-// window's length.
+// TimerWindow renders the drop-in. A daily run fires at the start of the
+// window plus a random delay below the window's length. Shorter intervals
+// fire every IntervalHours hours from midnight plus a random delay below
+// one hour. The packaged timer sets FixedRandomDelay, so the delay is the
+// same on every run of a server and the runs stay evenly spaced. systemd
+// never starts the service while a run is still active, so a run longer
+// than the interval skips the next start instead of overlapping it.
 func TimerWindow(s Settings) string {
-	return fmt.Sprintf("# Written by the Hostashi agent from the backup settings.\n[Timer]\nOnCalendar=\nOnCalendar=*-*-* %02d:00:00\nRandomizedDelaySec=%dh\n",
+	const head = "# Written by the Hostashi agent from the backup settings.\n[Timer]\nOnCalendar=\n"
+
+	if s.IntervalHours > 0 && s.IntervalHours < 24 {
+		delay := min(s.IntervalHours*60, 60)
+
+		return fmt.Sprintf(head+"OnCalendar=*-*-* 00/%d:00:00\nRandomizedDelaySec=%dmin\n", s.IntervalHours, delay)
+	}
+
+	return fmt.Sprintf(head+"OnCalendar=*-*-* %02d:00:00\nRandomizedDelaySec=%dh\n",
 		s.WindowStart, s.WindowEnd-s.WindowStart)
 }
 

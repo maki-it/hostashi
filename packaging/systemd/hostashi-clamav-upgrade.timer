@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Daily update of the installed ClamAV packages (ADR-0064): unattended-
+# upgrades takes only the security archive, but the distributions ship new
+# ClamAV versions in -updates (Ubuntu) and stable-updates (Debian) too.
+# clamav-install upgrade touches only the ClamAV packages and does nothing
+# while the scan is off. A random but fixed time per server.
+
+[Unit]
+Description=Daily update of ClamAV for Hostashi
+Documentation=https://github.com/maki-it/hostashi
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+RandomizedDelaySec=4h
+FixedRandomDelay=yes
+Persistent=yes
+Unit=hostashi-clamav-install@upgrade.service
+
+[Install]
+WantedBy=timers.target

@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Gear, Plus } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { formatHash } from "./routes";
+import { listProfiles, type Profile } from "./profiles";
+import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { getBackups, type BackupInfo } from "./backups";
+import { formatBytes, getSiteLimits, type Usage } from "./limits";
+import { relativeTime } from "./ui/Time";
+import { cronFailing, listCron } from "./cron";
+import { formatHash, type SiteTab } from "./routes";
+import { groupsForSite } from "./SiteNav";
 import {
+  compareVersions,
   createSite,
   domainsProblem,
   httpsLabel,
   httpsTone,
+  defaultPool,
   listPools,
-  listSites,
+  hasAccount,
+  listSitesMarked,
+  type SiteMarks,
   parseDomains,
   phpChoices,
   phpVersions,
@@ -26,6 +36,8 @@ import {
   type Site,
   type SiteProxy,
   type SiteRedirect,
+  maxTitleLength,
+  siteLabel,
 } from "./sites";
 import { newNodeApp, NodeFields, nodeProblem, useNodeStatus, type NodeValue } from "./SiteNode";
 import { newPythonApp, PythonFields, pythonFieldsProblem, pythonRequest, usePythonStatus, type PythonFieldsValue } from "./SitePython";
@@ -34,25 +46,30 @@ import { newProgramApp, ProgramFields, programFieldsProblem, programRequest, typ
 import { newProxy, ProxyFields } from "./SiteProxy";
 import { newestLine } from "./node";
 import { newRedirect, RedirectFields } from "./SiteRedirect";
-import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RowActions, Table, type Column, type Sort } from "./ui";
+import { Badge, Button, Card, Field, Notice, PageHead, Table, type Column, type Sort } from "./ui";
 
 type QueryProps = {
   /** The address query: q (text filter), state, sort, dir, new. */
   query: URLSearchParams;
   /** Replaces the query in the address, without a new history entry for typing. */
   onQuery: (q: URLSearchParams) => void;
+  /** The role of the logged-in account; users cannot create sites (ADR-0035). */
+  role?: string;
 };
 
 // useSites loads the sites and the PHP versions, and looks again while a
 // certificate is pending.
 export function useSites() {
   const [sites, setSites] = useState<Site[] | null>(null);
+  const [marks, setMarks] = useState<Record<string, SiteMarks>>({});
   const [php, setPhp] = useState<PHPVersions | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setSites(await listSites());
+      const r = await listSitesMarked();
+      setSites(r.sites);
+      setMarks(r.marks);
       setError("");
     } catch (err) {
       setError(siteMessage(err));
@@ -76,7 +93,79 @@ export function useSites() {
       .catch(() => setPhp({ installed: [], supported: [], legacy: [] }));
   }, [load]);
 
-  return { sites, php, error, load };
+  return { sites, marks, php, error, load };
+}
+
+// Disk is the disk use of a site and its limit (0: none).
+type Disk = { usage: Usage; limit: number };
+
+// useDisks loads the disk use of the sites with files, a few at a time, so
+// a long list does not ask the agent for every site at once.
+// usePerSite loads one value per site after the list, four requests at a
+// time. A site whose request fails stays out of the result.
+function usePerSite<T>(names: string[], load: (name: string) => Promise<T | undefined>): Record<string, T> {
+  const [out, setOut] = useState<Record<string, T>>({});
+  const key = names.join(" ");
+  useEffect(() => {
+    let live = true;
+    const queue = key ? key.split(" ") : [];
+    const next = async (): Promise<void> => {
+      const name = queue.shift();
+      if (!name || !live) return;
+      try {
+        const v = await load(name);
+        if (live && v !== undefined) setOut((o) => ({ ...o, [name]: v }));
+      } catch {
+        // The cell stays empty for this site.
+      }
+      return next();
+    };
+    void Promise.all([next(), next(), next(), next()]);
+    return () => {
+      live = false;
+    };
+    // load is a module-level function; the names decide what to fetch.
+  }, [key]);
+  return out;
+}
+
+const loadDisk = async (name: string): Promise<Disk | undefined> => {
+  const l = await getSiteLimits(name);
+  return l.usage ? { usage: l.usage, limit: l.limits.diskBytes } : undefined;
+};
+
+// loadCronFailing counts the active cron jobs of a site whose last run failed.
+const loadCronFailing = async (name: string): Promise<number> => (await listCron(name)).jobs.filter((j) => !j.paused && cronFailing(j.status)).length;
+
+const activeWith = (sites: Site[] | null, tab: SiteTab) =>
+  (sites ?? []).filter((s) => s.state === "active" && groupsForSite(s).some((g) => g.tabs.some((t) => t.id === tab))).map((s) => s.name);
+
+// useBackupStatus loads the backup state for administrators; for other
+// roles the request fails and the column stays hidden.
+function useBackupStatus(): BackupInfo | null {
+  const [info, setInfo] = useState<BackupInfo | null>(null);
+  useEffect(() => {
+    let live = true;
+    getBackups().then(
+      (b) => live && setInfo(b),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return info;
+}
+
+// backupOf says how the last backup run went for a site: "" when the site
+// was not part of it.
+function backupOf(info: BackupInfo, s: Site): { word: string; tone?: "err" | "warn"; at: number } {
+  const st = info.status;
+  const item = st.items.find((i) => i.site === s.name && i.kind === "files");
+  if (!info.ready || !item || !st.finished) return { word: "", at: 0 };
+  if (item.error) return { word: "Failed", tone: "err", at: 0 };
+  const at = new Date(st.finished).getTime();
+  return { word: relativeTime(new Date(at)), at, ...(info.overdue ? { tone: "warn" as const } : {}) };
 }
 
 const stateFilters = [
@@ -85,60 +174,171 @@ const stateFilters = [
   { value: "maintenance", label: "Maintenance" },
   { value: "disabled", label: "Disabled" },
   { value: "problem", label: "Certificate problems" },
+  { value: "attention", label: "Needs attention" },
+  { value: "staging", label: "Staging sites" },
 ] as const;
 
-function matches(s: Site, q: string, state: string): boolean {
-  if (q && !s.name.includes(q) && !s.domains.some((d) => d.includes(q))) return false;
+function matches(s: Site, q: string, state: string, m: SiteMarks | undefined, disk: Disk | undefined, failing: number, backups: BackupInfo | null): boolean {
+  if (q && !s.name.includes(q) && !(s.title ?? "").toLowerCase().includes(q) && !s.domains.some((d) => d.includes(q))) return false;
+  if (state === "attention")
+    return siteIssues(s).length > 0 || (m?.openFindings ?? 0) > 0 || failing > 0 || (disk !== undefined && disk.usage.level !== "ok") || (backups !== null && backupOf(backups, s).tone !== undefined);
+  if (state === "staging") return m?.staging === true;
   if (state === "problem") return s.tls.enabled && !s.tls.active && Boolean(s.tls.error);
   if (state) return siteStatus(s).key === state;
   return true;
 }
 
-const columns: Column<Site>[] = [
-  {
-    key: "name",
-    header: "Site",
-    sortValue: (s) => s.name,
-    cell: (s) => (
-      <div className="ui-cell-main">
-        <a href={formatHash({ page: "sites", site: { name: s.name } })}>{s.name}</a>
-        <span>{s.domains[0]}</span>
-      </div>
-    ),
-  },
-  { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
-  {
-    key: "https",
-    header: "HTTPS",
-    sortValue: (s) => httpsLabel(s.tls),
-    cell: (s) => <Badge tone={httpsTone(s.tls)}>{httpsLabel(s.tls)}</Badge>,
-  },
-  {
-    key: "state",
-    header: "State",
-    sortValue: (s) => siteStatus(s).word,
-    cell: (s) => {
-      const st = siteStatus(s);
-      return <Badge tone={st.tone}>{st.word}</Badge>;
+// siteIssues lists what needs a look on a site: maintenance and a
+// certificate that is missing or failed. Errors sort first.
+export function siteIssues(s: Site): { word: string; tone: "ok" | "warn" | "err" | "off" }[] {
+  const out: { word: string; tone: "ok" | "warn" | "err" | "off" }[] = [];
+  const st = siteStatus(s);
+  if (st.key === "maintenance") out.push({ word: st.word, tone: st.tone });
+  if (s.tls.enabled && !s.tls.active) out.push({ word: httpsLabel(s.tls), tone: httpsTone(s.tls) });
+  return out;
+}
+
+const rank = { err: 0, warn: 1, off: 2, ok: 3 } as const;
+
+// statusRank sorts problems first: errors, warnings, then HTTP only.
+function statusRank(s: Site): number {
+  const r = Math.min(3, ...siteIssues(s).map((i) => rank[i.tone]));
+  return r === 3 && !s.tls.enabled ? 2 : r;
+}
+
+// stateBadge marks a site that is not simply on: switched off, being
+// created or being deleted. An active site gets no mark (Kim, 2026-11-25).
+function stateBadge(s: Site) {
+  const st = siteStatus(s);
+  if (st.key === "active" || st.key === "maintenance") return null;
+  return <Badge tone={st.tone}>{st.key === "disabled" ? "Disabled" : st.word}</Badge>;
+}
+
+type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>; crons: Record<string, number>; backups: BackupInfo | null };
+
+// siteColumns are the columns of the list. Disk and backup come in after
+// the list; the backup column is only there for administrators.
+function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[] {
+  const cols: Column<Site>[] = [
+    {
+      key: "name",
+      header: "Site",
+      sortValue: (s) => siteLabel(s).toLowerCase(),
+      cell: (s) => {
+        const m = marks[s.name];
+        return (
+          <div className={`ui-cell-main${s.disabled ? " ui-cell-off" : ""}`}>
+            <span className="ui-row ui-row-tight">
+              <a className="ui-row-link" href={formatHash({ page: "sites", site: { name: s.name } })}>
+                {siteLabel(s)}
+              </a>
+              {stateBadge(s)}
+              {m?.cloneOf && <Badge tone={m.staging ? "warn" : "off"}>{`${m.staging ? "Staging" : "Copy"} of ${m.cloneOf}`}</Badge>}
+            </span>
+            <span>
+              {s.title && (
+                <>
+                  <span className="ui-mono" title="System name">
+                    {s.name}
+                  </span>
+                  {" · "}
+                </>
+              )}
+              {s.domains[0]}
+            </span>
+          </div>
+        );
+      },
     },
-  },
-  {
-    key: "actions",
-    header: "Actions",
-    srHeader: true,
-    cell: (s) => (
-      <RowActions>
-        <IconLink label={`Settings of ${s.name}`} icon={<Gear size={16} />} href={formatHash({ page: "sites", site: { name: s.name } })} />
-      </RowActions>
-    ),
-  },
-];
+    { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
+    {
+      key: "disk",
+      header: "Disk",
+      sortValue: (s) => disks[s.name]?.usage.bytes ?? -1,
+      cell: (s) => {
+        const d = disks[s.name];
+        if (!d) return <span className="ui-hint">—</span>;
+        const tone = d.usage.level === "critical" ? "err" : d.usage.level === "warning" ? "warn" : undefined;
+        return (
+          <span className="ui-cellbar" data-tone={tone}>
+            {d.limit > 0 && (
+              <span className="ui-cellbar-track" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, d.usage.bytesPercent)}%` }} />
+              </span>
+            )}
+            <span>{d.limit > 0 ? `${formatBytes(d.usage.bytes)} of ${formatBytes(d.limit)}` : formatBytes(d.usage.bytes)}</span>
+          </span>
+        );
+      },
+    },
+  ];
+  if (backups) {
+    cols.push({
+      key: "backup",
+      header: "Last backup",
+      sortValue: (s) => backupOf(backups, s).at,
+      cell: (s) => {
+        const b = backupOf(backups, s);
+        if (!b.word) return <span className="ui-hint">—</span>;
+        return b.tone ? <Badge tone={b.tone}>{b.word}</Badge> : b.word;
+      },
+    });
+  }
+  cols.push({
+    key: "status",
+    header: "Status",
+    sortValue: (s) => statusRank(s) - ((marks[s.name]?.openFindings ?? 0) > 0 ? 10 : 0) - ((crons[s.name] ?? 0) > 0 ? 5 : 0),
+    cell: (s) => {
+      const finds = marks[s.name]?.openFindings ?? 0;
+      const failing = crons[s.name] ?? 0;
+      return (
+        <span className="ui-row ui-row-tight">
+          {s.tls.active ? (
+            <span className="ui-https">
+              <LockSimple size={16} aria-hidden />
+              HTTPS
+            </span>
+          ) : (
+            <span className="ui-https ui-https-off">
+              <LockSimpleOpen size={16} aria-hidden />
+              HTTP only
+            </span>
+          )}
+          {finds > 0 && (
+            <a href={formatHash({ page: "sites", site: { name: s.name, tab: "malware" } })}>
+              <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+            </a>
+          )}
+          {failing > 0 && (
+            <a href={formatHash({ page: "sites", site: { name: s.name, tab: "cron" } })}>
+              <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
+            </a>
+          )}
+          {siteIssues(s).map((i) => (
+            <Badge key={i.word} tone={i.tone}>
+              {i.word}
+            </Badge>
+          ))}
+        </span>
+      );
+    },
+  });
+  return cols;
+}
 
 // Sites is the list of sites (ADR-0037): a table that can be sorted and
 // filtered, with the choice kept in the address. "New site" opens the form
 // as its own view (?new=1). Each site's settings are on its own page.
-export function Sites({ query, onQuery }: QueryProps) {
-  const { sites, php, error, load } = useSites();
+export function Sites({ query, onQuery, role = "user" }: QueryProps) {
+  const { sites, marks, php, error, load } = useSites();
+  const staff = role === "admin" || role === "manager";
+  const disks = usePerSite(
+    (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name),
+    loadDisk,
+  );
+  const crons = usePerSite(activeWith(sites, "cron"), loadCronFailing);
+  const backups = useBackupStatus();
+  const columns = useMemo(() => siteColumns({ marks, disks, crons, backups }), [marks, disks, crons, backups]);
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(query);
     if (value) next.set(key, value);
@@ -146,7 +346,7 @@ export function Sites({ query, onQuery }: QueryProps) {
     onQuery(next);
   };
 
-  if (query.get("new") === "1") {
+  if (staff && query.get("new") === "1") {
     return (
       <>
         <PageHead title="New site" description="A site answers for its domains: with PHP, static files, a Node.js app or a program of its own from its own Linux user and home, or as a redirect or reverse proxy." />
@@ -159,7 +359,7 @@ export function Sites({ query, onQuery }: QueryProps) {
   const state = query.get("state") ?? "";
   const sortKey = query.get("sort");
   const sort: Sort | undefined = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : undefined;
-  const shown = (sites ?? []).filter((s) => matches(s, q, state));
+  const shown = (sites ?? []).filter((s) => matches(s, q, state, marks[s.name], disks[s.name], crons[s.name] ?? 0, backups));
 
   return (
     <>
@@ -167,10 +367,12 @@ export function Sites({ query, onQuery }: QueryProps) {
         title="Sites"
         description="Every site has its domains and certificate. PHP, static, Node.js and app sites also have their own Linux user; redirect and reverse proxy sites have none."
         actions={
-          <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
-            <Plus size={16} aria-hidden="true" />
-            New site
-          </a>
+          staff && (
+            <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
+              <Plus size={16} aria-hidden="true" />
+              New site
+            </a>
+          )
         }
       />
       {error && <Notice tone="err" title={error} />}
@@ -292,6 +494,7 @@ type CreateProps = {
 
 function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProps) {
   const [name, setName] = useState("");
+  const [title, setTitleText] = useState("");
   const [domains, setDomainsText] = useState(parked);
   const [version, setVersion] = useState<string | null>(null);
   const [kind, setKind] = useState<ChosenType>("php");
@@ -308,16 +511,27 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   const [hsts, setHsts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState("");
-  const [created, setCreated] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [pool, setPool] = useState("default");
+  // Application profiles of PHP and static sites (ADR-0069), built-in and
+  // own ones; without the list a site gets the default of its type.
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profile, setProfile] = useState("php");
+
+  useEffect(() => {
+    listProfiles()
+      .then((c) => setProfiles(c.profiles))
+      .catch(() => setProfiles([]));
+  }, []);
 
   // The pool choice shows only with a second pool (ADR-0016). Without the
   // list, the site goes to the default pool as before.
   useEffect(() => {
     listPools()
-      .then(setPools)
+      .then((list) => {
+        setPools(list);
+        setPool(defaultPool(list));
+      })
       .catch(() => setPools([]));
   }, []);
   const choosePool = pools.length > 1;
@@ -326,6 +540,30 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   // Default to the newest installed version that is not legacy.
   const newest = [...(php?.installed ?? [])].reverse().find((v) => !php?.legacy.includes(v)) ?? "";
   const phpValue = version ?? newest;
+  const kindProfiles = profiles.filter((p) => p.type === kind);
+  const defaultProfile = kind === "static" ? "static" : "php";
+  const profileValue = kindProfiles.some((p) => p.name === profile) ? profile : defaultProfile;
+  const chosenProfile = kindProfiles.find((p) => p.name === profileValue);
+  const tooOld = kind === "php" && !!chosenProfile?.minPhp && !!phpValue && compareVersions(phpValue, chosenProfile.minPhp) < 0;
+
+  const profileChoice = (
+    <Field
+      label="Application"
+      hint={
+        chosenProfile?.webDir
+          ? `Serves the ${chosenProfile.webDir} folder and brings the hardening rules for ${chosenProfile.title}; both can be changed later.`
+          : "Brings fitting hardening rules; they can be changed later under Security."
+      }
+    >
+      <select className="ui-select" value={profileValue} onChange={(e) => setProfile(e.target.value)}>
+        {kindProfiles.map((p) => (
+          <option key={p.name} value={p.name}>
+            {p.title}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -344,8 +582,12 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     }
     setBusy(true);
     setError("");
-    setDone("");
     try {
+      if (tooOld) {
+        setError(`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`);
+        setBusy(false);
+        return;
+      }
       if (kind === "php" && !phpValue) {
         setError("No PHP version is installed. Install one under PHP, or create a static site.");
         setBusy(false);
@@ -353,31 +595,22 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
       }
       const s = await createSite({
         name,
+        ...(title.trim() && { title: title.trim() }),
         ...(choosePool && !webOnly(kind) && { pool }),
         php: kind === "php" ? phpValue : "",
         domains: list,
         tls,
         hsts: tls && hsts,
+        ...((kind === "php" || kind === "static") && profileValue !== defaultProfile && { profile: profileValue }),
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
         ...(kind === "node" && { type: "node" as const, node: nodeValue }),
         ...(kind === "app" && { type: "app" as const, app: programRequest(program) }),
         ...(kind === "python" && { type: "python" as const, python: pythonRequest(pythonValue) }),
       });
-      setDone(
-        s.tls.enabled && !s.tls.active
-          ? `Site ${s.name} created. It is served over HTTP until its certificate is there.`
-          : `Site ${s.name} created.`,
-      );
-      setCreated(s.name);
-      setName("");
-      setDomainsText("");
-      setVersion(null);
-      setRedirectValue(newRedirect());
-      setProxyValue(newProxy());
-      setNodeValue(null);
-      setProgramValue(newProgramApp());
       await onChange();
+      // Straight to the new site; its overview shows the certificate state.
+      window.location.hash = formatHash({ page: "sites", site: { name: s.name } });
     } catch (err) {
       setError(siteMessage(err));
     } finally {
@@ -388,7 +621,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-        {parked && !created && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
+        {parked && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
         <Field
           label="Name"
           hint={
@@ -398,6 +631,9 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
           }
         >
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
+        </Field>
+        <Field label="Display name (optional)" hint="Shown in the panel instead of the name. Free text, up to 64 characters; it can be changed at any time.">
+          <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} autoComplete="off" />
         </Field>
         <Field label="Domains" hint="One per line. The first one is the primary domain.">
           <textarea
@@ -436,8 +672,11 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
             <p className="ui-hint ui-flush">
               Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
             </p>
+            {kindProfiles.length > 1 && profileChoice}
+            {tooOld && <Notice tone="warn" title={`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`} />}
           </>
         )}
+        {kind === "static" && kindProfiles.length > 1 && profileChoice}
         {kind === "static" && (
           <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
         )}
@@ -458,11 +697,6 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         )}
         {tls && <p className="ui-hint ui-flush">The domains must point to this server, or the certificate cannot be issued.</p>}
         {error && <Notice tone="err" title={error} />}
-        {done && (
-          <Notice tone="ok" title={done}>
-            {created && <a href={formatHash({ page: "sites", site: { name: created } })}>Open {created}</a>}
-          </Notice>
-        )}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? "Creating…" : "Create site"}

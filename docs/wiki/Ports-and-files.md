@@ -21,6 +21,9 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | Path | What |
 |------|------|
 | `/usr/local/bin/hostashi` | the program (panel, agent and command line in one file) |
+| `/usr/local/bin/wp` | the site users' `wp` command: WP-CLI with the PHP version of their site, see [SSH and SFTP](SSH-and-SFTP.md#wp-cli) |
+| `/etc/hostashi-php/<site>` | the PHP version of a PHP site, written by the agent for the `wp` command |
+| `/opt/hostashi/wp-cli/<version>/wp-cli.phar` | the pinned WP-CLI, installed with the first WordPress install |
 | `/etc/hostashi/hostashi.env` | settings written by the installer, such as the panel address |
 | `/etc/hostashi/secret.key` | the panel's secret key. **Back it up outside the server**; see below. |
 | `/var/lib/hostashi/hostashi.db` | the panel database: sites, users, settings |
@@ -29,7 +32,9 @@ Hostashi's firewall lets in only these ports, plus what you open in the panel or
 | `/run/hostashi-valkey/<site>/valkey.sock` | the object cache (Valkey) of a site, if it is on. Only the site's own user can open it; it holds nothing worth keeping and is empty after a restart. |
 | `/var/log/nginx/sites/<site>/` | access and error logs of a site, readable only by root and in the panel |
 | `/var/log/hostashi/php/<site>/` | PHP error log of a site, readable only by root and in the panel |
-| `/var/log/nginx/hostashi/` | access and error logs of requests for no site |
+| `/var/log/hostashi/app/<site>/` | the output of a site's app (`app.log`) and of its last WordPress install (`wordpress.log`), readable only by root and in the panel |
+| `/var/log/nginx/hostashi/` | access and error logs of requests for no site; `error.log` also gets the failed site passwords that fail2ban reads |
+| `/var/lib/hostashi-web-auth/` | the password files of sites with [access protection](Access-protection.md): user names and password hashes, readable by root and the web server only |
 | `/etc/logrotate.d/hostashi` | daily rotation of these logs; the panel sets how many days are kept (default 7) |
 | `/var/log/hostashi-install.log` | the installer's log |
 | `/usr/share/hostashi/adminer/` | the database tool: the pinned Adminer (its build with all drivers; Hostashi's front lets only the MySQL and PostgreSQL drivers run), Hostashi's front for it, and `adminer.css` with the panel's fonts for the panel's look |

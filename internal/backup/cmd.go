@@ -108,7 +108,18 @@ func run(ctx context.Context, cfg RunConfig, prev Status) Status {
 		return fail(err)
 	}
 
-	r := &Runner{Settings: settings, Prev: prev, Log: cfg.Log}
+	r := &Runner{Settings: settings, Prev: prev, Log: cfg.Log, Live: map[string]bool{}}
+	for _, s := range sites {
+		r.Live[s.Name] = true
+	}
+
+	// Snapshots of deleted sites to remove (ADR-0074); without the list
+	// the run still removes what DeletedSiteDays expires.
+	if r.Marks, err = ReadMarks(cfg.ConfigDir, 0); err != nil {
+		cfg.Log.ErrorContext(ctx, "sites marked for removal", "err", err)
+
+		r.Marks = nil
+	}
 
 	// External databases (ADR-0041). A problem here does not stop the
 	// local part: the run saves everything else and reports it.

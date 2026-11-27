@@ -111,19 +111,22 @@ Things to know:
 | `--no-firewall` | No Hostashi firewall. Only use this behind a provider firewall. |
 | `--no-db-tool` | Do not install the web database tool (Adminer on port 8444). Given on a server that has it, the installer removes it. |
 | `--no-quota` | Do not enable disk quota. Sites then have no disk limit. |
-| `--auto-update` | Also install new Hostashi versions automatically: unattended-upgrades takes them from `get.hostashi.com/apt` together with the daily security updates. Off by default; then `sudo apt upgrade` installs them. Each update keeps a copy of the panel database first. A later `apply` without the option turns it off again. |
+| `--auto-update` | Also install new Hostashi versions automatically: unattended-upgrades takes them from `get.hostashi.com/apt` together with the daily security updates. Off by default; then `sudo apt upgrade` installs them. Each update keeps a copy of the panel database first. An admin can also switch it on and off in the panel (**System**, **Updates**), so a later `apply` without the option leaves it as it is. |
+| `--malware-scan` | Install ClamAV from the distribution for the malware scan. Off by default; an admin can also switch it on and off in the panel later, so a later `apply` without the option leaves it as it is. A scan needs about 1.5 GB of RAM while it runs. |
 | `--allow-untested` | Accept an operating system release that is not on the supported list. |
 | `--no-apt` | Install no packages. A step that needs a missing package fails and names it. Meant for runs from the `hostashi` package, which brings its dependencies. |
 
 ### Saved options and `upgrade`
 
-After each successful `apply` the installer saves its options (all of the above except `--binary` and `--no-apt`) to `/etc/hostashi/install.options`, one per line, owned by root with mode `0600`. `install.sh upgrade` runs `apply --yes --no-apt` again with these options and the binary of the `hostashi` package (`/usr/bin/hostashi`, or `--binary PATH`). To change an option, run `apply` again with the new options; the file follows.
+After each successful `apply` the installer saves its options (all of the above except `--binary`, `--no-apt`, `--auto-update` and `--malware-scan`) to `/etc/hostashi/install.options`, one per line, owned by root with mode `0600`. `install.sh upgrade` runs `apply --yes --no-apt` again with these options and the binary of the `hostashi` package (`/usr/bin/hostashi`, or `--binary PATH`). To change an option, run `apply` again with the new options; the file follows.
 
 The installer refuses an options file that anyone but root could have written, or that holds anything but the options above.
 
 ### Updates with the package
 
 The Health page and the overview show when a newer version is in the Hostashi repository (from apt's package list, which apt refreshes every day), and admins get one email per new version. On a server set up this way, installing a newer `hostashi` package (`apt upgrade`) updates it by itself. Before the new files land, the package stops the panel and keeps a copy of the panel database in `/var/lib/hostashi-installer/upgrade/` (the three newest). Then it runs `install.sh upgrade`, which restarts agent and panel, and waits up to 60 seconds for the panel to answer. The output goes to `/var/log/hostashi-upgrade.log`.
+
+The installer also adds the suite `runtimes` of the same repository (`/etc/apt/sources.list.d/hostashi-runtimes.sources`, signed with its own key, `/usr/share/keyrings/hostashi-runtimes-keyring.asc`) and installs the package `hostashi-runtimes`. It holds the pinned Node.js and Python releases as data, no Hostashi code; unattended-upgrades updates it every day, so patch releases of the installed lines arrive without a new Hostashi version. A pin (`/etc/apt/preferences.d/00hostashi-runtimes`) lets this suite provide only that package. An upgrade of the `hostashi` package installs it in the background right after apt is done (`hostashi-runtimes-install.service`); where that fails, `hostashi-runtimes-install.timer` tries again once a day, and `sudo systemctl start hostashi-runtimes-install.service` does it at once.
 
 If that fails, the panel runs again as far as possible and apt reports an error; the package stays unconfigured. Fix the cause (the log says what failed), then run `sudo dpkg --configure -a`.
 

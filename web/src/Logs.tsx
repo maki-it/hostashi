@@ -17,6 +17,7 @@ import {
   type LogKind,
   type LogRetention,
 } from "./logs";
+import { formatHash } from "./routes";
 import { siteType, type Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
@@ -206,13 +207,24 @@ export function SiteLogs({ site, admin }: Props) {
           </div>
         </div>
       </Card>
-      <RetentionCard admin={admin} />
+      <p className="ui-hint">
+        The server deletes old logs after the days an administrator set
+        {admin ? (
+          <>
+            {" "}
+            under <a href={formatHash({ page: "system" })}>System</a>.
+          </>
+        ) : (
+          ". Ask them if you need logs for longer."
+        )}
+      </p>
     </>
   );
 }
 
-// RetentionCard says how long the server keeps the logs; admins change it.
-function RetentionCard({ admin }: { admin: boolean }) {
+// LogRetentionCard says how long the server keeps the logs of every site;
+// it lives under System, as it is one value for the server (ADR-0053).
+export function LogRetentionCard() {
   const [r, setR] = useState<LogRetention | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -220,22 +232,13 @@ function RetentionCard({ admin }: { admin: boolean }) {
   const [done, setDone] = useState("");
 
   useEffect(() => {
-    if (!admin) return;
     getLogRetention()
       .then((v) => {
         setR(v);
         setText(String(v.days));
       })
       .catch((err: unknown) => setError(logMessage(err)));
-  }, [admin]);
-
-  if (!admin) {
-    return (
-      <p className="ui-hint">
-        The server deletes old logs after the days an administrator set. Ask them if you need logs for longer.
-      </p>
-    );
-  }
+  }, []);
 
   const problem = r ? retentionProblem(text, r) : "";
 
@@ -260,7 +263,7 @@ function RetentionCard({ admin }: { admin: boolean }) {
     <Card title="Log retention">
       <form className="ui-stack" onSubmit={save} noValidate>
         <p className="ui-hint">
-          One value for every site on this server: access, web server, PHP and app logs, and nginx's logs of requests for no site. Logs are
+          One value for every site on this server: access, web server, PHP, app and WordPress install logs, and nginx's logs of requests for no site. Logs are
           rotated daily and deleted after this many days. Match it to what your privacy policy and data processing agreements promise.
         </p>
         {r && (

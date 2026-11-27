@@ -27,8 +27,20 @@ export type SiteTLS = {
   renewPending?: boolean;
 };
 
+// SiteWWW is the www redirect of a site (ADR-0065). It acts on pairs only:
+// a domain and its www name that are both domains of the site.
+export type WWWMode = "off" | "to-www" | "to-non-www";
+export type SiteWWW = {
+  mode: WWWMode;
+  pairs: { bare: string; www: string }[];
+  missing: string[]; // names whose adding would make a further pair
+};
+
 export type Site = {
   name: string;
+  // Display name (ADR-0072), "" for none; name stays the system name
+  // (Linux user, home folder, API path). Older answers lack it.
+  title?: string;
   pool: string;
   state: "creating" | "active" | "deleting" | string;
   // static, php, node, app, proxy or redirect (ADR-0054), python (ADR-0061). Older answers lack it.
@@ -54,9 +66,27 @@ export type Site = {
   disabledPage: string; // maintenance page shown while disabled (ADR-0047)
   maintenance: SiteMaintenance;
   domains: string[]; // the first one is the primary domain
+  // Names that answer with 301 to the primary domain and stay on the
+  // certificate (ADR-0068). Older answers lack it.
+  redirectDomains?: string[];
+  // A domain change that waits for its certificate, null for none
+  // (ADR-0068). Older answers lack it.
+  pendingDomains?: PendingDomains | null;
+  // The redirect between example.com and www.example.com (ADR-0065).
+  // Older answers lack it.
+  www?: SiteWWW;
   tls: SiteTLS;
   createdAt: string;
   updatedAt: string;
+};
+
+/** A domain change that waits for a certificate for its names (ADR-0068). */
+export type PendingDomains = {
+  domains: string[];
+  redirectDomains: string[];
+  requestedAt: string;
+  error: string; // the last failed attempt, "" for none
+  failedAt: string | null;
 };
 
 export type SiteType = "static" | "php" | "node" | "app" | "python" | "proxy" | "redirect";
@@ -157,11 +187,14 @@ export type PHPVersions = {
 
 export type NewSite = {
   name: string;
+  title?: string;
   pool?: string;
   php: string;
   domains: string[];
   tls: boolean;
   hsts: boolean;
+  /** Application profile of a PHP site (ADR-0069); omitted: generic PHP. */
+  profile?: string;
   type?: "redirect" | "proxy" | "node" | "app" | "python";
   redirect?: SiteRedirect;
   proxy?: SiteProxy;
@@ -235,8 +268,9 @@ export function redirectProblem(target: string, own: string[]): string {
   return "";
 }
 
-// Pool is a storage pool for site homes (ADR-0016). Root adds pools on the
-// server (hostashi pool add); the panel only chooses one for a new site.
+// Pool is a storage pool for site homes (ADR-0016). Root adds and removes
+// pools on the server (hostashi pool add); admins rename them in the panel
+// and choose the default (addendum 2).
 export type Pool = {
   name: string;
   path: string;
@@ -246,9 +280,36 @@ export type Pool = {
   quota?: "off" | "counting" | "enforced";
   freeBytes?: number;
   totalBytes?: number;
+  // New sites that name no pool land here.
+  default: boolean;
 };
 
 export const listPools = () => request<{ pools: Pool[] }>("GET", "/pools").then((r) => r.pools);
+export const renamePool = (name: string, newName: string) =>
+  request<Pool>("POST", "/pools/" + encodeURIComponent(name) + "/rename", { name: newName });
+export const setDefaultPool = (name: string) => request<Pool>("POST", "/pools/" + encodeURIComponent(name) + "/default");
+
+/** The name of the default pool; "default" for an agent that marks none. */
+export function defaultPool(pools: readonly Pool[]): string {
+  return pools.find((p) => p.default)?.name ?? "default";
+}
+
+// Pool names as the agent accepts them (poolNameRe in internal/agentapi).
+const poolName = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** Why a new pool name cannot be used, or "". */
+export function poolNameProblem(name: string, pools: readonly Pool[], current: string): string {
+  if (name === "") return "Enter a name.";
+  if (!poolName.test(name)) return "Lowercase letters, digits and hyphens, starting with a letter, at most 32 characters.";
+  if (name !== current && pools.some((p) => p.name === name)) return "Another pool already has this name.";
+  return "";
+}
+
+/** The used share of a pool's volume, or null without sizes. */
+export function poolUsed(p: Pool): number | null {
+  if (!p.available || !p.totalBytes || p.freeBytes === undefined) return null;
+  return Math.max(0, p.totalBytes - p.freeBytes);
+}
 
 /** The text of a pool in the choice: name, path and free space. */
 export function poolLabel(p: Pool): string {
@@ -269,7 +330,14 @@ export function poolNote(p: Pool | undefined): string {
 
 const sitePath = (name: string) => "/sites/" + encodeURIComponent(name);
 
-export const listSites = async () => (await request<{ sites: Site[] }>("GET", "/sites")).sites;
+/** SiteMarks are shown beside a site in the list. */
+export type SiteMarks = { openFindings: number; cloneOf: string; staging: boolean };
+/** listSitesMarked returns the sites with their marks, by site name; older answers lack them. */
+export const listSitesMarked = async () => {
+  const r = await request<{ sites: Site[]; marks?: Record<string, SiteMarks> }>("GET", "/sites");
+  return { sites: r.sites, marks: r.marks ?? {} };
+};
+export const listSites = async () => (await listSitesMarked()).sites;
 export const phpVersions = () => request<PHPVersions>("GET", "/php/versions");
 export const createSite = (s: NewSite) => request<Site>("POST", "/sites", s);
 export const deleteSite = (name: string) => request<void>("DELETE", sitePath(name));
@@ -282,6 +350,24 @@ export const deleteAndPark = (name: string, p: ParkSite) => request<void>("POST"
 export const newSiteHash = (domain: string, tls: boolean) =>
   "#/sites?" + new URLSearchParams({ new: "1", domain, tls: tls ? "1" : "0" }).toString();
 export const setDomains = (name: string, domains: string[]) => request<Site>("PUT", sitePath(name) + "/domains", { domains });
+
+/**
+ * Sets the served and redirect domains (ADR-0068). On a site live on HTTPS
+ * the change waits for its certificate unless waitForCertificate is false;
+ * the answer then has pendingDomains.
+ */
+export const changeDomains = (name: string, domains: string[], redirectDomains: string[], waitForCertificate = true) =>
+  request<Site>("PUT", sitePath(name) + "/domains", { domains, redirectDomains, waitForCertificate });
+
+/** Cancels the domain change that waits for its certificate. */
+export const cancelDomainChange = (name: string) => request<Site>("DELETE", sitePath(name) + "/domains/pending");
+/** The display name if set, else the system name (ADR-0072). */
+export const siteLabel = (s: Pick<Site, "name" | "title">) => s.title || s.name;
+
+/** The longest display name in characters, as in migration 0065. */
+export const maxTitleLength = 64;
+
+export const setTitle = (name: string, title: string) => request<Site>("PUT", sitePath(name) + "/title", { title });
 export const setPHP = (name: string, php: string) => request<Site>("PUT", sitePath(name) + "/php", { php });
 
 /** A new type with its settings (ADR-0054 addendum 3); static takes none. */
@@ -363,6 +449,7 @@ export const setTLS = (name: string, enabled: boolean) => request<Site>("PUT", s
 // disabled site shows (empty: the built-in page), only sent when disabling.
 export const setDisabled = (name: string, disabled: boolean, page?: string) =>
   request<Site>("PUT", sitePath(name) + "/disabled", disabled && page ? { disabled, page } : { disabled });
+export const setWWW = (name: string, mode: WWWMode) => request<Site>("PUT", sitePath(name) + "/www", { mode });
 export const setHSTS = (name: string, enabled: boolean) => request<Site>("PUT", sitePath(name) + "/hsts", { enabled });
 export const setPHPPrograms = (name: string, enabled: boolean) =>
   request<Site>("PUT", sitePath(name) + "/php-programs", { enabled });
@@ -442,11 +529,11 @@ export function siteMessage(err: unknown): string {
       case "not_letsencrypt":
         return "Only a certificate from Let's Encrypt can be renewed here. Upload a new own certificate instead.";
       case "node_missing":
-        return "This Node.js version is not installed. An administrator installs it under Node.js versions.";
+        return "This Node.js version is not installed. An administrator installs it under Runtimes › Node.js.";
       case "apps_unavailable":
         return "Apps are not available on this panel.";
       case "python_missing":
-        return "This Python version is not installed. An administrator installs it under Python versions.";
+        return "This Python version is not installed. An administrator installs it under Runtimes › Python.";
       case "confirm_required":
         return "Type the site's name to confirm: this rebuilds .venv and its installed packages go.";
       case "wrong_site_type":
@@ -472,6 +559,17 @@ export function siteMessage(err: unknown): string {
 export type SiteStatus = { tone: "ok" | "warn" | "err" | "off"; word: string; key: "active" | "creating" | "deleting" | "disabled" | "maintenance" };
 
 // siteStatus is the state of a site as a badge: a word and a tone.
+/**
+ * runtimeWord names what runs a site's code: "PHP", "app" for Node.js,
+ * Python and app sites, "" for static, reverse proxy and redirect sites,
+ * whose texts then leave the runtime out.
+ */
+export function runtimeWord(s: Pick<Site, "type" | "php">): "PHP" | "app" | "" {
+  const t = siteType(s);
+  if (t === "php") return "PHP";
+  return t === "node" || t === "app" || t === "python" ? "app" : "";
+}
+
 export function siteStatus(s: Site): SiteStatus {
   if (s.state === "deleting") return { tone: "off", word: "Being deleted", key: "deleting" };
   if (s.state !== "active") return { tone: "warn", word: "Being created", key: "creating" };

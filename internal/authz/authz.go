@@ -83,29 +83,46 @@ var table = map[Action]Rule{
 	// Server-wide: admins only.
 	"backups.server:read":  server("backups:read"),
 	"backups.server:write": server("backups:write"),
-	"db_servers:write":     server("db_servers:write"),
-	"doctor:read":          server("doctor:read"),
-	"audit:read":           server("audit:read"),
-	"firewall:read":        server("firewall:read"),
-	"firewall:write":       server("firewall:write"),
-	"limits.presets:write": server("limits:write"),
-	"metrics:read":         server("metrics:read"),
-	"migrations:read":      server("migrations:read"),
-	"migrations:write":     server("migrations:write"),
-	"panel.tls:read":       server("sites:read"),
-	"panel.tls:write":      server("sites:write"),
-	"php:install":          server("php:install"),
-	"php:remove":           server("php:install"),
-	"php.install:read":     server("sites:read"),
-	"node:install":         server("node:install"),
-	"node:remove":          server("node:install"),
-	"python:install":       server("python:install"),
-	"python:remove":        server("python:install"),
+	// Restoring a deleted site's snapshot into another site (ADR-0074)
+	// reaches data of a site nobody owns any more: admins only.
+	"backups.server:restore": server("backups:restore"),
+	// Deleting the backups of a deleted site cannot be undone once the
+	// next run removed them (ADR-0074).
+	"backups.server:delete": server("backups:delete"),
+	"db_servers:write":      server("db_servers:write"),
+	"doctor:read":           server("doctor:read"),
+	"audit:read":            server("audit:read"),
+	"firewall:read":         server("firewall:read"),
+	"firewall:write":        server("firewall:write"),
+	"limits.presets:write":  server("limits:write"),
+	"metrics:read":          server("metrics:read"),
+	"migrations:read":       server("migrations:read"),
+	"migrations:write":      server("migrations:write"),
+	"panel.tls:read":        server("sites:read"),
+	"panel.tls:write":       server("sites:write"),
+	"php:install":           server("php:install"),
+	"php:remove":            server("php:install"),
+	"php.install:read":      server("sites:read"),
+	"node:install":          server("node:install"),
+	"node:remove":           server("node:install"),
+	"python:install":        server("python:install"),
+	"python:remove":         server("python:install"),
+	// ClamAV on the server (ADR-0064): apt as root with a fixed package
+	// list.
+	"malware.engine:read":  server("malware:read"),
+	"malware.engine:write": server("malware.engine:write"),
 	"services:read":        server("services:read"),
-	"services:write":       server("services:write"),
-	"system:read":          server("system:read"),
-	"system:write":         server("system:write"),
-	"web:sync":             server("sites:write"),
+	// All sites by their usage (ADR-0063): admins only, a site user never
+	// sees other sites' numbers.
+	"usage:read":     server("services:read"),
+	"services:write": server("services:write"),
+	"system:read":    server("system:read"),
+	"system:write":   server("system:write"),
+	// Rename a storage pool or make it the default (ADR-0016 addendum 2).
+	"pools:write": server("system:write"),
+	"web:sync":    server("sites:write"),
+	// Own application profiles are templates for every site (ADR-0069).
+	"profiles:write": server("settings:write"),
 
 	// Read-only things everyone needs. The lists of sites and databases
 	// are filtered to the sites a user may see.
@@ -119,6 +136,8 @@ var table = map[Action]Rule{
 	"python:read":       all("sites:read"),
 	"ssh.hostkeys:read": all("ssh:read"),
 	"pages:read":        all("pages:read"),
+	// The application profiles, for choosing one (ADR-0069).
+	"profiles:read": all("sites:read"),
 
 	// What spans all sites or claims names: managers (ADR-0035, question 3).
 	"sites:create":        manage("sites:write"),
@@ -129,10 +148,17 @@ var table = map[Action]Rule{
 	"pools:read":   manage("sites:read"),
 	"parked:write": manage("sites.maintenance:write"),
 	"sites:delete": mgrSite("sites:delete"),
+	// A clone is a new site with a copy of the source's files and data
+	// (ADR-0070); a refresh replaces the clone's with the source's again.
+	// The clone handler also asks for databases:write.
+	"sites:clone":         mgrSite("sites:write"),
+	"sites.clone:refresh": mgrSite("sites:write"),
 	// Delete a site and park domains of it (ADR-0048); the handler also
 	// asks for parked:write.
-	"sites:park":           mgrSite("sites:delete"),
-	"sites.domains:write":  mgrSite("sites:write"),
+	"sites:park":          mgrSite("sites:delete"),
+	"sites.domains:write": mgrSite("sites:write"),
+	// The www redirect decides which names of the site answer (ADR-0065).
+	"sites.www:write":      mgrSite("sites:write"),
 	"sites.tls:write":      mgrSite("sites:write"),
 	"sites.disabled:write": mgrSite("sites:write"),
 	// A type change can create a Linux account, as a new site does
@@ -148,6 +174,10 @@ var table = map[Action]Rule{
 	"sites.objectcache.size:write": mgrSite("objectcache:write"),
 	// Letting PHP start programs undoes a hardening default (ADR-0033).
 	"sites.programs:write": mgrSite("sites:write"),
+	// The repository and the build commands of a Git deploy (ADR-0062).
+	"sites.git:write": mgrSite("git:write"),
+	// A deploy or rollback runs only what an admin or manager stored.
+	"sites.deploy": ownSite("git:deploy"),
 
 	// nginx runs for every site, so snippets stay with admins (ADR-0029).
 	"sites.snippets:write": admSite("sites.snippets:write"),
@@ -157,14 +187,27 @@ var table = map[Action]Rule{
 
 	// The day-to-day work on one's own site: everyone with a grant. All of
 	// it runs as the site's own Linux user inside its isolation.
-	"sites:read":           ownSite("sites:read"),
-	"sites.php:write":      ownSite("sites:write"),
-	"sites.hsts:write":     ownSite("sites:write"),
-	"sites.headers:write":  ownSite("sites:write"),
-	"sites.realip:write":   ownSite("sites:write"),
-	"sites.web:write":      ownSite("sites:write"),
-	"sites.redirect:write": ownSite("sites:write"),
-	"sites.proxy:write":    ownSite("sites:write"),
+	"sites:read": ownSite("sites:read"),
+	// The usage of one site (ADR-0063).
+	"sites.usage:read":    ownSite("sites:read"),
+	"sites.php:write":     ownSite("sites:write"),
+	"sites.hsts:write":    ownSite("sites:write"),
+	"sites.title:write":   ownSite("sites:write"),
+	"sites.headers:write": ownSite("sites:write"),
+	// Profile and hardening rules of one's own site (ADR-0069).
+	"sites.profile:write": ownSite("sites:write"),
+	// The WordPress quick install writes the site's files as the site user
+	// and creates a database; the handler also asks for databases:write
+	// (ADR-0069).
+	"sites.wordpress:install": ownSite("sites:write"),
+	"sites.realip:write":      ownSite("sites:write"),
+	"sites.access:write":      ownSite("sites:write"),
+	"sites.web:write":         ownSite("sites:write"),
+	"sites.redirect:write":    ownSite("sites:write"),
+	"sites.proxy:write":       ownSite("sites:write"),
+	// A proxy target in a private network reaches the server's internal
+	// network; the proxy handler asks for this when a change sets one.
+	"sites.proxy.private:write": mgrSite("sites:write"),
 	// The app runs as the site user inside its isolation (ADR-0054).
 	"sites.app:write": ownSite("sites:write"),
 	// The values of the app's environment variables: whoever may change
@@ -173,6 +216,9 @@ var table = map[Action]Rule{
 	"sites.maintenance:write": ownSite("sites.maintenance:write"),
 	"sites.pagecache:write":   ownSite("sites:write"),
 	"sites.pagecache:purge":   ownSite("pagecache:purge"),
+	// Runs as root but only hands the site's own home to the site user,
+	// without following links (ADR-0067).
+	"sites.permissions:reset": ownSite("sites:write"),
 	"limits:read":             ownSite("limits:read"),
 	"sites.objectcache:read":  ownSite("objectcache:read"),
 	"sites.objectcache:write": ownSite("objectcache:write"),
@@ -191,6 +237,13 @@ var table = map[Action]Rule{
 	// The file manager writes as the site user (ADR-0040).
 	"files:read":  ownSite("files:read"),
 	"files:write": ownSite("files:write"),
+	// The malware scan of a site (ADR-0064): everyone with the site sees
+	// the findings, starts a scan and quarantines a file; the schedule,
+	// false positives and putting a file back stay with admins and
+	// managers.
+	"sites.malware:read":   ownSite("malware:read"),
+	"sites.malware:scan":   ownSite("malware:write"),
+	"sites.malware:manage": mgrSite("malware:write"),
 	// The site's own logs (ADR-0053); they hold its visitors' addresses.
 	"sites.logs:read": ownSite("logs:read"),
 }

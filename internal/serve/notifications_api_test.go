@@ -22,7 +22,7 @@ func TestAccountNotifications(t *testing.T) {
 	}
 
 	// Admins see every category, switched on by default.
-	want := `{"email":"","mail_enabled":false,"categories":[{"id":"backups","enabled":true},{"id":"certificates","enabled":true},{"id":"doctor","enabled":true},{"id":"services","enabled":true},{"id":"php","enabled":true},{"id":"disk","enabled":true}]}`
+	want := `{"email":"","mail_enabled":false,"categories":[{"id":"backups","enabled":true},{"id":"certificates","enabled":true},{"id":"doctor","enabled":true},{"id":"services","enabled":true},{"id":"malware","enabled":true},{"id":"deploys","enabled":false},{"id":"php","enabled":true},{"id":"disk","enabled":true}]}`
 	if got := get(c); got != want {
 		t.Fatalf("admin:\n%s\nwant\n%s", got, want)
 	}
@@ -36,7 +36,7 @@ func TestAccountNotifications(t *testing.T) {
 	// switch on server ones.
 	manager, _ := matrixLogin(t, e, c, "mona", "manager")
 
-	want = `{"email":"","mail_enabled":false,"categories":[{"id":"certificates","enabled":false},{"id":"services","enabled":false},{"id":"php","enabled":false},{"id":"disk","enabled":false}]}`
+	want = `{"email":"","mail_enabled":false,"categories":[{"id":"certificates","enabled":false},{"id":"services","enabled":false},{"id":"malware","enabled":false},{"id":"deploys","enabled":false},{"id":"php","enabled":false},{"id":"disk","enabled":false}]}`
 	if got := get(manager); got != want {
 		t.Fatalf("manager:\n%s\nwant\n%s", got, want)
 	}

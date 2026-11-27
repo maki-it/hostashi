@@ -10,6 +10,7 @@
     "typecheck": "tsc",
     "test": "vitest run",
     "e2e": "node e2e/login.e2e.mjs",
+    "e2e:phone": "node e2e/phone-overflow.e2e.mjs",
     "wiki-shots": "node e2e/wiki-shots.mjs"
   },
   "dependencies": {
@@ -36,7 +37,7 @@
     "uqr": "0.1.3"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/jest-dom": "8.0.0",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.13",
     "@types/node": "26.6.6",

@@ -71,14 +71,14 @@ func TestWebHeadersValidateRefuses(t *testing.T) {
 }
 
 func TestWebHeadersList(t *testing.T) {
-	h := WebHeaders{NoSniff: true, FrameOptions: FrameDeny, ReferrerPolicy: "origin", PermissionsPolicy: "usb=()", CSP: "default-src 'self'", CSPReportOnly: true}
+	h := WebHeaders{NoSniff: true, FrameOptions: FrameDeny, ReferrerPolicy: "origin", PermissionsPolicy: "usb=()", CSP: "default-src 'self'", CSPReportOnly: true, NoIndex: true}
 
 	var names []string
 	for _, x := range h.List() {
 		names = append(names, x.Name+": "+x.Value)
 	}
 
-	want := "X-Content-Type-Options: nosniff|X-Frame-Options: DENY|Referrer-Policy: origin|Permissions-Policy: usb=()|Content-Security-Policy-Report-Only: default-src 'self'"
+	want := "X-Content-Type-Options: nosniff|X-Frame-Options: DENY|Referrer-Policy: origin|Permissions-Policy: usb=()|Content-Security-Policy-Report-Only: default-src 'self'|X-Robots-Tag: noindex, nofollow"
 	if got := strings.Join(names, "|"); got != want {
 		t.Errorf("got %s", got)
 	}

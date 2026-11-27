@@ -80,6 +80,10 @@ var completionTree = &compNode{sub: cmds(
 		sub:  cmds(&compNode{name: "list", help: "show the managed services", flags: []string{"-json"}}),
 		args: []string{"start", "stop", "restart", "reload"}, argsFrom: 1,
 	},
+	&compNode{name: "firewall", help: "addresses fail2ban blocks", sub: cmds(
+		&compNode{name: "bans", help: "show the blocked addresses", flags: []string{"-json"}},
+		leaf("unban", "unblock an address in every jail"),
+	)},
 	&compNode{name: "system", help: "time zone, hostname and reboot", sub: cmds(
 		leaf("info", "show time zone, hostname and uptime"),
 		leaf("timezones", "list the time zones"),
@@ -95,9 +99,11 @@ var completionTree = &compNode{sub: cmds(
 		&compNode{name: "limits", help: "show or change a site's limits", args: limitKeys, argsFrom: 1},
 	)},
 	&compNode{name: "pool", help: "storage pools for site homes", sub: cmds(
-		leaf("add", "add a mounted volume as a pool"),
+		&compNode{name: "add", help: "add a mounted volume as a pool", flags: []string{"-default"}},
 		leaf("remove", "remove a pool"),
 		leaf("list", "list the pools"),
+		leaf("rename", "give a pool a new name"),
+		leaf("default", "make a pool the default for new sites"),
 	)},
 	&compNode{name: "web", help: "make the web state live", sub: cmds(leaf("apply", "read the web state as JSON from stdin"))},
 	&compNode{name: "db", help: "databases and database users", sub: cmds(
@@ -121,6 +127,10 @@ var completionTree = &compNode{sub: cmds(
 		leaf("status", "show the last backup"),
 		leaf("restore", "restore a snapshot into a site's home"),
 		leaf("restore-status", "show a restore"),
+		leaf("deleted", "list deleted sites with snapshots, or the snapshots of one"),
+		leaf("restore-deleted", "restore a deleted site's snapshot into another site"),
+		leaf("delete-deleted", "delete a deleted site's backups with the next run"),
+		leaf("keep-deleted", "keep a deleted site's backups marked for deletion"),
 		&compNode{name: "restore-run", hidden: true},
 		&compNode{name: "key", help: "the keys to keep outside the server", sub: cmds(leaf("show", "print the repository password and panel key"))},
 	)},
@@ -140,12 +150,15 @@ var completionTree = &compNode{sub: cmds(
 		leaf("install", "install an LTS line"),
 	)},
 	&compNode{name: "node-install", hidden: true},
+	&compNode{name: "wpcli-install", hidden: true},
+	&compNode{name: "wp-run", hidden: true},
 	&compNode{name: "python", help: "Python lines", sub: cmds(
 		leaf("status", "the installed lines and the last installation"),
 		leaf("install", "install a line"),
 		leaf("remove", "remove a line no site uses"),
 	)},
 	&compNode{name: "python-install", hidden: true},
+	&compNode{name: "git-sync", hidden: true},
 	&compNode{name: "user", help: "recover a locked-out account", sub: cmds(
 		&compNode{name: "recover", help: "reset a user's password and second factors", flags: []string{"-public-url=", "-db="}},
 	)},

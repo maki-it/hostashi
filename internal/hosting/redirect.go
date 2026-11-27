@@ -29,7 +29,7 @@ func (s *Service) SetRedirect(ctx context.Context, actor int64, name string, r s
 		return store.Site{}, ErrSiteType
 	}
 
-	if r, err = checkRedirect(r, site.Domains); err != nil {
+	if r, err = checkRedirect(r, site.AllDomains()); err != nil {
 		return store.Site{}, err
 	}
 

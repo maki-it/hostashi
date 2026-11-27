@@ -9,10 +9,12 @@ type CardProps = {
   /** false for content that brings its own spacing, such as a table. */
   padded?: boolean;
   children: ReactNode;
+  /** The element id, for a menu item that scrolls to the card. */
+  id?: string | undefined;
 };
 
 /** A titled section. With a title it is a labelled region. */
-export function Card({ title, actions, padded = true, children }: CardProps) {
+export function Card({ title, actions, padded = true, children, id }: CardProps) {
   const head =
     title !== undefined ? (
       <div className="ui-card-head">
@@ -21,9 +23,13 @@ export function Card({ title, actions, padded = true, children }: CardProps) {
       </div>
     ) : null;
   const body = padded ? <div className="ui-card-body">{children}</div> : children;
-  if (title === undefined) return <div className="ui-card">{body}</div>;
+  if (title === undefined) return (
+      <div className="ui-card" id={id}>
+        {body}
+      </div>
+    );
   return (
-    <section className="ui-card" aria-label={title}>
+    <section className="ui-card" aria-label={title} id={id}>
       {head}
       {body}
     </section>

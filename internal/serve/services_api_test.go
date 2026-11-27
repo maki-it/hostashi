@@ -16,9 +16,10 @@ import (
 )
 
 type stubServerAgent struct {
-	mu    sync.Mutex
-	acted []agentapi.ServiceActionRequest
-	err   error
+	mu        sync.Mutex
+	acted     []agentapi.ServiceActionRequest
+	siteCalls int
+	err       error
 }
 
 func (a *stubServerAgent) HostStats(context.Context) (agentapi.HostStats, error) {
@@ -158,7 +159,8 @@ func TestServicesAPI(t *testing.T) {
 	}{
 		{&agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "nginx -t rejected"}, http.StatusConflict},
 		{&agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "the site has no PHP"}, http.StatusNotFound},
-		{&agentrpc.Error{Code: agentrpc.CodeInternal, Message: "x"}, http.StatusServiceUnavailable},
+		{&agentrpc.Error{Code: agentrpc.CodeInternal, Message: "internal error"}, http.StatusServiceUnavailable},
+		{&agentrpc.Error{Code: agentrpc.CodeInternal, Message: "systemd did not complete the action, see the agent's log"}, http.StatusBadGateway},
 	} {
 		e.srvAgent.err = tc.err
 		if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/services/nginx/reload", cookie: c}); rec.Code != tc.code {
@@ -168,7 +170,7 @@ func TestServicesAPI(t *testing.T) {
 
 	e.srvAgent.err = nil
 
-	if err := e.st.RawCount(t.Context(), `SELECT COUNT(*) FROM audit_log WHERE action = ?`, "service.action", &n); err != nil || n != 6 {
+	if err := e.st.RawCount(t.Context(), `SELECT COUNT(*) FROM audit_log WHERE action = ?`, "service.action", &n); err != nil || n != 7 {
 		t.Fatalf("audit rows after errors %d %v", n, err)
 	}
 }

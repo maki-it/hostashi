@@ -210,6 +210,17 @@ func (h *siteOps) registerDB(s *agentrpc.Server) {
 		return j, mapDBError(err)
 	})
 
+	agentrpc.Handle(s, agentapi.DBCopy, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBCopyRequest) (agentapi.DBJob, error) {
+		if h.db == nil {
+			return agentapi.DBJob{}, errNoDB
+		}
+
+		//nolint:contextcheck // the job outlives the request and runs under the agent context
+		j, err := h.db.StartCopy(req.Source, req.Target)
+
+		return j, mapDBError(err)
+	})
+
 	agentrpc.Handle(s, agentapi.DBJobStatus, func(_ context.Context, _ agentrpc.Caller, req agentapi.DBJobRequest) (agentapi.DBJob, error) {
 		if h.db == nil {
 			return agentapi.DBJob{}, errNoDB

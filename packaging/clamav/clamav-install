@@ -1,0 +1,284 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Installs or removes ClamAV from the distribution for the malware scan
+# (ADR-0064). The panel starts it through the unit
+# hostashi-clamav-install@<install|remove>.service when an admin switches
+# the scan on or off, the installer with --malware-scan; neither the panel
+# nor the agent can change what this script does (root, 0755).
+#
+#   clamav-install check     read-only: exit 0 if the recorded state holds
+#                            (on: packages installed and freshclam enabled;
+#                            off or no record: nothing to do), else 1 with
+#                            the reason on stdout
+#   clamav-install install   install clamav and clamav-freshclam, enable
+#                            freshclam, record "on" and the version
+#   clamav-install remove    purge both and the signatures (and the
+#                            real-time mode), record "off"
+#   clamav-install realtime-on   install clamav-daemon and clamdscan with
+#                            Hostashi's drop-ins, record realtime "on"
+#   clamav-install realtime-off  stop and purge them, record realtime "off"
+#   clamav-install upgrade   while "on": update the installed ClamAV
+#                            packages only, from every apt source of the
+#                            distribution (also -updates and stable-updates,
+#                            which unattended-upgrades leaves out); run
+#                            daily by hostashi-clamav-upgrade.timer
+#
+# Only these packages, without recommends: no clamav-daemon unless the
+# real-time mode is switched on (ADR-0064). Its drop-ins replace the
+# distribution's command lines: clamd and clamonacc read the agent's
+# /etc/hostashi/clamav/clamd.conf, clamonacc passes descriptors (--fdpass),
+# only reports (the distribution's unit would move files with --move) and
+# logs to /var/log/hostashi/scan/realtime.log. Both wait for that file.
+# The distribution's AppArmor profile for clamd only lets it read
+# /etc/clamav/clamd.conf and the homes under /home: a marked block in its
+# local include adds that file and the files clamonacc and clamdscan hand
+# over (site homes may live on any storage pool). ClamAV is GPL-2.0 and stays a separate
+# program from the distribution; Hostashi does not ship or link it.
+#
+# The state lives in STATE_DIR (the agent reads it): state, version,
+# install.log (the unit's output).
+#
+# Exit codes: 0 ok, 1 not set up (check) or failed, 64 usage.
+# Test hooks (environment): HOSTASHI_CLAMAV_STATE_DIR.
+set -u
+set -o pipefail
+umask 022
+
+STATE_DIR=${HOSTASHI_CLAMAV_STATE_DIR:-/var/lib/hostashi-agent/clamav-install}
+PKGS=(clamav clamav-freshclam)
+PURGE=(clamav clamav-freshclam clamav-base)
+FRESHCLAM=clamav-freshclam.service
+RT_PKGS=(clamav-daemon clamdscan)
+CLAMD=clamav-daemon.service
+ONACC=clamav-clamonacc.service
+UNIT_DIR=${HOSTASHI_CLAMAV_UNIT_DIR:-/etc/systemd/system}
+RT_CONF=/etc/hostashi/clamav/clamd.conf
+RT_LOG=/var/log/hostashi/scan/realtime.log
+AA_DIR=${HOSTASHI_CLAMAV_APPARMOR_DIR:-/etc/apparmor.d}
+AA_PROFILE=$AA_DIR/usr.sbin.clamd
+AA_LOCAL=$AA_DIR/local/usr.sbin.clamd
+AA_BEGIN="# BEGIN hostashi (ADR-0064): written by clamav-install, do not edit"
+AA_END="# END hostashi"
+export DEBIAN_FRONTEND=noninteractive
+# apt waits for the dpkg lock (unattended-upgrades) instead of failing.
+APT_OPTS=(-o DPkg::Lock::Timeout=600 -y -qq --no-install-recommends)
+
+say() { echo "clamav-install: $*"; }
+
+installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
+
+record() {
+  install -d -m 0700 -o root -g root "$STATE_DIR" || return 1
+  printf '%s\n' "$1" >"$STATE_DIR/state.tmp" && mv -f "$STATE_DIR/state.tmp" "$STATE_DIR/state"
+}
+
+state() { cat "$STATE_DIR/state" 2>/dev/null || echo off; }
+rt_state() { cat "$STATE_DIR/realtime" 2>/dev/null || echo off; }
+
+record_rt() {
+  install -d -m 0700 -o root -g root "$STATE_DIR" || return 1
+  printf '%s\n' "$1" >"$STATE_DIR/realtime.tmp" && mv -f "$STATE_DIR/realtime.tmp" "$STATE_DIR/realtime"
+}
+
+# write_dropins puts the fixed drop-ins in place before the package is
+# installed, so its postinst never starts clamonacc with --move.
+write_dropins() {
+  install -d -m 0755 "$UNIT_DIR/$CLAMD.d" "$UNIT_DIR/$ONACC.d" || return 1
+  cat >"$UNIT_DIR/$CLAMD.d/50-hostashi.conf" <<EOF || return 1
+# Written by clamav-install (ADR-0064). The agent writes $RT_CONF.
+[Unit]
+ConditionPathExists=$RT_CONF
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/clamd --foreground=true --config-file=$RT_CONF
+Slice=hostashi-scan.slice
+MemoryMax=2G
+MemorySwapMax=0
+EOF
+  cat >"$UNIT_DIR/$ONACC.d/50-hostashi.conf" <<EOF || return 1
+# Written by clamav-install (ADR-0064): report only, no --move.
+[Unit]
+ConditionPathExists=$RT_CONF
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/clamonacc --foreground --fdpass --config-file=$RT_CONF --log=$RT_LOG
+EOF
+  systemctl daemon-reload
+}
+
+# aa_block is the block in the profile's local include.
+aa_block() {
+  printf '%s\n' "$AA_BEGIN" \
+    "$RT_CONF r," \
+    "# Files of site homes, on /home or on a storage pool, handed over with --fdpass." \
+    "/** r," \
+    "$AA_END"
+}
+
+# aa_strip prints the local include without Hostashi's block.
+aa_strip() {
+  [ -f "$AA_LOCAL" ] || return 0
+  awk -v b="$AA_BEGIN" -v e="$AA_END" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$AA_LOCAL"
+}
+
+aa_reload() {
+  command -v apparmor_parser >/dev/null 2>&1 || return 0
+  [ -d /sys/kernel/security/apparmor ] || return 0
+  apparmor_parser -r -T -W "$AA_PROFILE"
+}
+
+# aa_ok: without the distribution's profile there is nothing to add.
+aa_ok() {
+  [ -f "$AA_PROFILE" ] || return 0
+  [ -f "$AA_LOCAL" ] && grep -qxF "$AA_BEGIN" "$AA_LOCAL" && grep -qxF "$RT_CONF r," "$AA_LOCAL"
+}
+
+# write_apparmor adds the block (after the package put its profile in
+# place) and reloads the profile, so clamd can read $RT_CONF.
+write_apparmor() {
+  [ -f "$AA_PROFILE" ] || return 0
+  install -d -m 0755 "$AA_DIR/local" || return 1
+  { aa_strip && aa_block; } >"$AA_LOCAL.tmp" && chmod 0644 "$AA_LOCAL.tmp" && mv -f "$AA_LOCAL.tmp" "$AA_LOCAL" || return 1
+  aa_reload
+}
+
+remove_apparmor() {
+  [ -f "$AA_LOCAL" ] || return 0
+  aa_strip >"$AA_LOCAL.tmp" && chmod 0644 "$AA_LOCAL.tmp" && mv -f "$AA_LOCAL.tmp" "$AA_LOCAL"
+}
+
+remove_dropins() {
+  rm -f "${UNIT_DIR:?}/${CLAMD:?}.d/50-hostashi.conf" "${UNIT_DIR:?}/${ONACC:?}.d/50-hostashi.conf"
+  rmdir "${UNIT_DIR:?}/${CLAMD:?}.d" "${UNIT_DIR:?}/${ONACC:?}.d" 2>/dev/null
+  systemctl daemon-reload
+}
+
+check() {
+  local p
+  case "$(state)" in
+    on)
+      for p in "${PKGS[@]}"; do installed "$p" || { echo "$p not installed"; return 1; }; done
+      [ "$(systemctl is-enabled "$FRESHCLAM" 2>/dev/null)" = enabled ] || { echo "$FRESHCLAM not enabled"; return 1; }
+      ;;
+    off) ;;
+    *) echo "unknown state $(state)"; return 1;;
+  esac
+  case "$(rt_state)" in
+    on)
+      for p in "${RT_PKGS[@]}"; do installed "$p" || { echo "$p not installed"; return 1; }; done
+      grep -q -- '--fdpass' "$UNIT_DIR/$ONACC.d/50-hostashi.conf" 2>/dev/null || { echo "$ONACC drop-in missing"; return 1; }
+      aa_ok || { echo "AppArmor lets clamd not read $RT_CONF"; return 1; }
+      ;;
+    off) ;;
+    *) echo "unknown real-time state $(rt_state)"; return 1;;
+  esac
+}
+
+do_install() {
+  say "installing ${PKGS[*]}"
+  apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
+  apt-get "${APT_OPTS[@]}" install "${PKGS[@]}" || { say "cannot install ${PKGS[*]}"; return 1; }
+  systemctl enable --now "$FRESHCLAM" || { say "cannot start $FRESHCLAM"; return 1; }
+  dpkg-query -W -f='${Version}\n' clamav >"$STATE_DIR/version.tmp" && mv -f "$STATE_DIR/version.tmp" "$STATE_DIR/version"
+  record on || return 1
+  # A repair (install.sh runs install when check fails) also fixes the
+  # real-time mode of servers set up before its AppArmor block; the agent
+  # then restarts the failed clamd.
+  if [ "$(rt_state)" = on ]; then
+    write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
+    systemctl reset-failed "$CLAMD" clamav-daemon.socket 2>/dev/null
+  fi
+  say "done: ClamAV $(cat "$STATE_DIR/version"), signatures follow from freshclam"
+}
+
+# do_repair puts back what check wants without apt: the installer runs it
+# while dpkg holds the lock (the hostashi package's postinst). It fails
+# when a package is missing, which only install can fix.
+do_repair() {
+  local p
+  if [ "$(state)" = on ]; then
+    for p in "${PKGS[@]}"; do installed "$p" || { say "$p not installed"; return 1; }; done
+    systemctl enable --now "$FRESHCLAM" || { say "cannot start $FRESHCLAM"; return 1; }
+  fi
+  if [ "$(rt_state)" = on ]; then
+    for p in "${RT_PKGS[@]}"; do installed "$p" || { say "$p not installed"; return 1; }; done
+    write_dropins || { say "cannot write the drop-ins"; return 1; }
+    write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
+    systemctl reset-failed "$CLAMD" clamav-daemon.socket 2>/dev/null
+  fi
+  say "done: repaired"
+}
+
+do_realtime_on() {
+  [ "$(state)" = on ] || { say "switch the malware scan on first"; return 1; }
+  say "installing ${RT_PKGS[*]}"
+  write_dropins || { say "cannot write the drop-ins"; return 1; }
+  apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
+  apt-get "${APT_OPTS[@]}" install "${RT_PKGS[@]}" || { say "cannot install ${RT_PKGS[*]}"; return 1; }
+  write_apparmor || { say "cannot add $RT_CONF to clamd's AppArmor profile"; return 1; }
+  systemctl enable "$CLAMD" "$ONACC" || { say "cannot enable $CLAMD and $ONACC"; return 1; }
+  record_rt on || return 1
+  say "done: the agent writes the configuration and starts clamonacc"
+}
+
+do_realtime_off() {
+  local p have=()
+  say "removing the real-time mode"
+  systemctl disable --now "$ONACC" "$CLAMD" clamav-daemon.socket 2>/dev/null
+  for p in "${RT_PKGS[@]}"; do installed "$p" && have+=("$p"); done
+  if [ "${#have[@]}" -gt 0 ]; then
+    apt-get "${APT_OPTS[@]}" purge "${have[@]}" || { say "cannot remove ${have[*]}"; return 1; }
+  fi
+  remove_dropins
+  remove_apparmor
+  rm -f "$RT_CONF"
+  record_rt off || return 1
+  say "done: real-time mode removed"
+}
+
+# ALL_PKGS are the packages upgrade updates when they are installed.
+ALL_PKGS=(clamav clamav-base clamav-freshclam libclamav12 clamav-daemon clamdscan)
+
+do_upgrade() {
+  local p have=()
+  [ "$(state)" = on ] || { say "ClamAV is off: nothing to upgrade"; return 0; }
+  for p in "${ALL_PKGS[@]}"; do installed "$p" && have+=("$p"); done
+  # A library with another soname still comes along as a dependency.
+  for p in $(dpkg-query -W -f='${Package}\n' 'libclamav*' 2>/dev/null); do
+    installed "$p" && [[ " ${have[*]} " != *" $p "* ]] && have+=("$p")
+  done
+  [ "${#have[@]}" -gt 0 ] || { say "no ClamAV package installed"; return 1; }
+  say "upgrading ${have[*]}"
+  apt-get "${APT_OPTS[@]}" update || { say "cannot update the package lists"; return 1; }
+  apt-get "${APT_OPTS[@]}" install --only-upgrade "${have[@]}" || { say "cannot upgrade ${have[*]}"; return 1; }
+  dpkg-query -W -f='${Version}\n' clamav >"$STATE_DIR/version.tmp" && mv -f "$STATE_DIR/version.tmp" "$STATE_DIR/version"
+  # A new profile from the package keeps its local include; the block
+  # stays, the reload picks up both.
+  if [ "$(rt_state)" = on ]; then write_apparmor || { say "cannot reload clamd's AppArmor profile"; return 1; }; fi
+  say "done: ClamAV $(cat "$STATE_DIR/version")"
+}
+
+do_remove() {
+  local p have=()
+  if [ "$(rt_state)" != off ] || installed clamav-daemon; then do_realtime_off || return 1; fi
+  say "removing ClamAV"
+  for p in "${PURGE[@]}"; do installed "$p" && have+=("$p"); done
+  if [ "${#have[@]}" -gt 0 ]; then
+    apt-get "${APT_OPTS[@]}" purge "${have[@]}" || { say "cannot remove ${have[*]}"; return 1; }
+  fi
+  rm -f "$STATE_DIR/version"
+  record off || return 1
+  say "done: removed"
+}
+
+case "${1:-}" in
+  check) [ $# = 1 ] || exit 64; check || exit 1;;
+  install) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_install || exit 1;;
+  repair) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_repair || exit 1;;
+  remove) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_remove || exit 1;;
+  realtime-on) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_realtime_on || exit 1;;
+  upgrade) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_upgrade || exit 1;;
+  realtime-off) [ $# = 1 ] || exit 64; install -d -m 0700 -o root -g root "$STATE_DIR" && do_realtime_off || exit 1;;
+  *) echo "usage: $0 check | install | remove | realtime-on | realtime-off | upgrade" >&2; exit 64;;
+esac

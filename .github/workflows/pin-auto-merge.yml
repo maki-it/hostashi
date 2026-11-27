@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Merges the open pull request of a pin workflow (Node versions, Python
+# versions) by itself, once every check on its head commit is green
+# (ADR-0077 part 1, Kim 2026-11-26). The caller runs it only when its tool
+# said the change is a newer patch release or build of lines that are
+# already pinned (-auto-merge); new lines and changed end dates wait for a
+# maintainer. This is not GitHub's auto-merge: the rules live in this file.
+#
+# It refuses when the pull request changes any file outside `files`, when a
+# check failed or is still running after the wait, or when the branch moved
+# while it waited. A refusal fails the run, so the maintainer sees it, and
+# leaves the pull request open.
+name: Pin auto-merge
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: head branch of the pull request
+        required: true
+        type: string
+      files:
+        description: the only files the pull request may change, separated by spaces
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    name: Merge when green
+    runs-on: ubuntu-latest
+    # The installer tests take the longest (about 10 minutes).
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+    steps:
+      - name: Wait for the checks and merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ inputs.branch }}
+          FILES: ${{ inputs.files }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          found=$(gh pr list --repo "$REPO" --head "$BRANCH" --base main --state open \
+            --json number,headRefOid --jq '.[0] // empty | "\(.number) \(.headRefOid)"')
+          if [ -z "$found" ]; then
+            echo "::error::no open pull request from $BRANCH"; exit 1
+          fi
+          read -r pr sha <<<"$found"
+          echo "Pull request #$pr at $sha" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # Only the pin files.
+          bad=$(gh pr diff "$pr" --repo "$REPO" --name-only | grep -vxF -f <(tr ' ' '\n' <<<"$FILES") || true)
+          if [ -n "$bad" ]; then
+            echo "::error::#$pr changes files outside the pin list: $bad"; exit 1
+          fi
+
+          # The workflow that opened the pull request started these runs on
+          # the branch; wait until each exists for this commit and finished.
+          for wf in go.yml web.yml licenses.yml; do
+            id=""
+            for _ in $(seq 1 40); do
+              id=$(gh run list --repo "$REPO" --workflow "$wf" --branch "$BRANCH" --commit "$sha" \
+                --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+              [ -n "$id" ] && break
+              sleep 15
+            done
+            if [ -z "$id" ]; then
+              echo "::error::no $wf run for $sha"; exit 1
+            fi
+            gh run watch "$id" --repo "$REPO" --interval 30 --exit-status >/dev/null ||
+              { echo "::error::$wf run $id did not pass"; exit 1; }
+            echo "$wf run $id passed" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+          # Every check run on the commit, not only the three workflows.
+          left=$(gh api --paginate "repos/$REPO/commits/$sha/check-runs" \
+            --jq '.check_runs[] | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not)) | "\(.name): \(.status) \(.conclusion)"')
+          if [ -n "$left" ]; then
+            echo "::error::checks not green on $sha:"; echo "$left"; exit 1
+          fi
+
+          # --match-head-commit refuses when the branch moved meanwhile.
+          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$sha"
+          gh pr comment "$pr" --repo "$REPO" --body "Merged by the pin workflow after every check on $sha passed (ADR-0077): only patch releases or builds of lines that were already pinned. Run: $RUN_URL"
+          echo "Merged #$pr" | tee -a "$GITHUB_STEP_SUMMARY"
+          # A merge with GITHUB_TOKEN starts no push workflows: publish the
+          # new pins in the runtimes suite (ADR-0077 part 2).
+          gh workflow run runtimes.yml --repo "$REPO" --ref main

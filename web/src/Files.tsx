@@ -9,6 +9,7 @@ import {
   ArrowClockwise,
   ArrowSquareOut,
   Copy,
+  DotsThree,
   DownloadSimple,
   File as FileIcon,
   FileArchive,
@@ -23,8 +24,9 @@ import {
   PencilSimpleLine,
   Trash,
   UploadSimple,
+  ShieldCheck,
 } from "@phosphor-icons/react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
   chmod,
   cleanPath,
@@ -49,8 +51,10 @@ import {
   type FileEntry,
   type Listing,
 } from "./files";
+import { formatHash } from "./routes";
+import { getSiteScan, maxScanPaths, scanMessage, startScan } from "./scan";
 import type { Site } from "./sites";
-import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
+import { Button, Card, Field, IconButton, Menu, Notice, relativeTime, RelTime, RowActions, Table, type Column, type MenuItem, type Sort } from "./ui";
 
 type Props = {
   site: Site;
@@ -75,6 +79,7 @@ const isZip = (e: FileEntry) => e.type === "file" && e.name.toLowerCase().endsWi
 
 export function FileManager({ site, path, onPath }: Props) {
   const [listing, setListing] = useState<Listing | null>(null);
+  const [listed, setListed] = useState("");
   const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<Sort>({ key: "name", dir: "asc" });
@@ -84,22 +89,32 @@ export function FileManager({ site, path, onPath }: Props) {
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState<FileEntry | null>(null);
+  const [scanOn, setScanOn] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const { stuck, gap } = useStickyBar(rootRef, sentinelRef, barRef);
 
   const load = useCallback(async () => {
     setLoadError("");
     try {
       const l = await listFiles(site.name, path);
       setListing(l);
+      setListed(site.name + "/" + path);
       setSelected((s) => new Set([...s].filter((n) => l.entries.some((e) => e.name === n))));
     } catch (err) {
       setLoadError(filesMessage(err));
     }
   }, [site.name, path]);
 
+  // The old listing stays on screen (dimmed, not clickable) until the new
+  // folder is read, so switching folders does not make the page jump.
   useEffect(() => {
-    setListing(null);
     setSelected(new Set());
     setDialog(null);
     setEditing(null);
@@ -107,9 +122,47 @@ export function FileManager({ site, path, onPath }: Props) {
     void load();
   }, [load]);
 
+  // The selection bar stays in view while the listing scrolls; a dialog or
+  // a result it starts shows above the table, so bring that into view.
+  useEffect(() => {
+    if (dialog || done || scanNote || loadError) bodyRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [dialog, done, scanNote, loadError]);
+
+  const stale = listing !== null && listed !== site.name + "/" + path;
+
+  // The scan button shows only while ClamAV is on for this server and the
+  // account may read the site's scan (ADR-0064).
+  useEffect(() => {
+    let live = true;
+    getSiteScan(site.name).then(
+      (v) => live && setScanOn(v.engine === "on"),
+      () => live && setScanOn(false),
+    );
+    return () => {
+      live = false;
+    };
+  }, [site.name]);
+
+  useEffect(() => setScanNote(null), [path]);
+
+  async function scanSelection(paths: string[]) {
+    setScanning(true);
+    setScanNote(null);
+    try {
+      await startScan(site.name, paths);
+      setSelected(new Set());
+      setScanNote({ tone: "ok", text: paths.length === 1 ? `Virus scan of ${paths[0]} started.` : `Virus scan of ${String(paths.length)} items started.` });
+    } catch (err) {
+      setScanNote({ tone: "err", text: scanMessage(err) });
+    } finally {
+      setScanning(false);
+    }
+  }
+
   const entries = listing?.entries ?? [];
   const shown = filter === "" ? entries : entries.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()));
   const allSelected = shown.length > 0 && shown.every((e) => selected.has(e.name));
+  const selectAll = () => setSelected(allSelected ? new Set() : new Set(shown.map((e) => e.name)));
 
   const toggle = (name: string) =>
     setSelected((s) => {
@@ -162,20 +215,54 @@ export function FileManager({ site, path, onPath }: Props) {
     void sendFiles(await droppedFiles(e.dataTransfer));
   }
 
+  // entryItems are the row actions as a menu, for the compact rows on a phone.
+  const entryItems = (e: FileEntry): MenuItem[] => {
+    const items: MenuItem[] = [];
+    const p = joinPath(path, e.name);
+    if (e.type === "file") items.push({ label: "Download", icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true });
+    if (e.type === "dir") items.push({ label: "Download as ZIP", icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true });
+    if (e.type === "file" && e.size <= maxEditBytes) items.push({ label: "Edit", icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
+    if (isZip(e)) items.push({ label: "Extract", icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e }) });
+    items.push({ label: "Rename", icon: <PencilSimpleLine size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "rename", entry: e }) });
+    items.push({ label: "Delete", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name] }) });
+    return items;
+  };
+
   const columns: Column<FileEntry>[] = [
     {
       key: "select",
       header: "Select",
       srHeader: true,
+      headerCell: (
+        <label className="ui-check-cell">
+          <input
+            type="checkbox"
+            className="ui-check"
+            aria-label="Select all"
+            checked={allSelected}
+            disabled={shown.length === 0}
+            onChange={selectAll}
+          />
+        </label>
+      ),
       cell: (e) => (
-        <input type="checkbox" className="ui-check" aria-label={"Select " + e.name} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
+        // The whole cell is the click target, not only the small box.
+        <label className="ui-check-cell">
+          <input type="checkbox" className="ui-check" aria-label={"Select " + e.name} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
+        </label>
       ),
     },
     {
       key: "name",
       header: "Name",
+      main: true,
       sortValue: (e) => (e.type === "dir" ? "0" : "1") + e.name,
-      cell: (e) => <EntryName entry={e} onOpen={() => onPath(joinPath(path, e.name))} />,
+      cell: (e) => (
+        <>
+          <EntryName entry={e} onOpen={() => onPath(joinPath(path, e.name))} />
+          <span className="ui-phone-only ui-files-meta">{[e.type === "file" ? formatSize(e.size) : "", relativeTime(new Date(e.modified)), e.mode.slice(1)].filter(Boolean).join(" · ")}</span>
+        </>
+      ),
     },
     { key: "size", header: "Size", sortValue: (e) => (e.type === "dir" ? -1 : e.size), cell: (e) => (e.type === "file" ? formatSize(e.size) : "") },
     { key: "modified", header: "Modified", sortValue: (e) => e.modified, cell: (e) => <RelTime iso={e.modified} /> },
@@ -185,24 +272,31 @@ export function FileManager({ site, path, onPath }: Props) {
       header: "Actions",
       srHeader: true,
       cell: (e) => (
-        <RowActions>
-          {e.type === "file" && (
-            <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={"Download " + e.name} data-tip="Download">
-              <DownloadSimple size={18} aria-hidden="true" />
-            </a>
-          )}
-          {e.type === "dir" && (
-            <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
-              <DownloadSimple size={18} aria-hidden="true" />
-            </a>
-          )}
-          {e.type === "file" && e.size <= maxEditBytes && (
-            <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
-          )}
-          {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
-          <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
-          <IconButton label={"Delete " + e.name} danger icon={<Trash size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: [e.name] })} />
-        </RowActions>
+        <>
+          <span className="ui-phone-hide">
+            <RowActions>
+              {e.type === "file" && (
+                <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={"Download " + e.name} data-tip="Download">
+                  <DownloadSimple size={18} aria-hidden="true" />
+                </a>
+              )}
+              {e.type === "dir" && (
+                <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
+                  <DownloadSimple size={18} aria-hidden="true" />
+                </a>
+              )}
+              {e.type === "file" && e.size <= maxEditBytes && (
+                <IconButton label={"Edit " + e.name} icon={<NotePencil size={18} aria-hidden="true" />} onClick={() => setEditing(e)} />
+              )}
+              {isZip(e) && <IconButton label={"Extract " + e.name} icon={<FileArchive size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "extract", entry: e })} />}
+              <IconButton label={"Rename " + e.name} icon={<PencilSimpleLine size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "rename", entry: e })} />
+              <IconButton label={"Delete " + e.name} danger icon={<Trash size={18} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: [e.name] })} />
+            </RowActions>
+          </span>
+          <span className="ui-phone-only">
+            <Menu label={"Actions for " + e.name} buttonLabel={"Actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e)} />
+          </span>
+        </>
       ),
     },
   ];
@@ -213,6 +307,11 @@ export function FileManager({ site, path, onPath }: Props) {
 
   return (
     <Card padded={false}>
+      <div className="ui-files" ref={rootRef}>
+      {/* The bar (folder, toolbar, filter and the selection) sticks to the
+          top of the window in a compact form while the listing scrolls. */}
+      <div ref={sentinelRef} className="ui-files-sentinel" aria-hidden="true" />
+      <div ref={barRef} className="ui-files-bar" data-stuck={stuck} style={gap > 0 ? { marginBottom: gap } : undefined}>
       <div className="ui-files-head">
         <Breadcrumb site={site.name} path={path} onPath={onPath} />
         <div className="ui-row ui-nowrap" role="toolbar" aria-label="Files">
@@ -232,27 +331,14 @@ export function FileManager({ site, path, onPath }: Props) {
           onChange={(e) => { onPick(e.target.files); e.target.value = ""; }}
         />
       </div>
-      {(loadError || done || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog || sel.length > 0) && (
-      <div className="ui-card-body ui-stack">
-        {loadError && <Notice tone="err" title={loadError} />}
-        {done && <Notice tone="ok" title={done} />}
-        {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
-        {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
-        {listing !== null && listing.unnamed > 0 && (
-          <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
-        )}
-        {dialog && (
-          <DialogCard
-            site={site.name}
-            path={path}
-            dialog={dialog}
-            onCancel={() => setDialog(null)}
-            onDone={(msg) => {
-              setSelected(new Set());
-              void finished(msg);
-            }}
-          />
-        )}
+      <div className="ui-filters">
+        <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        {/* On a phone the table head is hidden, so the box sits here. */}
+        <label className="ui-row ui-phone-only">
+          <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
+          Select all
+        </label>
+      </div>
         {sel.length > 0 && (
           <div className="ui-files-selection" role="region" aria-label="Selection">
             <strong>{sel.length === 1 ? "1 selected" : `${String(sel.length)} selected`}</strong>
@@ -273,6 +359,14 @@ export function FileManager({ site, path, onPath }: Props) {
             <Button icon={<LockKey size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "chmod", names: sel })}>
               Change mode
             </Button>
+            {scanOn &&
+              (sel.length <= maxScanPaths ? (
+                <Button icon={<ShieldCheck size={16} aria-hidden="true" />} disabled={scanning} onClick={() => void scanSelection(selPaths)}>
+                  {scanning ? "Starting scan…" : "Scan for viruses"}
+                </Button>
+              ) : (
+                <span className="ui-hint">Too many entries for one virus scan; scan the folder instead.</span>
+              ))}
             <Button variant="danger" icon={<Trash size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: sel })}>
               Delete
             </Button>
@@ -280,23 +374,42 @@ export function FileManager({ site, path, onPath }: Props) {
           </div>
         )}
       </div>
-      )}
-      <div className="ui-filters">
-        <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <label className="ui-row">
-          <input
-            type="checkbox"
-            className="ui-check"
-            checked={allSelected}
-            disabled={shown.length === 0}
-            onChange={() => setSelected(allSelected ? new Set() : new Set(shown.map((e) => e.name)))}
+      {(loadError || done || scanNote || uploads.length > 0 || listing?.truncated || (listing?.unnamed ?? 0) > 0 || dialog) && (
+      <div ref={bodyRef} className="ui-card-body ui-stack ui-files-body">
+        {loadError && <Notice tone="err" title={loadError} />}
+        {done && <Notice tone="ok" title={done} />}
+        {scanNote && (
+          <Notice tone={scanNote.tone} title={scanNote.text}>
+            {scanNote.tone === "ok" && (
+              <>
+                The results appear on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })}>Virus scan</a> tab.
+              </>
+            )}
+          </Notice>
+        )}
+        {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
+        {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
+        {listing !== null && listing.unnamed > 0 && (
+          <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
+        )}
+        {dialog && (
+          <DialogCard
+            site={site.name}
+            path={path}
+            dialog={dialog}
+            onCancel={() => setDialog(null)}
+            onDone={(msg) => {
+              setSelected(new Set());
+              void finished(msg);
+            }}
           />
-          Select all
-        </label>
+        )}
       </div>
+      )}
       <div
         className="ui-files-drop"
         data-dragging={dragging}
+        aria-busy={stale}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("Files")) {
             e.preventDefault();
@@ -318,6 +431,7 @@ export function FileManager({ site, path, onPath }: Props) {
             rowKey={(e) => e.name}
             sort={sort}
             onSort={setSort}
+            compact
             empty={filter === "" ? "This folder is empty. Drop files here to upload them." : "No entry matches the filter."}
           />
         )}
@@ -336,15 +450,81 @@ export function FileManager({ site, path, onPath }: Props) {
           />
         </Suspense>
       )}
+      </div>
     </Card>
   );
+}
+
+/** The height of the bar and the table head; the head counts only where it
+ *  shows (on a phone the rows are cards without one). */
+function stickyHeight(root: HTMLElement | null, bar: HTMLElement | null): number {
+  const head = root?.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+  return (bar?.offsetHeight ?? 0) + (head > 1 ? head : 0);
+}
+
+/**
+ * Tells whether the bar is stuck to the top of the window: the sentinel just
+ * above it has scrolled out at the top. The compact bar and table head are
+ * lower than the full ones; gap keeps the difference as a margin below it while stuck, so
+ * the listing does not jump at the moment the bar sticks. The heights of
+ * the bar and the table head go to CSS variables: the table head sticks
+ * below the bar, and focus scrolls clear of both.
+ */
+function useStickyBar(root: RefObject<HTMLDivElement | null>, sentinel: RefObject<HTMLDivElement | null>, bar: RefObject<HTMLDivElement | null>) {
+  const [stuck, setStuck] = useState(false);
+  const [gap, setGap] = useState(0);
+  const fullHeight = useRef(0);
+
+  useEffect(() => {
+    const s = sentinel.current;
+    if (!s || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e) return;
+      const now = !e.isIntersecting && e.boundingClientRect.top < 0;
+      if (now && bar.current?.dataset["stuck"] !== "true") fullHeight.current = stickyHeight(root.current, bar.current);
+      setStuck(now);
+    });
+    io.observe(s);
+    return () => io.disconnect();
+  }, [root, sentinel, bar]);
+
+  // A long path in the compact bar scrolls; keep the open folder in view.
+  useLayoutEffect(() => {
+    const crumbs = root.current?.querySelector<HTMLElement>(".ui-files-crumbs");
+    if (stuck && crumbs) crumbs.scrollLeft = crumbs.scrollWidth;
+  });
+
+  useLayoutEffect(() => {
+    setGap(stuck ? Math.max(0, fullHeight.current - stickyHeight(root.current, bar.current)) : 0);
+  }, [stuck, root, bar]);
+
+  useEffect(() => {
+    const r = root.current;
+    const b = bar.current;
+    if (!r || !b || typeof ResizeObserver === "undefined") return;
+    const html = document.documentElement;
+    const measure = () => {
+      r.style.setProperty("--files-bar-h", `${String(b.offsetHeight)}px`);
+      html.style.setProperty("--files-sticky-h", `${String(stickyHeight(r, b))}px`);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(b);
+    ro.observe(r);
+    measure();
+    return () => {
+      ro.disconnect();
+      html.style.removeProperty("--files-sticky-h");
+    };
+  }, [root, bar]);
+
+  return { stuck, gap };
 }
 
 function EntryName({ entry, onOpen }: { entry: FileEntry; onOpen: () => void }) {
   if (entry.type === "dir") {
     return (
       <button type="button" className="ui-files-name ui-link-btn" onClick={onOpen}>
-        <Folder size={18} weight="fill" aria-hidden="true" />
+        <Folder size={18} aria-hidden="true" />
         <span>{entry.name}</span>
       </button>
     );

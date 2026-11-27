@@ -2,16 +2,20 @@
 
 **For:** panel admins.
 
-Hostashi backs up every site's files and every database once a day with restic, encrypted, to a Hetzner Storage Box over SFTP. Restores never touch the live site.
+Hostashi backs up every site's files and every database once a day with restic, encrypted, to an SFTP server. Restores never touch the live site.
+
+Any SSH server that offers SFTP and accepts key login works: a Hetzner Storage Box, a NAS, or another Linux server. The account only needs write access to the backup directory; it does not need a shell.
 
 ## Set up the target
 
-1. In the Storage Box settings at Hetzner, turn on SSH access.
-2. Open **Server → Backups → Target and schedule** and enter the Storage Box host (for example `u123456.your-storagebox.de`), the user and a directory. The directory is created on the first run.
-3. The panel shows a **public key**. Add it to the Storage Box's `.ssh/authorized_keys`.
-4. Under **Host key**, confirm the Storage Box's SSH host key. Backups start only after that.
-5. Choose the time window: the daily backup starts at a random time between the two hours (server time).
-6. Choose how many daily, weekly and monthly snapshots to keep.
+1. Create an account on the SFTP server for the backups. On a Hetzner Storage Box, turn on SSH access in its settings (a sub-account limited to one directory works well).
+2. Open **Server → Backups → Target and schedule** and enter the user, the host (DNS name or IP address), the port and a directory. The port is usually 22; a Storage Box uses 23. The directory is relative to the login directory, or absolute when it starts with `/`. It is created on the first run.
+3. The panel shows a **public key**. Add it to `~/.ssh/authorized_keys` of that account (on a Storage Box also possible in Hetzner's console).
+4. Under **Host key**, fetch the server's SSH host key and compare the fingerprint with the server's own, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on that server, or the fingerprints your provider publishes. Backups start only after you confirm it.
+   ![The target form for an SFTP server](images/backups-target.png)
+5. Under **Run backups**, choose how often: once a day, or every 1, 2, 3, 4, 6, 8 or 12 hours. Once a day starts at a random time in the window between the two hours. Shorter intervals start at a fixed random minute after each of those hours, counted from midnight. All times are server time. A backup that is still running when the next one is due skips that one, so two backups never overlap.
+6. Choose how many hourly, daily, weekly, monthly and yearly snapshots to keep. For each hour, day, week, month and year, the newest snapshot is kept, up to these counts. Hourly only matters when backups run more than once a day; hourly and yearly are 0 by default.
+   ![Hourly backups that keep 48 hourly and 3 yearly snapshots](images/backups-hourly.png)
 
 **Back up now** runs a backup right away; it runs in the background.
 
@@ -29,7 +33,7 @@ Without them, the backups are useless if the server is lost. They are never show
 
 ## Data check
 
-Once a month Hostashi reads part of the stored data back and checks it, a different part each month. **Monthly data check reads 1 of N parts** sets how much; `0` turns it off. **Status** shows the last backup and the last data check.
+Once a month Hostashi reads part of the stored data back and checks it, a different part each month. **Data check parts** sets how much: each month 1 of that many parts is read; `0` turns it off. **Status** shows the last backup and the last data check.
 
 ## Restore files
 
@@ -45,3 +49,25 @@ Each database has its own snapshots in the same list. Restoring one writes its d
 You can also import the dump into an existing database yourself, see [Databases](Databases.md).
 
 On the command line, the same is `hostashi backup restore SITE SNAPSHOT`.
+
+## Backups of deleted sites
+
+Deleting a site does not delete its snapshots. Administrators find them under **Snapshots** in the site list, in the group **Deleted sites**.
+
+![Snapshots of a deleted site with the choice of the site to restore into](images/backups-deleted.png)
+
+1. Choose the deleted site.
+2. Under **Restore into**, choose an existing site, for example a new site you created for it.
+3. Restore a snapshot. Files go into a new folder `restore-<time>` in the home of that site; a database dump can then be imported into a new database of that site, as above.
+
+If you create a new site with the name of a deleted one, the new site only shows the snapshots taken since it was created. The older ones are listed as **(earlier site)** under **Deleted sites** and can be restored into the site of the same name.
+
+### Delete the backups of a deleted site
+
+The snapshots of a deleted site stay until you delete them. Below the snapshots of a deleted site, type its name and choose **Delete backups of …**. The next backup run removes them; **Back up now** removes them at once. Until that run, **Keep backups** takes it back. The space is freed by the next weekly cleanup of the repository. For an earlier site, only the snapshots from before the current site was created are deleted.
+
+![Deleting the backups of a deleted site, with the name to type](images/backups-deleted-remove.png)
+
+To remove them automatically, set **Deleted sites (days)** under **Keep snapshots**. A backup run then removes the snapshots of a deleted site once its newest snapshot is older than that many days. 0, the default, keeps them until you delete them. Earlier sites of a reused name are never removed automatically. The status shows what the last run removed.
+
+On the command line: `hostashi backup deleted` lists deleted sites with snapshots, `hostashi backup deleted SITE` their snapshots, and `hostashi backup restore-deleted SITE SNAPSHOT TARGET` restores one into the site `TARGET`. `hostashi backup delete-deleted SITE` marks the backups of a deleted site for removal by the next run, and `hostashi backup keep-deleted SITE` takes that back.

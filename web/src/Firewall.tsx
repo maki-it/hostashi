@@ -14,7 +14,9 @@ import {
   type FirewallRule,
   type FirewallState,
 } from "./firewall";
-import { Button, Card, Field, IconButton, Notice, PageHead, RelTime } from "./ui";
+import { Button, Card, Field, IconButton, Notice, PageHead, RelTime, UnsavedNote } from "./ui";
+import { BlockedAddressesCard } from "./BlockedAddresses";
+import { TokenAllowlistCard } from "./TokenAllowlist";
 
 type RuleDraft = { proto: "tcp" | "udp"; ports: string; sources: string; note: string };
 
@@ -79,7 +81,7 @@ export function Firewall() {
   const head = (
     <PageHead
       title="Firewall"
-      description="Ports 80 and 443 are always open for the sites. SSH and the panel are open to everyone until you set an allowlist."
+      description="Ports 80 and 443 are always open for the sites. SSH, the panel and API tokens are open to everyone until you set an allowlist."
     />
   );
 
@@ -106,6 +108,8 @@ export function Firewall() {
           Use the firewall in front of the server (for example at your provider), and let only SSH, 80, 443 and the panel port through.
           Run the installer again without --no-firewall to manage the rules here.
         </Notice>
+        <BlockedAddressesCard />
+        <TokenAllowlistCard clientIp={fw.clientIp} />
       </>
     );
   }
@@ -115,6 +119,8 @@ export function Firewall() {
       {head}
       {error && <Notice tone="err" title={error} />}
       <Editor key={JSON.stringify(fw.state) + (fw.pending?.deadline ?? "")} fw={fw} reload={load} flash={flash} setFlash={setFlash} />
+      <BlockedAddressesCard />
+      <TokenAllowlistCard clientIp={fw.clientIp} />
     </>
   );
 }
@@ -226,6 +232,8 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
 
   const setRule = (i: number, patch: Partial<RuleDraft>) => setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const foreignPending = !!fw.pending && !waiting;
+  const dirty =
+    ssh !== fw.state.sshAllow.join("\n") || panel !== fw.state.panelAllow.join("\n") || JSON.stringify(rules) !== JSON.stringify(fw.state.open.map(toDraft));
 
   return (
     <form className="ui-stack" onSubmit={(e) => void save(e)}>
@@ -361,7 +369,7 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
                 </Field>
                 <IconButton
                   label={"Remove port " + (i + 1)}
-                  icon={<Trash size={16} />}
+                  text="Remove" icon={<Trash size={16} />}
                   danger
                   onClick={() => setRules(rules.filter((_, j) => j !== i))}
                 />
@@ -380,10 +388,13 @@ function Editor({ fw, reload, flash, setFlash }: EditorProps) {
           </label>
         </Notice>
       )}
-      <div className="ui-row">
-        <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending}>
+      {/* One bar for both cards above: the allowlists and the ports apply together. */}
+      <div className="ui-card ui-card-body ui-apply-bar">
+        <Button type="submit" variant="primary" disabled={busy || !!waiting || foreignPending || !dirty}>
           {busy ? "Applying…" : "Apply rules"}
         </Button>
+        <UnsavedNote dirty={dirty} />
+        <span className="ui-hint">Rolls back after {fw.confirmWithin} seconds unless it is confirmed.</span>
       </div>
     </form>
   );

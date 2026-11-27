@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { CaretRight, List, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { CaretDown, CaretRight, List, MagnifyingGlass, Moon, SignOut, Sun, X } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { logout, type User } from "./auth";
 import { navFor, navItem } from "./nav";
+import { runtimes } from "./Runtimes";
+import { siteGroups } from "./SiteNav";
 import { countLabel, healthCount, servicesCount, type NavCount } from "./navcounts";
 import { runDoctor } from "./doctor";
+import { Search, shortcut } from "./Search";
 import { listServices } from "./services";
 import { formatHash, type Route } from "./routes";
 import { isDark, saveColorScheme, type ColorScheme } from "./scheme";
-import { panelVersion, versionLabel } from "./system";
+import { panelVersion, releaseUrl, versionLabel } from "./system";
 import { IconButton } from "./ui";
 
 type ShellProps = {
@@ -50,13 +53,40 @@ function crumbs(route: Route): Crumb[] {
   if (!item) return [];
   const out: Crumb[] = [];
   if (item.group) out.push({ label: item.group });
+  const tab = item.also ? runtimes.find((r) => r.page === route.page) : undefined;
   if (route.site) {
     out.push({ label: item.label, href: formatHash({ page: route.page }) });
     out.push({ label: route.site.name });
+  } else if (tab) {
+    out.push({ label: item.label, href: formatHash({ page: item.page }) });
+    out.push({ label: tab.label });
   } else {
     out.push({ label: item.label });
   }
   return out;
+}
+
+/**
+ * pageTitle names the browser tab after the page, most specific first, and
+ * ends in the panel's host name, so tabs of several servers stay apart:
+ * "Logs · blog · panel.example.com".
+ */
+export function pageTitle(route: Route, host: string): string {
+  const parts: string[] = [];
+  if (route.site) {
+    const tab = siteGroups.flatMap((g) => g.tabs).find((t) => t.id === route.site?.tab);
+    if (tab && route.site.tab !== "overview") parts.push(tab.label);
+    parts.push(route.site.name);
+  } else if (route.page === "account") {
+    parts.push("Your account");
+  } else {
+    const item = navItem(route.page);
+    const tab = runtimes.find((r) => r.page === route.page);
+    if (item && tab) parts.push(tab.label);
+    if (item) parts.push(item.label);
+  }
+  parts.push(host || "Hostashi");
+  return parts.join(" · ");
 }
 
 /**
@@ -93,10 +123,18 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     let live = true;
     const load = () => {
       runDoctor()
-        .then((r) => live && setCounts((c) => ({ ...c, health: healthCount(r) })))
+        .then((r) => {
+          // Counted here, not in the state updater: a bad answer must not
+          // take the whole frame down.
+          const health = healthCount(r);
+          if (live) setCounts((c) => ({ ...c, health }));
+        })
         .catch(() => undefined);
       listServices()
-        .then((rows) => live && setCounts((c) => ({ ...c, services: servicesCount(rows) })))
+        .then((rows) => {
+          const services = servicesCount(rows);
+          if (live) setCounts((c) => ({ ...c, services }));
+        })
         .catch(() => undefined);
     };
     load();
@@ -107,6 +145,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     };
   }, [isAdmin, onCountPage]);
   const trail = crumbs(route);
+  const title = pageTitle(route, window.location.hostname);
+  useEffect(() => {
+    document.title = title;
+    return () => {
+      document.title = "Hostashi";
+    };
+  }, [title]);
 
   async function doLogout() {
     setBusy(true);
@@ -134,15 +179,50 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     }
   }
 
+  // Ctrl K (⌘ K on a Mac) opens the search from anywhere.
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearching((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+
+  // navScrolled draws a line under the brand once the nav scrolls under it.
+  const [navScrolled, setNavScrolled] = useState(false);
+  // navMore shows a hint at the bottom of the nav while entries are hidden
+  // below it, on a low screen (C2 of the UX review).
+  const navRef = useRef<HTMLElement>(null);
+  const [navMore, setNavMore] = useState(false);
+  const measureNav = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    setNavScrolled(el.scrollTop > 0);
+    setNavMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8);
+  }, []);
+  useEffect(() => {
+    measureNav();
+    window.addEventListener("resize", measureNav);
+    return () => window.removeEventListener("resize", measureNav);
+  }, [measureNav, groups.length]);
+  const lastGroup = groups[groups.length - 1]?.label;
+
   return (
     <div className="ui-root app">
-      <aside className="app-side" data-open={menuOpen}>
+      <aside className="app-side" data-open={menuOpen} data-scrolled={navScrolled}>
         <div className="app-brand">
-          <Mark />
-          <span className="app-brand-name">
-            Hostashi
-            <span className="app-host">{window.location.hostname}</span>
-          </span>
+          {/* The name and the panel's host lead to the overview (Kim, 2026-11-25). */}
+          <a className="app-brand-link" href={formatHash({ page: "home" })} aria-label="Hostashi, overview" onClick={() => setMenuOpen(false)}>
+            <Mark />
+            <span className="app-brand-name">
+              Hostashi
+              <span className="app-host">{window.location.hostname}</span>
+            </span>
+          </a>
           <span className="app-menu-btn">
             <IconButton
               label={menuOpen ? "Close menu" : "Open menu"}
@@ -154,7 +234,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             />
           </span>
         </div>
-        <nav aria-label="Main" id="app-nav" className="app-nav">
+        <nav aria-label="Main" id="app-nav" className="app-nav" ref={navRef} onScroll={measureNav}>
           {groups.map((g) => (
             <div className="app-nav-group" key={g.label ?? "top"}>
               {g.label && <h2 className="app-nav-label">{g.label}</h2>}
@@ -166,7 +246,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
                       <a
                         className="app-nav-item"
                         href={formatHash({ page: i.page })}
-                        aria-current={route.page === i.page ? "page" : undefined}
+                        aria-current={route.page === i.page || i.also?.includes(route.page) ? "page" : undefined}
                         onClick={() => setMenuOpen(false)}
                       >
                         <Icon size={20} aria-hidden="true" />
@@ -182,27 +262,44 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             </div>
           ))}
         </nav>
-        <div className="app-user">
-          <span className="app-avatar" aria-hidden="true">
-            {user.username.slice(0, 2).toUpperCase()}
-          </span>
-          <a
-            className="app-user-name"
-            href={formatHash({ page: "account" })}
-            aria-current={route.page === "account" ? "page" : undefined}
-            onClick={() => setMenuOpen(false)}
-          >
-            {user.username}
-            <small>{user.role}</small>
-          </a>
-          <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
-        </div>
-        {error && (
-          <p role="alert" className="app-user-error">
-            {error}
-          </p>
+        {navMore && lastGroup && (
+          <div className="app-nav-more">
+            <button type="button" tabIndex={-1} onClick={() => navRef.current?.scrollTo({ top: navRef.current.scrollHeight, behavior: "smooth" })}>
+              <CaretDown size={12} aria-hidden="true" />
+              {lastGroup}
+            </button>
+          </div>
         )}
-        {isAdmin && version && <p className="app-version">Hostashi {versionLabel(version)}</p>}
+        {/* The account, logout and version stay in view while the nav scrolls. */}
+        <div className="app-foot">
+          <div className="app-user">
+            <span className="app-avatar" aria-hidden="true">
+              {user.username.slice(0, 2).toUpperCase()}
+            </span>
+            <a
+              className="app-user-name"
+              href={formatHash({ page: "account" })}
+              aria-current={route.page === "account" ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              {user.username}
+              <small>{user.role}</small>
+            </a>
+            <IconButton label="Log out" icon={<SignOut size={20} />} disabled={busy} onClick={() => void doLogout()} />
+          </div>
+          {error && (
+            <p role="alert" className="app-user-error">
+              {error}
+            </p>
+          )}
+          {isAdmin && version && (
+            <p className="app-version">
+              <a href={releaseUrl(version)} target="_blank" rel="noopener noreferrer" title="Release notes">
+                Hostashi {versionLabel(version)}
+              </a>
+            </p>
+          )}
+        </div>
       </aside>
       <div className="app-main">
         <header className="app-top">
@@ -224,6 +321,13 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
             </ol>
           </nav>
           <span className="app-top-actions">
+            <button type="button" className="app-search-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={() => setSearching(true)}>
+              <MagnifyingGlass size={16} aria-hidden="true" />
+              <span className="app-search-text">Search</span>
+              <kbd className="app-kbd" aria-hidden="true">
+                {shortcut}
+              </kbd>
+            </button>
             <IconButton
               label={dark ? "Use light colours" : "Use dark colours"}
               icon={dark ? <Sun size={20} /> : <Moon size={20} />}
@@ -234,6 +338,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
         </header>
         <div className="app-content">{children}</div>
       </div>
+      {searching && <Search role={user.role} onClose={() => setSearching(false)} />}
     </div>
   );
 }

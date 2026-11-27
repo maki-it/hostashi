@@ -44,7 +44,39 @@ func (h *siteOps) registerPools(s *agentrpc.Server, adminUID uint32) {
 			h.enforceQuota(p)
 		}
 
+		if req.Default {
+			if _, err := h.m.SetDefaultPool(p.Name); err != nil {
+				return agentapi.PoolInfo{}, mapPoolError(err)
+			}
+		}
+
 		return h.poolInfo(p, 0), nil
+	})
+
+	// Rename and default carry no path and change no unit, so the panel may
+	// send them too (ADR-0016 addendum 2).
+	agentrpc.Handle(s, agentapi.PoolRename, func(_ context.Context, _ agentrpc.Caller, req agentapi.PoolRenameRequest) (agentapi.PoolInfo, error) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		p, err := h.m.RenamePool(req.Name, req.NewName)
+		if err != nil {
+			return agentapi.PoolInfo{}, mapPoolError(err)
+		}
+
+		return h.poolInfo(p, h.poolSites(p.Name)), nil
+	})
+
+	agentrpc.Handle(s, agentapi.PoolDefault, func(_ context.Context, _ agentrpc.Caller, req agentapi.PoolDefaultRequest) (agentapi.PoolInfo, error) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		p, err := h.m.SetDefaultPool(req.Name)
+		if err != nil {
+			return agentapi.PoolInfo{}, mapPoolError(err)
+		}
+
+		return h.poolInfo(p, h.poolSites(p.Name)), nil
 	})
 
 	agentrpc.Handle(s, agentapi.PoolRemove, func(ctx context.Context, c agentrpc.Caller, req agentapi.PoolRemoveRequest) (agentapi.PoolRemoveResponse, error) {
@@ -65,6 +97,18 @@ func (h *siteOps) registerPools(s *agentrpc.Server, adminUID uint32) {
 	})
 }
 
+func (h *siteOps) poolSites(name string) int {
+	n := 0
+
+	for _, s := range h.m.List() {
+		if s.Pool == name {
+			n++
+		}
+	}
+
+	return n
+}
+
 func (h *siteOps) poolInfos() []agentapi.PoolInfo {
 	count := map[string]int{}
 	for _, s := range h.m.List() {
@@ -82,7 +126,7 @@ func (h *siteOps) poolInfos() []agentapi.PoolInfo {
 // poolInfo describes a pool; state, quota and sizes only when its volume
 // is there, so a missing volume never shows the root disk's free space.
 func (h *siteOps) poolInfo(p sites.Pool, n int) agentapi.PoolInfo {
-	info := agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: n}
+	info := agentapi.PoolInfo{Name: p.Name, Path: p.Path, Sites: n, Default: p.Name == h.m.DefaultPool()}
 	if h.m.CheckPool(p.Name) != nil {
 		return info
 	}

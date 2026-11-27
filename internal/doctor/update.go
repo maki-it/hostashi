@@ -54,3 +54,23 @@ func Update(st updates.Status, err error, now time.Time) []Check {
 
 	return out
 }
+
+// Runtimes reports whether the package hostashi-runtimes brings newer
+// patch releases of the pinned Node.js and CPython lines (ADR-0077). A
+// server not set up from the package gets no check.
+func Runtimes(st updates.Status) []Check {
+	if st.Installed == "" || st.Repository == "" {
+		return nil
+	}
+
+	switch {
+	case st.Runtimes == "":
+		return []Check{warn("hostashi.runtimes", "the package hostashi-runtimes is not installed: newer patch releases of the pinned Node.js and Python lines do not arrive",
+			"Install it now: sudo systemctl start hostashi-runtimes-install.service (the daily hostashi-runtimes-install.timer does the same; errors: journalctl -u hostashi-runtimes-install).")}
+	case !st.RuntimesAuto:
+		return []Check{warn("hostashi.runtimes", "unattended-upgrades does not take the suite runtimes: hostashi-runtimes "+st.Runtimes+" stays as it is",
+			"Run the installer again: sudo /usr/share/hostashi/install.sh upgrade")}
+	}
+
+	return []Check{ok("hostashi.runtimes", "hostashi-runtimes "+st.Runtimes+" is installed and updated by unattended-upgrades")}
+}

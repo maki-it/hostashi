@@ -67,9 +67,12 @@ const (
 
 // DBJob is the state of an import or export.
 type DBJob struct {
-	ID       string    `json:"id"`
-	Kind     string    `json:"kind"` // "import" or "export"
-	Database string    `json:"database"`
+	ID       string `json:"id"`
+	Kind     string `json:"kind"` // "import", "export" or "copy"
+	Database string `json:"database"`
+	// Source is the database a copy reads (ADR-0070); Database is the one
+	// it loads into.
+	Source   string    `json:"source,omitempty"`
 	Path     string    `json:"path"`
 	AsOwner  bool      `json:"asOwner,omitempty"`
 	State    string    `json:"state"`
@@ -121,3 +124,33 @@ func (r DBJobRequest) Validate() error {
 
 // DBJobStatus reports a job the agent still remembers.
 var DBJobStatus = agentrpc.Op[DBJobRequest, DBJob]{Name: "db.job"}
+
+// DBCopyRequest names two local databases: the source is dumped as its
+// site's user, the dump is loaded into the target as the target's owner
+// account with DEFINER clauses stripped (ADR-0070, ADR-0030). The target
+// must exist; tables of the same name are replaced.
+type DBCopyRequest struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// Validate checks the names.
+func (r DBCopyRequest) Validate() error {
+	if err := ValidateDBName(r.Source); err != nil {
+		return fmt.Errorf("source: %w", err)
+	}
+
+	if err := ValidateDBName(r.Target); err != nil {
+		return fmt.Errorf("target: %w", err)
+	}
+
+	if r.Source == r.Target {
+		return errors.New("target: must differ from the source")
+	}
+
+	return nil
+}
+
+// DBCopy starts copying one local database into another. It answers at
+// once with the running job; DBJobStatus reports it.
+var DBCopy = agentrpc.Op[DBCopyRequest, DBJob]{Name: "db.copy"}

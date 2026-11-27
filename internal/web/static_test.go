@@ -123,7 +123,7 @@ func TestStaticOptionsServed(t *testing.T) {
 	}
 
 	// Hidden files stay hidden with the fallback.
-	if code, _ := e.fetchPath(t, "spa.example.com", "/.env"); code != http.StatusForbidden {
+	if code, _ := e.fetchPath(t, "spa.example.com", "/.env"); code != http.StatusNotFound {
 		t.Errorf("hidden file: %d", code)
 	}
 }

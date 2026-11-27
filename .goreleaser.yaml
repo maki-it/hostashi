@@ -13,6 +13,9 @@ before:
   hooks:
     - npm --prefix web ci --no-audit --no-fund
     - npm --prefix web run build
+    # The manual page ships gzipped (Debian policy 12.1); -n leaves the
+    # name and time out, so the same page gives the same file.
+    - sh -c 'mkdir -p build/man && gzip -9nc packaging/man/hostashi.1 > build/man/hostashi.1.gz'
 
 builds:
   - id: hostashi
@@ -50,9 +53,9 @@ nfpms:
     package_name: hostashi
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
     formats: [deb]
-    vendor: The Hostashi contributors
+    vendor: Maki IT
     homepage: https://github.com/maki-it/hostashi
-    maintainer: The Hostashi contributors <kontakt@maki-it.de>
+    maintainer: Maki IT <kontakt@maki-it.de>
     description: |-
       Hosting control panel for a single Linux server
       Hostashi runs websites with nginx, PHP-FPM and MariaDB on one Debian or
@@ -117,6 +120,10 @@ nfpms:
         dst: /usr/share/keyrings/hostashi-archive-keyring.asc
         file_info:
           mode: 0644
+      - src: packaging/keyring/hostashi-runtimes-keyring.asc
+        dst: /usr/share/keyrings/hostashi-runtimes-keyring.asc
+        file_info:
+          mode: 0644
       - src: packaging/deb/hostashi-rollback
         dst: /usr/sbin/hostashi-rollback
         file_info:
@@ -126,6 +133,9 @@ nfpms:
         type: tree
       - src: packaging/apt/
         dst: /usr/share/hostashi/apt/
+        type: tree
+      - src: packaging/clamav/
+        dst: /usr/share/hostashi/clamav/
         type: tree
       - src: packaging/fail2ban/
         dst: /usr/share/hostashi/fail2ban/
@@ -151,6 +161,11 @@ nfpms:
       - src: packaging/systemd/
         dst: /usr/share/hostashi/systemd/
         type: tree
+      # hostashi(1), made from the usage text (cmd/hostashi/man.go).
+      - src: build/man/hostashi.1.gz
+        dst: /usr/share/man/man1/hostashi.1.gz
+        file_info:
+          mode: 0644
       - src: LICENSE
         dst: /usr/share/doc/hostashi/copyright
         file_info:
@@ -161,6 +176,10 @@ release:
   # it publishes the release at the end.
   draft: true
   prerelease: auto
+  # A re-run after a failed upload (for example during a GitHub outage)
+  # finds the files of the first attempt; replace them instead of failing
+  # with "already_exists".
+  replace_existing_artifacts: true
 
 changelog:
   use: github-native

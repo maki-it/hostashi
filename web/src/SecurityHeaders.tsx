@@ -100,7 +100,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
           switched on here replaces the same header from the application.
           Switched off, the application's own header passes through unchanged.
         </p>
-        <fieldset className="ui-fieldset ui-stack" disabled={busy}>
+        <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
           <legend>Basic</legend>
           <div className="ui-form-grid">
             <Field
@@ -166,7 +166,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
             </Field>
           </div>
         </fieldset>
-        <fieldset className="ui-fieldset ui-stack" disabled={busy}>
+        <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
           <legend>Permissions</legend>
           <Field
             label="Browser features"
@@ -211,7 +211,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
             </Field>
           )}
         </fieldset>
-        <fieldset className="ui-fieldset ui-stack" disabled={busy}>
+        <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
           <legend>Content Security Policy</legend>
           <Field
             label="Mode"
@@ -265,7 +265,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
             disabled={busy}
             onClick={() =>
               void save(
-                toForm(view.defaults, strict),
+                { ...toForm(view.defaults, strict), noIndex: form.noIndex },
                 "The recommended headers are on.",
               )
             }

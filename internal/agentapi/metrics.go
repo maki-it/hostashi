@@ -47,3 +47,41 @@ type MetricsSnapshotResponse struct {
 // MetricsSnapshot reads the per-site numbers. It only reads and answers
 // from cached disk measurements, so a scrape stays cheap.
 var MetricsSnapshot = agentrpc.Op[MetricsSnapshotRequest, MetricsSnapshotResponse]{Name: "metrics.snapshot"}
+
+// SitesStatsRequest has no parameters.
+type SitesStatsRequest struct{}
+
+// Validate accepts the empty request.
+func (SitesStatsRequest) Validate() error { return nil }
+
+// SiteUsage are the raw counters of one site's slice plus the slice of its
+// SSH and SFTP sessions (ADR-0063). Counters only grow while the cgroup
+// lives; the panel turns two readings into rates and treats a smaller
+// value as a restart.
+type SiteUsage struct {
+	Name    string `json:"name"`
+	CPUUsec uint64 `json:"cpuUsec"`
+	// MemoryBytes is the working set: memory.current minus inactive_file.
+	MemoryBytes  uint64 `json:"memoryBytes"`
+	CacheBytes   uint64 `json:"cacheBytes"`
+	MemoryKnown  bool   `json:"memoryKnown"`
+	Tasks        uint64 `json:"tasks"`
+	IOReadBytes  uint64 `json:"ioReadBytes"`
+	IOWriteBytes uint64 `json:"ioWriteBytes"`
+	IOKnown      bool   `json:"ioKnown"`
+	// HTTP* count the site's traffic.log since the agent started: requests,
+	// bytes the clients sent and bytes nginx sent.
+	HTTPRequests uint64 `json:"httpRequests"`
+	HTTPBytesIn  uint64 `json:"httpBytesIn"`
+	HTTPBytesOut uint64 `json:"httpBytesOut"`
+}
+
+// SitesStatsResponse lists at most MaxSites sites, sorted by name.
+type SitesStatsResponse struct {
+	At    time.Time   `json:"at"`
+	Sites []SiteUsage `json:"sites"`
+}
+
+// SitesStats reads the cgroup counters of every site. It only reads small
+// files below /sys/fs/cgroup.
+var SitesStats = agentrpc.Op[SitesStatsRequest, SitesStatsResponse]{Name: "sites.stats"}

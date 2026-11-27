@@ -91,7 +91,14 @@ func TestRead(t *testing.T) {
 		t.Fatalf("Read = %+v, want %+v", st, want)
 	}
 
-	write(t, p.Unattended, "\t\"origin=Hostashi,codename=stable\";\n")
+	// The suite runtimes (ADR-0077) is not --auto-update.
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n")
+
+	if st, err := Read(p); err != nil || st.Auto {
+		t.Fatalf("runtimes only: %+v %v", st, err)
+	}
+
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n\t\"origin=Hostashi,codename=stable\";\n")
 	write(t, p.DpkgStatus, status[:len(status)-len("Version: 0.1.0\nDescription: Hostashi\n a hosting panel\n")]+"Version: 0.10.0\n")
 
 	st, err = Read(p)
@@ -132,6 +139,22 @@ func TestReadWithoutPackageOrList(t *testing.T) {
 	}
 }
 
+func TestInstalled(t *testing.T) {
+	p := setup(t)
+
+	if v, err := Installed(p.DpkgStatus, Package); err != nil || v != "0.1.0" {
+		t.Fatalf("Installed = %q, %v", v, err)
+	}
+
+	if v, err := Installed(p.DpkgStatus, "clamav"); err != nil || v != "" {
+		t.Fatalf("not installed: %q, %v", v, err)
+	}
+
+	if v, err := Installed(filepath.Join(t.TempDir(), "missing"), Package); err != nil || v != "" {
+		t.Fatalf("missing file: %q, %v", v, err)
+	}
+}
+
 func TestListName(t *testing.T) {
 	for _, c := range []struct{ uri, want string }{
 		{"https://get.hostashi.com/apt", "get.hostashi.com_apt_dists_stable_main_binary-arm64_Packages"},
@@ -141,5 +164,26 @@ func TestListName(t *testing.T) {
 		if got := listName(c.uri, "stable", "main", "arm64"); got != c.want {
 			t.Errorf("listName(%q) = %q, want %q", c.uri, got, c.want)
 		}
+	}
+}
+
+// The installer writes AutoFile from packaging/apt with --auto-update; the
+// panel's switch writes AutoContent. Both must be the same file.
+func TestAutoContentMatchesInstaller(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "packaging", "apt", filepath.Base(AutoFile)))
+	if err != nil || string(b) != AutoContent {
+		t.Fatalf("packaging/apt/%s differs from AutoContent: %v", filepath.Base(AutoFile), err)
+	}
+}
+
+func TestReadRuntimes(t *testing.T) {
+	p := setup(t)
+
+	write(t, p.DpkgStatus, status+"\nPackage: hostashi-runtimes\nStatus: install ok installed\nArchitecture: all\nVersion: 20261127050000\n")
+	write(t, p.Unattended, "\t\"origin=Hostashi,codename=runtimes\";\n")
+
+	st, err := Read(p)
+	if err != nil || st.Runtimes != "20261127050000" || !st.RuntimesAuto || st.Auto {
+		t.Fatalf("runtimes: %+v %v", st, err)
 	}
 }

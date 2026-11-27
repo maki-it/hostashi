@@ -8,9 +8,11 @@ The cache is off until you switch it on. It listens only on a socket that the si
 
 **For:** everyone who can change the site.
 
-1. Open the site and go to the **PHP** tab.
+1. Open the site and go to the **App › Cache** tab.
 2. Under **Object cache**, switch it on. It starts with 64 MiB.
 3. Copy the connection details shown there into the app.
+
+![The Cache tab of a site with the page cache and the object cache](images/site-cache.png)
 
 For WordPress with the *Redis Object Cache* plugin, add these lines to `wp-config.php` above `/* That's all, stop editing! */` (the panel shows them with the site's name filled in):
 

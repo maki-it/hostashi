@@ -166,12 +166,17 @@ func TestSiteLimitsOverAPI(t *testing.T) {
 
 func TestBackupOverAPI(t *testing.T) {
 	got := fakeAPI(t, map[string]string{
-		"GET /api/v1/backups":                       `{"ready":false,"publicKey":"ssh-ed25519 AAAA","hostKey":"","settings":{},"status":{"ok":true,"running":false}}`,
-		"PUT /api/v1/backups/settings":              `{"ready":false,"publicKey":"ssh-ed25519 AAAA"}`,
-		"PUT /api/v1/backups/hostkey":               `{"ready":true}`,
-		"POST /api/v1/backups/run":                  ``,
-		"POST /api/v1/sites/bk/backups/abc/restore": `{"id":"r1","state":"queued"}`,
-		"GET /api/v1/backups/restores/r1":           `{"id":"r1","state":"done"}`,
+		"GET /api/v1/backups":                          `{"ready":false,"publicKey":"ssh-ed25519 AAAA","hostKey":"","settings":{},"status":{"ok":true,"running":false}}`,
+		"PUT /api/v1/backups/settings":                 `{"ready":false,"publicKey":"ssh-ed25519 AAAA"}`,
+		"PUT /api/v1/backups/hostkey":                  `{"ready":true}`,
+		"POST /api/v1/backups/run":                     ``,
+		"POST /api/v1/sites/bk/backups/abc/restore":    `{"id":"r1","state":"queued"}`,
+		"GET /api/v1/backups/restores/r1":              `{"id":"r1","state":"done"}`,
+		"GET /api/v1/backups/deleted":                  `{"sites":[{"name":"old","earlier":false}]}`,
+		"GET /api/v1/backups/deleted/old":              `{"snapshots":[{"id":"abc"}]}`,
+		"POST /api/v1/backups/deleted/old/abc/restore": `{"id":"r2","site":"bk","source":"old"}`,
+		"PUT /api/v1/backups/deleted/old/removal":      `{"marks":[{"site":"old"}]}`,
+		"DELETE /api/v1/backups/deleted/old/removal":   `{"marks":[]}`,
 	})
 
 	for _, c := range []struct {
@@ -186,6 +191,11 @@ func TestBackupOverAPI(t *testing.T) {
 		{"", []string{"start"}, "backup started"},
 		{"", []string{"restore", "bk", "abc"}, `"state": "queued"`},
 		{"", []string{"restore-status", "r1"}, `"state": "done"`},
+		{"", []string{"deleted"}, `"name": "old"`},
+		{"", []string{"deleted", "old"}, `"id": "abc"`},
+		{"", []string{"restore-deleted", "old", "abc", "bk"}, `"source": "old"`},
+		{"", []string{"delete-deleted", "old"}, `"site": "old"`},
+		{"", []string{"keep-deleted", "old"}, `"marks": []`},
 	} {
 		code, out, errOut := runCLI(t, c.in, append([]string{"backup"}, c.args...)...)
 		if code != 0 || !strings.Contains(out, c.want) {
@@ -297,5 +307,62 @@ func TestSiteOverAPI(t *testing.T) {
 
 	if got["POST /api/v1/sites"] != `{"name":"blog","domains":["blog.example.com"]}` {
 		t.Errorf("create body without a pool = %s", got["POST /api/v1/sites"])
+	}
+}
+
+func TestPoolRenameAndDefaultOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"POST /api/v1/pools/vol1/rename":  `{"name":"fast","path":"/srv/vol1","sites":2,"available":true,"default":false}`,
+		"POST /api/v1/pools/fast/default": `{"name":"fast","path":"/srv/vol1","sites":2,"available":true,"default":true}`,
+	})
+
+	if code, out, _ := runCLI(t, "", "pool", "rename", "vol1", "fast"); code != 0 || !strings.Contains(out, `"name": "fast"`) || got["POST /api/v1/pools/vol1/rename"] != `{"name":"fast"}` {
+		t.Errorf("rename = %d: %s %v", code, out, got)
+	}
+
+	if code, out, _ := runCLI(t, "", "pool", "default", "fast"); code != 0 || !strings.Contains(out, `"default": true`) {
+		t.Errorf("default = %d: %s", code, out)
+	}
+
+	for _, args := range [][]string{{"pool", "rename", "vol1"}, {"pool", "default"}, {"pool", "add", "-x", "a", "/b"}} {
+		if code, _, _ := runCLI(t, "", args...); code != 2 {
+			t.Errorf("%v = %d", args, code)
+		}
+	}
+}
+
+func TestFirewallOverAPI(t *testing.T) {
+	got := fakeAPI(t, map[string]string{
+		"GET /api/v1/firewall/bans": `{"jails":[{"name":"sshd","running":false,"bans":[]},` +
+			`{"name":"hostashi-site-auth","running":true,"totalFailed":10,"bans":[{"address":"203.0.113.7","since":"2026-11-26T22:00:00Z","until":"2026-11-26T23:00:00Z"}]},` +
+			`{"name":"recidive","running":true,"bans":[{"address":"2001:db8::1","since":"2026-11-26T22:00:00Z","until":null}]}]}`,
+		"DELETE /api/v1/firewall/bans/203.0.113.7": `{"address":"203.0.113.7","jails":["hostashi-site-auth"]}`,
+	})
+
+	code, out, _ := runCLI(t, "", "firewall", "bans")
+	if code != 0 || !strings.Contains(out, "203.0.113.7") || !strings.Contains(out, "no end") || !strings.Contains(out, "(not running)") {
+		t.Errorf("bans = %d: %s", code, out)
+	}
+
+	if code, out, _ = runCLI(t, "", "firewall", "bans", "-json"); code != 0 || !strings.Contains(out, `"recidive"`) {
+		t.Errorf("bans -json = %d: %s", code, out)
+	}
+
+	if code, out, _ = runCLI(t, "", "firewall", "unban", "203.0.113.7"); code != 0 || !strings.Contains(out, "hostashi-site-auth") {
+		t.Errorf("unban = %d: %s", code, out)
+	}
+
+	if _, ok := got["DELETE /api/v1/firewall/bans/203.0.113.7"]; !ok {
+		t.Errorf("no DELETE: %v", got)
+	}
+
+	if code, _, errOut := runCLI(t, "", "firewall", "unban", "198.51.100.1"); code != 1 || !strings.Contains(errOut, "no such thing") {
+		t.Errorf("not banned = %d: %s", code, errOut)
+	}
+
+	for _, args := range [][]string{{"firewall"}, {"firewall", "unban"}, {"firewall", "bans", "-yaml"}} {
+		if code, _, _ := runCLI(t, "", args...); code != 2 {
+			t.Errorf("%v = %d", args, code)
+		}
 	}
 }

@@ -66,7 +66,7 @@ grep -q 'assets/index-' /usr/bin/hostashi || fail "frontend not embedded"
 # The installer and every data directory it reads ($HERE/<dir> in install.sh).
 share=/usr/share/hostashi
 [ -x "$share/install.sh" ] || fail "install.sh missing or not executable"
-for d in adminer apt fail2ban firewall mariadb php postgresql ssh sysctl systemd; do
+for d in adminer apt clamav fail2ban firewall mariadb php postgresql ssh sysctl systemd; do
   [ -d "$share/$d" ] || fail "$share/$d missing"
   # Same files as in the source tree, byte for byte.
   diff -r "/src/packaging/$d" "$share/$d" >/dev/null || fail "$share/$d differs from packaging/$d"
@@ -74,6 +74,7 @@ done
 cmp -s /src/packaging/install.sh "$share/install.sh" || fail "install.sh differs"
 [ -x "$share/php/php-install" ] || fail "php-install lost its mode"
 [ -x "$share/postgresql/pg-client-install" ] || fail "pg-client-install lost its mode"
+[ -x "$share/clamav/clamav-install" ] || fail "clamav-install lost its mode"
 [ -x "$share/apt/php-restart" ] || fail "php-restart lost its mode"
 [ ! -e "$share/test" ] || fail "test scripts must not ship"
 [ -f /usr/share/doc/hostashi/copyright ] || fail "copyright missing"
@@ -83,20 +84,28 @@ cmp -s /src/packaging/deb/hostashi-rollback /usr/sbin/hostashi-rollback || fail 
 [ "$(stat -c '%a %U:%G' /usr/sbin/hostashi-rollback)" = "755 root:root" ] || fail "hostashi-rollback owner or mode"
 [ "$(/usr/bin/hostashi version -schema)" -gt 0 ] || fail "hostashi version -schema"
 
+# The manual page, gzipped and the same as packaging/man/hostashi.1. Read
+# from the package: container images often leave /usr/share/man out.
+page=./usr/share/man/man1/hostashi.1.gz
+dpkg-deb -c "$deb" | grep -E "^-rw-r--r-- root/root .* $page\$" >/dev/null || fail "man page missing, or its owner or mode"
+dpkg-deb --fsys-tarfile "$deb" | tar -xOf - "$page" | gzip -dc | cmp -s - /src/packaging/man/hostashi.1 || fail "man page differs from packaging/man/hostashi.1"
+
 # Nothing outside /usr, and no file writable by others.
 bad=$(dpkg -L hostashi | grep -vE '^/(\.|usr(/.*)?)$' || true)
 [ -z "$bad" ] || fail "files outside /usr: $bad"
-ww=$(dpkg -L hostashi | while read -r f; do [ -e "$f" ] && [ ! -L "$f" ] && find "$f" -maxdepth 0 -perm -o+w; done)
+# "if", not "&&": a path the image leaves out (Ubuntu drops /usr/share/man)
+# must not end the loop with a failure, which set -e would stop on.
+ww=$(dpkg -L hostashi | while read -r f; do if [ -e "$f" ] && [ ! -L "$f" ]; then find "$f" -maxdepth 0 -perm -o+w; fi; done)
 [ -z "$ww" ] || fail "world-writable: $ww"
 
 # Installing the same package again works and changes nothing.
-sum() { dpkg -L hostashi | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done | sort; }
+sum() { dpkg -L hostashi | while read -r f; do if [ -f "$f" ]; then sha256sum "$f"; fi; done | sort; }
 before=$(sum)
 apt-get install -y -qq --no-install-recommends --reinstall "$deb" >/dev/null || fail "reinstall"
 [ "$(sum)" = "$before" ] || fail "reinstall changed files"
 
 # Purge leaves nothing of the package behind (dependencies stay, as apt does).
-files=$(dpkg -L hostashi | grep -vE '^/(\.|usr|usr/bin|usr/sbin|usr/share|usr/share/doc|usr/share/keyrings)$')
+files=$(dpkg -L hostashi | grep -vE '^/(\.|usr|usr/bin|usr/sbin|usr/share|usr/share/doc|usr/share/keyrings|usr/share/man|usr/share/man/man1)$')
 apt-get purge -y -qq hostashi >/dev/null || fail "purge"
 for f in $files; do [ ! -e "$f" ] || fail "left behind: $f"; done
 

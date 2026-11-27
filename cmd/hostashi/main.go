@@ -29,12 +29,16 @@ import (
 	"github.com/maki-it/hostashi/internal/backup"
 	"github.com/maki-it/hostashi/internal/dbjob"
 	"github.com/maki-it/hostashi/internal/files"
+	"github.com/maki-it/hostashi/internal/gitsync"
 	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/pythoninstall"
 	"github.com/maki-it/hostashi/internal/reqid"
+	"github.com/maki-it/hostashi/internal/runtimepins"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/serve"
 	"github.com/maki-it/hostashi/internal/store"
+	"github.com/maki-it/hostashi/internal/wpcli"
+	"github.com/maki-it/hostashi/internal/wpinstall"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -67,6 +71,10 @@ commands:
             start, stop, restart or reload one where the service catalog
             allows it, through the panel's API (needs hostashi login,
             ADR-0052)
+  firewall bans [-json] | firewall unban ADDRESS
+            show the addresses fail2ban blocks, or unblock one in every
+            Hostashi jail, through the panel's API (needs hostashi login,
+            ADR-0078)
   system info | system timezones | system timezone ZONE |
   system hostname NAME | system reboot HOSTNAME
             show or change the server's time zone and hostname, or reboot it
@@ -76,10 +84,14 @@ commands:
             create a static site with its domains, delete a site with its
             data, or list the sites, through the panel's API (needs
             hostashi login)
-  pool add NAME PATH | pool remove NAME | pool list
+  pool add [-default] NAME PATH | pool remove NAME | pool list
             storage pools for site homes (ADR-0016, root on the server):
             PATH is a mounted, empty ext4 or XFS volume with nosuid,nodev
-            and an /etc/fstab entry; Hostashi never formats or mounts
+            and an /etc/fstab entry; Hostashi never formats or mounts;
+            -default makes the new pool the default for new sites
+  pool rename NAME NEWNAME | pool default NAME
+            rename a pool (its path and sites stay) or make it the default
+            for new sites, through the panel's API (needs hostashi login)
   site files NAME
             start the file manager's socket of a site and print its path
             (ADR-0040)
@@ -89,14 +101,14 @@ commands:
             memory, tasks, cpu-priority (low, normal, high), cpu-quota,
             disk, inodes, php-workers, db-size, db-connections; 0 means no
             limit, values left out stay as they are
-  web apply read the complete web state as JSON from stdin and make it live,
+  web apply  read the complete web state as JSON from stdin and make it live,
             e.g. {"sites":[{"user":"blog","domains":["blog.example.com"]}]}
   db list | db create SITE NAME | db delete NAME
   db user create DATABASE USER | db user password USER | db user delete USER
   db import DATABASE FILE | db export DATABASE FILE
-            with FILE relative to the site home, ending in .sql or .sql.gz
             manage databases through the panel's API (needs hostashi
-            login); the password is read from stdin, an empty line lets
+            login); FILE is relative to the site home and ends in .sql or
+            .sql.gz; the password is read from stdin, an empty line lets
             the panel generate one
   backup run   one backup now (root; normally started by hostashi-backup.service)
   backup get | backup set | backup hostkey | backup start | backup status
@@ -106,6 +118,12 @@ commands:
   backup restore SITE SNAPSHOT | backup restore-status ID
             restore a snapshot into a new directory restore-<time> in the
             site's home, through the panel's API (needs hostashi login)
+  backup deleted [SITE] | backup restore-deleted SITE SNAPSHOT TARGET
+            list deleted sites that still have snapshots, or the snapshots
+            of one; restore one into the existing site TARGET (admins)
+  backup delete-deleted SITE | backup keep-deleted SITE
+            delete the backups of a deleted site with the next backup run,
+            or keep them after all (admins)
   backup restore-run ID
             one restore (root; started by hostashi-restore@ID.service)
   backup key show
@@ -137,6 +155,13 @@ commands:
             download, check and unpack the pinned Node.js build of MAJOR into
             /opt/hostashi/node/MAJOR (root; started by
             hostashi-node-install@MAJOR.service)
+  wp-run PHAR
+            run the WordPress quick install with WP-CLI from the job in the
+            unit's credentials (site user; started by hostashi-wp@SITE.service)
+  wpcli-install
+            download and check the pinned WP-CLI phar into
+            /opt/hostashi/wp-cli/VERSION (root; started by
+            hostashi-wpcli-install.service, ADR-0069)
   python status | python install LINE | python remove LINE
             the installed Python lines and the last installation, start the
             installation of a line (for example 3.13) or remove one that no
@@ -145,6 +170,10 @@ commands:
             download, check and unpack the pinned CPython build of LINE into
             /opt/hostashi/python/LINE (root; started by
             hostashi-python-install@LINE.service)
+  git-sync -url URL -branch BRANCH -cache DIR -release DIR -result FILE [flags]
+            fetch a site's branch and write one commit into a new release
+            directory (the site user, never root; started by
+            hostashi-deploy@SITE.service, ADR-0062)
   user recover [-public-url URL] NAME
             reset NAME's password and second factors, enable the account
             and print a new invitation link (root; the way back in when
@@ -182,6 +211,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 
 	log := slog.New(reqid.Handler(slog.NewJSONHandler(stderr, nil)))
 	cmd, args := args[0], args[1:]
+
+	loadRuntimePins(log, runtimepins.DefaultPath, cmd == "agent")
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	socket := fs.String("socket", agentapi.DefaultSocket, "agent socket path")
@@ -202,6 +233,8 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		return completionCmd(args, stdout, stderr)
 	case "__complete":
 		return completeCmd(args, stdout)
+	case "__man":
+		return manCmd(args, stdout, stderr)
 	}
 
 	switch cmd {
@@ -283,6 +316,17 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = serviceCmd(ctx, fs.Args(), stdout)
+		if errors.Is(err, errUsage) {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+	case "firewall":
+		if fs.Parse(args) != nil {
+			return 2
+		}
+
+		err = firewallCmd(ctx, fs.Args(), stdout)
 		if errors.Is(err, errUsage) {
 			fmt.Fprint(stderr, usage)
 
@@ -420,6 +464,9 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = (&pythoninstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
+	case "git-sync":
+		// Runs in the deploy unit as the site user (ADR-0062).
+		err = gitsync.Run(ctx, args, euid, stderr)
 	case "node-install":
 		if fs.Parse(args) != nil || fs.NArg() != 1 {
 			fmt.Fprint(stderr, usage)
@@ -434,6 +481,23 @@ func run(ctx context.Context, args []string, euid int, stdout, stderr io.Writer)
 		}
 
 		err = (&nodeinstall.Installer{Out: stdout}).Install(ctx, fs.Arg(0))
+	case "wp-run":
+		// Runs in hostashi-wp@<site> as the site user (ADR-0069).
+		err = wpcli.Main(ctx, args, euid, stdout)
+	case "wpcli-install":
+		if fs.Parse(args) != nil || fs.NArg() != 0 {
+			fmt.Fprint(stderr, usage)
+
+			return 2
+		}
+
+		if euid != 0 {
+			err = errors.New("must run as root")
+
+			break
+		}
+
+		err = (&wpinstall.Installer{Out: stdout}).Install(ctx)
 	case "user":
 		dbPath := fs.String("db", store.DefaultPath, "SQLite database path")
 		publicURL := fs.String("public-url", "", "panel address for the link (default: from "+envFile+")")
@@ -542,4 +606,27 @@ func filesHelper(ctx context.Context, euid int, home string, idle time.Duration,
 	}
 
 	return files.Serve(ctx, ln, &files.Handler{Root: root, Log: log}, idle, log)
+}
+
+// loadRuntimePins puts newer Node.js and CPython pins from the package
+// hostashi-runtimes over the built-in ones (ADR-0077), before any command
+// reads them, so the agent, the panel and the install units agree. A bad
+// file is reported and ignored; the built-in pins stay.
+func loadRuntimePins(log *slog.Logger, path string, verbose bool) {
+	res, err := runtimepins.Load(path)
+	if err != nil {
+		log.Warn("runtime pins file ignored", "err", err)
+
+		return
+	}
+
+	for _, s := range res.Skipped {
+		log.Warn("runtime pin ignored", "pin", s)
+	}
+
+	if verbose {
+		for _, a := range res.Applied {
+			log.Info("runtime pin from "+path, "pin", a)
+		}
+	}
 }

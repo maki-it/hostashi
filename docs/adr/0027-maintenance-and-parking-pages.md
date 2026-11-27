@@ -70,3 +70,32 @@ None left.
 
 1. ~~May the page's own JavaScript run?~~ Decided (Kim, 2026-11-19): yes, from its files and inline, see the named conflict.
 2. ~~Should parked domains get HTTPS with Let's Encrypt?~~ Decided (Kim, 2026-11-19): yes.
+
+## Addendum 1: preview in the panel (Accepted by Kim, 2026-11-24)
+
+**Context.** Kim wants a Preview button on the maintenance pages (Kim, 2026-11-23). Uploaded pages live only on the agent side in `/var/lib/hostashi-pages/<id>.<digest>/`, a directory nginx reads and that is world-readable by design [V: `internal/agent/pages.go`, `internal/pages`]. The panel unit runs with `ProtectSystem=strict`, which leaves that directory readable [V: `packaging/systemd/hostashi.service`]. A page is HTML from the admin or copied from elsewhere; shown under the panel's own origin, a script in it could use the panel session [U: same-origin rules]. Session cookies are `SameSite=Strict` [V: `internal/serve/auth_api.go`].
+
+**Options.** (a) Preview in the panel, sandboxed. (b) The same without scripts. (c) Preview only the built-in pages. Kim chose (a) on 2026-11-23.
+
+**Decision proposed.**
+
+- `POST /api/v1/status-pages/{id}/preview` (action `pages:read`, admins and managers) returns a link `/api/page-preview/<token>/`. The token is 32 random bytes, kept in the panel's memory for 15 minutes and for exactly one version (id and digest) of one page; at most 256 live tokens, a restart ends them.
+- `GET /api/page-preview/{token}/{path...}` is public and, being for browsers only, outside `/api/v1` and the OpenAPI document: the token is the credential. It serves only files that pass `agentapi.ValidatePagePath`, with the Content-Type of `agentapi.PageTypes`, read through `os.Root` (no symlink or `..` out of the page, regular files only, at most 2 MiB) or from the embedded built-in pages.
+- Every answer carries `Content-Security-Policy: sandbox allow-scripts; ...; connect-src 'none'; form-action 'none'; frame-ancestors 'none'` without `allow-same-origin`. The page runs in an opaque origin: it cannot read panel cookies, call the API (also `SameSite=Strict` keeps the cookies away) or script the panel tab. Scripts, styles, images and fonts from `https:` load as on the live page.
+- The panel opens the tab before it asks for the link (popup blockers) and drops `window.opener` before the tab navigates.
+- No new agent operation, no new `os/exec` exception; the panel reads the pages directory read-only.
+
+**Consequences.** A preview link works for whoever holds it for 15 minutes, like a share link; it shows only what visitors of a site with that page see anyway. The token sits in the URL and so in the browser history; it expires quickly and unlocks nothing else [A]. Requests from the page itself (`fetch`, forms) are blocked in the preview, unlike on a live site.
+
+## Addendum 2: the visited domain in a page (Kim's request, 2026-11-25)
+
+**Context.** Kim's own maintenance and parking pages (repository `maki-it/cloudpanel`, `parking/`) contain the placeholder `%%DOMAIN%%`, which their CloudPanel setup replaces with nginx `sub_filter`. Hostashi served it literally (Kim, 2026-11-25, with a screenshot). Those pages use no other placeholder [V: `parking/src/page.html`, `parking/build.py`]. The value comes from the request: the Host header, or the host of an absolute request line [U: nginx docs for `$host`]. Placed unchecked into HTML it would allow markup injection wherever a request can reach the server block with an odd host name [A: today every server block has exact names, so this is defence in depth].
+
+**Decision.**
+
+- In the location of a page's files, nginx replaces `%%DOMAIN%%` with `$hostashi_page_domain` (`sub_filter`, `sub_filter_once off`), only in `text/html` (the `sub_filter_types` default), so CSS, JavaScript and SVG stay untouched. This covers maintenance, disabled sites and parked domains, which all serve pages through that location.
+- `$hostashi_page_domain` is a `map` on `$host` (lower case, no port): the host name if it consists only of dot-separated labels of `a-z`, `0-9`, `_` and `-`, otherwise empty. None of these characters can end an HTML text, an attribute value or a script string. Internationalized names appear in their ASCII form.
+- The panel preview replaces the placeholder with `example.com` in HTML files.
+- `ngx_http_sub_module` is part of the Debian and Ubuntu nginx builds [V: `nginx -V` on Ubuntu 24.04 shows `--with-http_sub_module`; the installer tests on Debian 13 and Ubuntu 26.04 run the rendered configuration]. No new agent operation and no `os/exec` exception.
+
+**Consequences.** Pages written for Kim's CloudPanel setup work unchanged. `sub_filter` skips compressed responses; uploaded pages cannot contain precompressed `.br` or `.gz` files, so `brotli_static` never bypasses it [V: `agentapi.PageTypes`]. A visitor who sends an unusual Host header sees an empty domain instead.

@@ -27,10 +27,15 @@
   --font-body: "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --head-ls: -0.04em;
+  /* Small caps for table heads, nav groups and similar captions */
   --label-font: var(--font-mono);
   --label-size: 12px;
   --label-tf: uppercase;
   --label-ls: 0.08em;
+  /* Form labels and fact names: plain text, easier to read */
+  --field-label-font: var(--font-body);
+  --field-label-size: 14px;
+  --field-label-weight: 600;
 
   --radius: 6px;
   --radius-card: 10px;
@@ -54,13 +59,18 @@
   --muted: #3b4a44;
   --accent: #1f6b55;
   --focus: #1f6b55;
-  --primary: #ff6f61;
-  --on-primary: #0d1f1a;
+  /* Main actions are green; coral stays the brand colour of the logo so
+     it is never mistaken for the red of a destructive action. */
+  --primary: #1f6b55;
+  --on-primary: #ffffff;
+  --brand: #ff6f61;
+  --on-brand: #0d1f1a;
   /* QR codes stay dark on white in both schemes: scanners need it. */
   --qr-dark: #000;
   --qr-light: #fff;
   --ok: #0e6f8c;
   --ok-bg: #e3f1f6;
+  --selection: #b6d8ee;
   --warn: #a24b00;
   --warn-bg: #fbece0;
   --err: #b42318;
@@ -94,10 +104,11 @@
   --muted: #9db3ab;
   --accent: #5cbc9d;
   --focus: #5cbc9d;
-  --primary: #ff6f61;
+  --primary: #5cbc9d;
   --on-primary: #0d1f1a;
   --ok: #5bc0de;
   --ok-bg: #0f2c36;
+  --selection: #24506a;
   --warn: #f0a15a;
   --warn-bg: #3a2210;
   --err: #ff8f84;
@@ -111,7 +122,7 @@
   --side-active-bg: #1a2c22;
   --side-active-fg: #ffffff;
   --side-line: #1a2c22;
-  --active-bar: #ff6f61;
+  --active-bar: #5cbc9d;
 
   --series-1: #2f9c7c;
   --series-2: #8a78ee;
@@ -130,10 +141,11 @@
     --muted: #9db3ab;
     --accent: #5cbc9d;
     --focus: #5cbc9d;
-    --primary: #ff6f61;
+    --primary: #5cbc9d;
     --on-primary: #0d1f1a;
     --ok: #5bc0de;
     --ok-bg: #0f2c36;
+    --selection: #24506a;
     --warn: #f0a15a;
     --warn-bg: #3a2210;
     --err: #ff8f84;
@@ -147,7 +159,7 @@
     --side-active-bg: #1a2c22;
     --side-active-fg: #ffffff;
     --side-line: #1a2c22;
-    --active-bar: #ff6f61;
+    --active-bar: #5cbc9d;
 
     --series-1: #2f9c7c;
     --series-2: #8a78ee;

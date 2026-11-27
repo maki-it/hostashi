@@ -14,6 +14,7 @@ import (
 	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/certs"
 	"github.com/maki-it/hostashi/internal/doctor"
+	"github.com/maki-it/hostashi/internal/f2bctl"
 	"github.com/maki-it/hostashi/internal/firewall"
 	"github.com/maki-it/hostashi/internal/nodeinstall"
 	"github.com/maki-it/hostashi/internal/php"
@@ -55,10 +56,11 @@ type doctorOps struct {
 	fw       *firewall.Manager // nil without the panel's firewall rules
 	dbTool   bool              // the web database tool is installed (ADR-0038)
 	node     *nodeinstall.Manager
+	f2b      *f2bctl.Controller // nil: the jails are not checked
 }
 
-func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, node *nodeinstall.Manager, dbTool bool) {
-	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, node: node, dbTool: dbTool}
+func registerDoctor(s *agentrpc.Server, env DoctorEnv, stateDir string, h *siteOps, fw *firewall.Manager, node *nodeinstall.Manager, f2b *f2bctl.Controller, dbTool bool) {
+	d := &doctorOps{env: env, stateDir: stateDir, h: h, fw: fw, node: node, f2b: f2b, dbTool: dbTool}
 
 	agentrpc.Handle(s, agentapi.Doctor, func(ctx context.Context, _ agentrpc.Caller, _ agentapi.DoctorRequest) (agentapi.DoctorReport, error) {
 		return d.run(ctx), nil
@@ -109,6 +111,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	}
 
 	out = append(out, poolCheck...)
+	out = append(out, sys.FstabDevices())
 
 	disk := d.env.Disk
 	if disk == nil {
@@ -134,8 +137,16 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, doctor.Panel(ctx, orDefault(d.env.PanelSocket, PanelSocket)))
 	out = append(out, d.nginx(ctx))
 	out = append(out, d.mariadb(ctx))
-	out = append(out, doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
-		"Logins are not protected against brute force. Check: systemctl status fail2ban."))
+	f2bCheck := doctor.Socket(ctx, "service.fail2ban", "fail2ban", orDefault(d.env.Fail2banSocket, Fail2banSocket),
+		"Logins are not protected against brute force. Check: systemctl status fail2ban.")
+	out = append(out, f2bCheck)
+
+	// The jails only when fail2ban answers; otherwise the check above
+	// already says it (ADR-0078).
+	if d.f2b != nil && f2bCheck.Status == agentapi.DoctorOK {
+		st, err := d.f2b.Status(ctx)
+		out = append(out, doctor.Fail2banJails(st, err))
+	}
 
 	if d.dbTool {
 		out = append(out, doctor.Socket(ctx, "service.dbtool", "the database tool", orDefault(d.env.DBToolSocket, DBToolSocket),
@@ -163,6 +174,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	out = append(out, hard.Updates(), hard.Reboot(), hard.PHP(), hard.Files(), hard.SSH(), hard.Sysctl())
 	st, err := updates.Read(d.env.Updates)
 	out = append(out, doctor.Update(st, err, d.now())...)
+	out = append(out, doctor.Runtimes(st)...)
 	out = append(out, d.valkey(ctx))
 	out = append(out, d.nodeChecks()...)
 

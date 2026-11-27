@@ -85,7 +85,7 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 			return c, fmt.Errorf("%w: type redirect needs a target", ErrInvalid)
 		}
 
-		r, err := checkRedirect(*req.Redirect, site.Domains)
+		r, err := checkRedirect(*req.Redirect, site.AllDomains())
 		if err != nil {
 			return c, err
 		}
@@ -96,7 +96,7 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 			return c, fmt.Errorf("%w: type proxy needs a target", ErrInvalid)
 		}
 
-		if err := s.checkProxy(ctx, *req.Proxy, site.Domains); err != nil {
+		if err := s.checkProxy(ctx, *req.Proxy, site.AllDomains()); err != nil {
 			return c, err
 		}
 

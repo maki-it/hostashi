@@ -3,6 +3,7 @@
 # Build / local
 /bin/
 /dist/
+/build/
 /node_modules/
 *.log
 .env
@@ -19,3 +20,6 @@
 /internal/ui/dist/*
 !/internal/ui/dist/.gitkeep
 /web/node_modules/
+
+# Binary from "go build ./cmd/hostashi" in the repository root.
+/hostashi

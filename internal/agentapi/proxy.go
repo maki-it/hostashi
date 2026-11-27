@@ -121,6 +121,29 @@ func ProxyAddrAllowed(a netip.Addr) error {
 	return nil
 }
 
+// sharedAddressSpace is 100.64.0.0/10 (RFC 6598), the carrier-grade NAT
+// range that overlay networks such as Tailscale use as well.
+var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+
+// ProxyAddrPrivate reports whether a proxy target address lies in a
+// private network: 10/8, 172.16/12, 192.168/16, fc00::/7 and 100.64/10,
+// also when they are wrapped in IPv6. Only admins and managers may point a
+// reverse proxy there (second own security review, 2026-11-26): such an
+// address reaches the server's internal network, not the internet.
+func ProxyAddrPrivate(a netip.Addr) bool {
+	a = a.WithZone("")
+	if a.Is4In6() {
+		a = a.Unmap()
+	}
+
+	if nat64.Contains(a) {
+		b := a.As16()
+		a = netip.AddrFrom4([4]byte(b[12:]))
+	}
+
+	return a.IsPrivate() || sharedAddressSpace.Contains(a)
+}
+
 // ProxyResolver looks up the addresses of a host name.
 type ProxyResolver func(ctx context.Context, host string) ([]netip.Addr, error)
 

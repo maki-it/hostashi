@@ -116,7 +116,7 @@ describe("Migrate", () => {
   it("creates a reviewed site from the plan and imports it", async () => {
     const user = userEvent.setup();
     let sites = [
-      { ...planSite("shop", "review", [{ code: "custom_snippets", msg: "2 nginx directives need a one-time review" }]), pageCache: "php" },
+      { ...planSite("shop", "review", [{ code: "custom_snippets", msg: "2 nginx directives need a one-time review" }]), pageCache: "php", profile: "wordpress" },
       planSite("old", "skip", [{ code: "type_unsupported", msg: 'site type "nodejs" is not supported by Hostashi yet' }]),
     ];
     let polls = 0;
@@ -207,6 +207,7 @@ describe("Migrate", () => {
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["8.2 (not installed)", "8.3", "8.4"]);
     await user.selectOptions(select, "8.4");
     await user.click(create.getByRole("checkbox", { name: /I checked the points above for shop/ }));
+    expect(create.getByText(/gets the WordPress profile/)).toBeInTheDocument();
     // The proposed page cache is on unless the admin unticks it.
     const cache = create.getByRole("checkbox", { name: "Switch on the page cache (Other PHP application preset)" });
     expect(cache).toBeChecked();
@@ -370,7 +371,9 @@ describe("Migrate", () => {
     render(<Harness initial="report=r1&site=api" />);
     expect(await screen.findByText("Node.js")).toBeInTheDocument();
     const select = await screen.findByLabelText(/^Node.js for api/);
-    expect(within(select).getByRole("option", { name: "Node.js 26 (not installed)" })).toBeInTheDocument();
+    // The release list arrives after the select first renders with the
+    // installed lines only, so wait for it.
+    expect(await within(select).findByRole("option", { name: "Node.js 26 (not installed)" })).toBeInTheDocument();
     await user.selectOptions(select, "22");
     await user.click(screen.getByLabelText(/I checked the points above/));
     await user.click(screen.getByRole("button", { name: "Create api" }));
@@ -404,7 +407,8 @@ describe("Migrate", () => {
     render(<Harness initial="report=r1&site=blog" />);
     expect(await screen.findByText("Python")).toBeInTheDocument();
     const select = await screen.findByLabelText(/^Python for blog/);
-    expect(within(select).getByRole("option", { name: "Python 3.14 (not installed)" })).toBeInTheDocument();
+    // The select shows before the Python versions have loaded.
+    expect(await within(select).findByRole("option", { name: "Python 3.14 (not installed)" })).toBeInTheDocument();
     await user.selectOptions(select, "3.12");
     await user.click(screen.getByLabelText(/I checked the points above/));
     await user.click(screen.getByRole("button", { name: "Create blog" }));

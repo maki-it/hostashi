@@ -41,7 +41,7 @@ import { formatHash } from "./routes";
 import { getNode, type NodeStatus } from "./node";
 import { getPython, type PythonStatus } from "./python";
 import { presetLabel, type Preset } from "./pagecache";
-import { listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
+import { defaultPool, listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
   Badge,
   Button,
@@ -481,8 +481,8 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
       srHeader: true,
       cell: (r) => (
         <RowActions>
-          <IconLink label="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
-          <IconButton label="Delete report" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
+          <IconLink label="Show plan" text="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
+          <IconButton label="Delete report" text="Delete" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
         </RowActions>
       ),
     },
@@ -748,7 +748,15 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
           {site.redirectFrom.length > 0 && (
             <>
               <dt>Redirects</dt>
-              <dd>{site.redirectFrom.join(", ")}</dd>
+              <dd>
+                {site.redirectFrom.join(", ")}
+                {site.wwwRedirect && (
+                  <span className="ui-hint ui-flush">
+                    {" "}
+                    · taken over as the site's www redirect ({site.wwwRedirect === "to-www" ? "to the www name" : "to the name without www"})
+                  </span>
+                )}
+              </dd>
             </>
           )}
           <dt>Type</dt>
@@ -845,7 +853,10 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   useEffect(() => {
     if (site.proxy) return;
     listPools()
-      .then(setPools)
+      .then((list) => {
+        setPools(list);
+        setPool(defaultPool(list));
+      })
       .catch(() => setPools([]));
   }, [site.proxy]);
   useEffect(() => {
@@ -969,6 +980,12 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
           <input type="checkbox" checked={cache} onChange={(e) => setCache(e.target.checked)} />
           Switch on the page cache ({presetLabel[site.pageCache as Preset] ?? site.pageCache} preset)
         </label>
+      )}
+      {site.profile === "wordpress" && (
+        <p className="ui-hint">
+          The site gets the WordPress profile: <code>xmlrpc.php</code> is blocked, PHP never runs in <code>wp-content/uploads</code>, and{" "}
+          <code>wp-login.php</code> is rate limited. Change the rules on the site's Hardening tab after the import.
+        </p>
       )}
       {review && (
         <label className="ui-check">

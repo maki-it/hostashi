@@ -101,6 +101,27 @@ type SystemInfo struct {
 	// CloudInit reports that cloud-init is installed; the agent then keeps
 	// it from setting the hostname back at boot.
 	CloudInit bool `json:"cloudInit"`
+	// Updates is the state of the hostashi package (ADR-0050); absent
+	// when the server was not set up from the package.
+	Updates *SystemUpdates `json:"updates,omitempty"`
+}
+
+// SystemUpdates says which hostashi package is installed, which one apt
+// last saw in the Hostashi repository, and whether unattended-upgrades
+// installs new ones by itself (--auto-update).
+type SystemUpdates struct {
+	Installed string `json:"installed"`
+	// Available is empty while apt has no list of the repository.
+	Available string `json:"available,omitempty"`
+	Update    bool   `json:"update"`
+	Auto      bool   `json:"auto"`
+	// ListedAt is when apt last fetched the list, RFC 3339 UTC.
+	ListedAt string `json:"listedAt,omitempty"`
+	// Runtimes is the installed version of hostashi-runtimes, the pinned
+	// Node.js and CPython releases (ADR-0077); empty when not installed.
+	// RuntimesAuto: unattended-upgrades updates it.
+	Runtimes     string `json:"runtimes,omitempty"`
+	RuntimesAuto bool   `json:"runtimesAuto"`
 }
 
 // SystemTimezonesRequest has no parameters.
@@ -136,6 +157,15 @@ type SystemRebootRequest struct{}
 // Validate accepts the empty request.
 func (SystemRebootRequest) Validate() error { return nil }
 
+// SystemAutoUpdateRequest turns the automatic installation of new Hostashi
+// versions on or off (ADR-0050).
+type SystemAutoUpdateRequest struct {
+	On bool `json:"on"`
+}
+
+// Validate accepts both values.
+func (SystemAutoUpdateRequest) Validate() error { return nil }
+
 // SystemRebootResponse says when the agent asks systemd to reboot.
 type SystemRebootResponse struct {
 	DelaySeconds int `json:"delaySeconds"`
@@ -148,4 +178,6 @@ var (
 	SystemTimezoneSet = agentrpc.Op[SystemTimezoneRequest, SystemInfo]{Name: "system.timezone.set"}
 	SystemHostnameSet = agentrpc.Op[SystemHostnameRequest, SystemInfo]{Name: "system.hostname.set"}
 	SystemReboot      = agentrpc.Op[SystemRebootRequest, SystemRebootResponse]{Name: "system.reboot"}
+	// SystemAutoUpdateSet is ADR-0050's --auto-update as a switch.
+	SystemAutoUpdateSet = agentrpc.Op[SystemAutoUpdateRequest, SystemInfo]{Name: "system.autoupdate.set"}
 )

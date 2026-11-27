@@ -9,7 +9,7 @@ import type { BackupInfo } from "./backups";
 import { mockFetch } from "./test-utils";
 
 const status = { running: false, ok: false, items: [], maintenanceOk: true };
-const defaults = { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 };
+const defaults = { version: 1, retention: { hourly: 0, daily: 7, weekly: 4, monthly: 6, yearly: 0 }, intervalHours: 24, windowStart: 1, windowEnd: 5, readParts: 12, deletedSiteDays: 0 };
 const target = { user: "u123456", host: "u123456.your-storagebox.de", port: 23, path: "hostashi" };
 const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGtest hostashi-backup@web3";
 
@@ -32,7 +32,7 @@ const snapFiles = "a".repeat(64);
 const snapDB = "b".repeat(64);
 
 describe("Backups", () => {
-  it("sets the target and shows the key for the Storage Box", async () => {
+  it("sets a Storage Box target and shows the key", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({
       "GET /api/v1/backups": { body: fresh },
@@ -42,10 +42,121 @@ describe("Backups", () => {
     expect(await screen.findByText(/Not set up yet/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("User"), "u123456");
     await user.type(screen.getByLabelText("Host"), "U123456.your-storagebox.de ");
+    const port = screen.getByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "23");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target });
     expect(screen.getByRole("heading", { name: "Host key" })).toBeInTheDocument();
+  });
+
+  it("sets a plain SFTP server on port 22 by default", async () => {
+    const user = userEvent.setup();
+    const nas = { user: "backup_web3", host: "192.0.2.10", port: 22, path: "/srv/backups/web3" };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: fresh },
+      "PUT /api/v1/backups/settings": { body: { ...fresh, settings: { ...defaults, target: nas }, publicKey: pub } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/Not set up yet/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Port")).toHaveValue("22");
+    await user.type(screen.getByLabelText("User"), "backup_web3");
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    const dir = screen.getByLabelText("Directory");
+    await user.clear(dir);
+    await user.type(dir, "/srv/backups/web3");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target: nas });
+    expect(screen.queryByText(/Hetzner.s console/)).not.toBeInTheDocument();
+  });
+
+  it("runs backups every hour and keeps hourly and yearly snapshots", async () => {
+    const user = userEvent.setup();
+    const nas = { user: "backup", host: "192.0.2.10", port: 22, path: "hostashi" };
+    const hourly = { ...defaults, target: nas, intervalHours: 1, retention: { ...defaults.retention, hourly: 48, yearly: 3 } };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: fresh },
+      "PUT /api/v1/backups/settings": { body: { ...fresh, settings: hourly, publicKey: pub } },
+    });
+    render(<Harness />);
+    expect(await screen.findByLabelText("Start from (hour)")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("User"), "backup");
+    await user.type(screen.getByLabelText("Host"), "192.0.2.10");
+    await user.selectOptions(screen.getByLabelText("Run backups"), "Every hour");
+    expect(screen.queryByLabelText("Start from (hour)")).not.toBeInTheDocument();
+    expect(screen.getByText(/skips that one/)).toBeInTheDocument();
+    const h = screen.getByLabelText("Hourly");
+    await user.clear(h);
+    await user.type(h, "48");
+    const y = screen.getByLabelText("Yearly");
+    await user.clear(y);
+    await user.type(y, "3");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByLabelText("Public key")).toHaveTextContent(pub);
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual(hourly);
+    expect(screen.getByLabelText("Run backups")).toHaveValue("1");
+  });
+
+  it("shows an older server's settings as daily without hourly or yearly snapshots", async () => {
+    const old = { version: 1, retention: { daily: 7, weekly: 4, monthly: 6 }, windowStart: 1, windowEnd: 5, readParts: 12 };
+    mockFetch({ "GET /api/v1/backups": { body: { ...fresh, settings: old } } });
+    render(<Harness />);
+    expect(await screen.findByLabelText("Run backups")).toHaveValue("24");
+    expect(screen.getByLabelText("Hourly")).toHaveValue("0");
+    expect(screen.getByLabelText("Yearly")).toHaveValue("0");
+    expect(screen.getByLabelText("Deleted sites (days)")).toHaveValue("0");
+  });
+
+  it("removes the backups of deleted sites after the days set", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: withTarget },
+      "PUT /api/v1/backups/settings": { body: { ...withTarget, settings: { ...defaults, target, deletedSiteDays: 90 } } },
+    });
+    render(<Harness />);
+    const days = await screen.findByLabelText("Deleted sites (days)");
+    await user.clear(days);
+    await user.type(days, "90");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ ...defaults, target, deletedSiteDays: 90 });
+  });
+
+  it("lists what the last run removed of deleted sites", async () => {
+    mockFetch({
+      "GET /api/v1/backups": {
+        body: { ...ready, status: { ...ready.status, removed: [{ site: "old", snapshots: 3, expired: true }], removeError: "repository locked" } },
+      },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/backups/deleted": { body: { sites: [] } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/Removed 3 snapshots of the deleted site/)).toHaveTextContent("old (expired).");
+    expect(screen.getByText(/Removing backups of deleted sites failed: repository locked/)).toBeInTheDocument();
+  });
+
+  it("shows an overdue backup with the interval", async () => {
+    mockFetch({
+      "GET /api/v1/backups": { body: { ...ready, overdue: true, settings: { ...ready.settings, intervalHours: 6 } } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+    });
+    render(<Harness />);
+    expect(await screen.findByText(/No backup has finished in the last 8 hours, although backups run every 6 hours/)).toBeInTheDocument();
+    expect(screen.getByText("Overdue")).toBeInTheDocument();
+  });
+
+  it("warns when a Storage Box is set on another port than 23", async () => {
+    const user = userEvent.setup();
+    mockFetch({ "GET /api/v1/backups": { body: fresh } });
+    render(<Harness />);
+    await user.type(await screen.findByLabelText("Host"), "u123456.your-storagebox.de");
+    expect(screen.getByText("Hetzner Storage Boxes serve SFTP on port 23.")).toBeInTheDocument();
+    const port = screen.getByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "23");
+    expect(screen.queryByText("Hetzner Storage Boxes serve SFTP on port 23.")).not.toBeInTheDocument();
   });
 
   it("shows the fingerprint and trusts the key only on confirmation", async () => {
@@ -58,7 +169,7 @@ describe("Backups", () => {
     });
     render(<Harness />);
     await user.click(await screen.findByRole("button", { name: "Fetch the host key" }));
-    expect(await screen.findByText(/Compare it with the fingerprints/)).toHaveTextContent("SHA256:abc");
+    expect(await screen.findByText(/Compare it with the fingerprint of the server/)).toHaveTextContent("SHA256:abc");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "Trust this key" }));
     expect(await screen.findByText("Trusted:")).toBeInTheDocument();
@@ -123,7 +234,7 @@ describe("Backups", () => {
     const table = await screen.findByRole("table", { name: "Snapshots of blog" });
     // Newest first: the database dump of 01:13, then the files of 01:12.
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(within(rows[0]!).getByText("Database blog_wp")).toBeInTheDocument();
+    expect(within(rows[0]!).getByRole("cell", { name: "Database blog_wp" })).toBeInTheDocument();
     await user.click(within(rows[1]!).getByRole("button", { name: /^Restore files of / }));
     expect(await screen.findByText(/Restored 3 files into/)).toHaveTextContent("restore-1");
     await user.click(within(rows[0]!).getByRole("button", { name: /^Restore database blog_wp of / }));
@@ -192,7 +303,88 @@ describe("Backups", () => {
     });
     render(<Harness initial="site=shop" />);
     expect(await screen.findByText("No snapshots of this site yet.")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("shop");
+    expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("s:shop");
     expect(calls.some((c) => c.path === "/api/v1/sites/blog/backups")).toBe(false);
+  });
+
+  it("restores a snapshot of a deleted site into the site picked", async () => {
+    const user = userEvent.setup();
+    const restore = { site: "shop", source: "old", files: 1, bytes: 10, state: "done" };
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: ready },
+      "GET /api/v1/sites": { body: { sites: [{ name: "blog", state: "active" }, { name: "shop", state: "active" }] } },
+      "GET /api/v1/sites/blog/backups": { body: { snapshots: [] } },
+      "GET /api/v1/backups/deleted": {
+        body: {
+          sites: [
+            { name: "blog", earlier: true, snapshots: 1, oldest: "2025-01-02T01:00:00Z", newest: "2025-01-02T01:00:00Z" },
+            { name: "old", earlier: false, snapshots: 1, oldest: "2026-11-01T01:00:00Z", newest: "2026-11-01T01:00:00Z" },
+          ],
+        },
+      },
+      "GET /api/v1/backups/deleted/old": { body: { snapshots: [{ id: snapDB, time: "2026-11-01T01:00:00Z", kind: "db", database: "old_wp" }] } },
+      "GET /api/v1/backups/deleted/blog": { body: { snapshots: [{ id: snapFiles, time: "2025-01-02T01:00:00Z", kind: "files" }] } },
+      ["POST /api/v1/backups/deleted/old/" + snapDB + "/restore"]: {
+        status: 202,
+        body: { ...restore, id: "4444444444444444", snapshot: snapDB, kind: "db", database: "old_wp", dir: "restore-4", state: "queued" },
+      },
+      "GET /api/v1/backups/restores/4444444444444444": { body: { ...restore, id: "4444444444444444", kind: "db", database: "old_wp", dir: "restore-4" } },
+      "POST /api/v1/sites/shop/databases": { status: 201, body: { name: "old_wp_restored" } },
+      "POST /api/v1/backups/restores/4444444444444444/import": { status: 202, body: { id: "5555555555555555", state: "running" } },
+      "GET /api/v1/backups/imports/5555555555555555": { body: { id: "5555555555555555", state: "done" } },
+    });
+    render(<Harness />);
+    const select = await screen.findByRole("combobox", { name: "Site" });
+    expect(await within(select).findByRole("option", { name: "old (deleted)" })).toBeInTheDocument();
+
+    // An earlier site of a reused name goes back only into the current one.
+    await user.selectOptions(select, "blog (earlier site)");
+    expect(await screen.findByRole("table", { name: "Snapshots of blog" })).toBeInTheDocument();
+    expect(screen.getByText(/from an earlier site named/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Restore into")).toBeDisabled();
+    expect(screen.getByLabelText("Restore into")).toHaveValue("blog");
+
+    await user.selectOptions(select, "old (deleted)");
+    expect(await screen.findByText(/was deleted; its snapshots stay/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Restore into"), "shop");
+    await user.click(await screen.findByRole("button", { name: /^Restore database old_wp of / }));
+    expect(await screen.findByText(/Restored 1 file into/)).toHaveTextContent("restore-4 of the site shop.");
+    expect(calls.find((c) => c.path.endsWith("/backups/deleted/old/" + snapDB + "/restore"))?.body).toEqual({ target: "shop" });
+    await user.click(await screen.findByRole("button", { name: "Create and import" }));
+    expect(await screen.findByText(/The dump is in the new database/)).toHaveTextContent("old_wp_restored");
+    expect(calls.find((c) => c.path === "/api/v1/sites/shop/databases")?.body).toEqual({ name: "old_wp_restored" });
+  });
+
+  it("deletes the backups of a deleted site with the next run, after the name is typed", async () => {
+    const user = userEvent.setup();
+    let marked: string | null = null;
+    const old = () => ({ name: "old", earlier: false, snapshots: 2, oldest: "2026-11-01T01:00:00Z", newest: "2026-11-02T01:00:00Z", markedAt: marked });
+    const calls = mockFetch({
+      "GET /api/v1/backups": { body: ready },
+      "GET /api/v1/sites": { body: { sites: [{ name: "shop", state: "active" }] } },
+      "GET /api/v1/backups/deleted": () => ({ body: { sites: [old()] } }),
+      "GET /api/v1/backups/deleted/old": { body: { snapshots: [{ id: snapFiles, time: "2026-11-02T01:00:00Z", kind: "files" }] } },
+      "PUT /api/v1/backups/deleted/old/removal": () => {
+        marked = "2026-11-26T09:00:00Z";
+        return { body: { marks: [] } };
+      },
+      "DELETE /api/v1/backups/deleted/old/removal": () => {
+        marked = null;
+        return { body: { marks: [] } };
+      },
+    });
+    render(<Harness initial="deleted=old" />);
+    const input = await screen.findByLabelText(/to confirm/);
+    expect(screen.getByText("old", { selector: "code.ui-confirm-phrase" })).toBeInTheDocument();
+    const del = screen.getByRole("button", { name: "Delete backups of old" });
+    expect(del).toBeDisabled();
+    await user.type(input, "old");
+    await user.click(del);
+    expect(await screen.findByText("Marked for deletion")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT" && c.path.endsWith("/removal"))?.body).toEqual({ confirm: "old" });
+
+    await user.click(screen.getByRole("button", { name: "Keep backups" }));
+    expect(await screen.findByRole("button", { name: "Delete backups of old" })).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "DELETE" && c.path.endsWith("/removal"))).toBe(true);
   });
 });

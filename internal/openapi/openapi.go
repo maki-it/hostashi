@@ -320,8 +320,8 @@ func operation(r *reflector, rt Route, method, path string, errRef map[string]an
 			ct = strings.TrimSpace(ct)
 
 			schema := map[string]any{"type": "string"}
-			if strings.HasSuffix(ct, "json") {
-				schema = map[string]any{} // a JSON document of its own
+			if strings.HasSuffix(ct, "json") || strings.HasSuffix(ct, "yaml") {
+				schema = map[string]any{} // a JSON or YAML document of its own
 			}
 
 			content[ct] = map[string]any{"schema": schema}
