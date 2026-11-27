@@ -105,7 +105,7 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 		{"POST", "/api/v1/agent/exec", http.StatusNotFound},
 		{"GET", "/api", http.StatusNotFound},
 		{"POST", "/", http.StatusMethodNotAllowed},
-		{"GET", "/favicon.ico", http.StatusNotFound},
+		{"GET", "/missing.ico", http.StatusNotFound},
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))

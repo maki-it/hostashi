@@ -1,4 +1,9 @@
-# Hostashi
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/hostashi-logo-dark.svg">
+    <img src="docs/brand/hostashi-logo-light.svg" alt="Hostashi" height="48">
+  </picture>
+</h1>
 
 A modern, **truly open source** hosting control panel for single Linux servers, as an alternative to [CloudPanel](https://www.cloudpanel.io/).
 
@@ -56,7 +61,7 @@ One Go binary with two roles: `hostashi serve` runs the panel and API without ro
 
 ## Contributing and security
 
-Layout, local checks and rules: [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security problems as described in [`SECURITY.md`](SECURITY.md), not in a public issue.
+Layout, local checks and rules: [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security problems as described in [`SECURITY.md`](SECURITY.md), not in a public issue. Only the newest release is supported; updates come through apt ([`SECURITY.md`](SECURITY.md#supported-versions)).
 
 ## License
 

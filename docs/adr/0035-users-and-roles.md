@@ -107,3 +107,16 @@ Custom roles, per-grant permissions, users who create users (reseller, ADR-0010)
 2. Second factor required for `admin` and `manager`, optional for `user` (an admin can require it per user)? **Decided (Kim, 2026-11-20): yes.**
 3. A `user` may not change domains, TLS, limits or snippets of their site, nor disable or delete it? **Decided (Kim, 2026-11-20): yes.**
 4. New users come in through a one-time invitation link instead of a password the admin sets? **Decided (Kim, 2026-11-20): yes.**
+
+## Addendum 1: a second factor for every account (Kim's request, 2026-11-27)
+
+**Context.** Kim wants an admin option on the Users page that requires a second factor of every account, not only per account (Kim, 2026-11-27). Today admins and managers always need one and a `user` only if an admin sets `require_second_factor` on that account [V: `internal/auth/secondfactor.go`]. The enforcement already exists: an account that must have a second factor and has none gets `403 second_factor_required` on every route except login, logout, `/auth/me` and the TOTP and passkey setup, also for its API tokens, and the panel shows only the setup [V: `internal/serve/tokens_api.go`, `web/src/App.tsx`].
+
+**Decision.**
+
+- One panel setting, `auth.require_second_factor` in the existing `settings` table (no migration), off by default. `GET`/`PUT /api/v1/users/policy` with `{"requireSecondFactor": bool}`, actions `users:read` and `users:write` (admins, browser session). Changes go to the audit log as `settings.second_factor` with a diff.
+- With it on, every account needs a second factor, whatever its role or per-account flag. The per-account flag stays stored and applies again once the setting is off.
+- **No lockout.** Accounts without a second factor still log in, but only to set one up; the policy never refuses a login by itself. Admins are checked without reading the setting, so a broken value cannot keep them out, and an admin can always overwrite it. Turning the setting on needs a second factor on the actor's own account (admins have one anyway, this guards a later change of that rule). `hostashi user recover` stays the way back for an account whose factor is lost.
+- Turning it on in the panel names the accounts that have no second factor yet and asks for confirmation.
+
+**Consequences.** API tokens of users without a second factor stop working the moment the setting is on, until the account sets one up. Like for admins today, the password alone protects such an account until its first factor is set up [A]. Each check of a `user` account reads one setting row more [A: negligible next to the session lookup].

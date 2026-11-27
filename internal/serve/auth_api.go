@@ -133,6 +133,13 @@ func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON,
 		return meJSON{}, false
 	}
 
+	req, err := a.svc.SecondFactorRequired(r.Context(), u)
+	if err != nil {
+		a.fail(w, err, "check second factor")
+
+		return meJSON{}, false
+	}
+
 	p, err := a.svc.Preferences(r.Context(), u.ID)
 	if err != nil {
 		a.fail(w, err, "read preferences")
@@ -142,7 +149,7 @@ func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON,
 
 	return meJSON{
 		userJSON:     userJSON{Username: u.Username, Role: u.Role},
-		SecondFactor: has, SecondFactorRequired: auth.SecondFactorRequired(u), TOTP: u.TOTPEnabled,
+		SecondFactor: has, SecondFactorRequired: req, TOTP: u.TOTPEnabled,
 		preferencesJSON: toPreferencesJSON(p),
 	}, true
 }
