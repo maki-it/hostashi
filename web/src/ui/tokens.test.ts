@@ -94,7 +94,7 @@ describe("component styles", () => {
   });
 
   // Measured sizes that components set at runtime, not design tokens.
-  const runtime = new Set(["--files-bar-h", "--files-sticky-h"]);
+  const runtime = new Set(["--app-top-h", "--files-bar-h", "--files-sticky-h"]);
 
   it.each(sheets)("%s uses only defined tokens", (file) => {
     const css = readFileSync(resolve(dir, file), "utf8");

@@ -192,6 +192,23 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
     return () => document.removeEventListener("keydown", key);
   }, []);
 
+  // The top bar sticks to the top of the window. Its height goes to a CSS
+  // variable, so other sticky parts (the file manager's bar) stick below it.
+  const topRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const top = topRef.current;
+    if (!top || typeof ResizeObserver === "undefined") return;
+    const html = document.documentElement;
+    const measure = () => html.style.setProperty("--app-top-h", `${String(top.offsetHeight)}px`);
+    const ro = new ResizeObserver(measure);
+    ro.observe(top);
+    measure();
+    return () => {
+      ro.disconnect();
+      html.style.removeProperty("--app-top-h");
+    };
+  }, []);
+
   // navScrolled draws a line under the brand once the nav scrolls under it.
   const [navScrolled, setNavScrolled] = useState(false);
   // navMore shows a hint at the bottom of the nav while entries are hidden
@@ -302,7 +319,7 @@ export function Shell({ user, route, onLogout, onScheme, children }: ShellProps)
         </div>
       </aside>
       <div className="app-main">
-        <header className="app-top">
+        <header className="app-top" ref={topRef}>
           <nav aria-label="Breadcrumb">
             <ol className="app-crumbs">
               {trail.map((c, i) => {
