@@ -1768,6 +1768,32 @@
         ],
         "type": "object"
       },
+      "CronOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ran": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lines",
+          "ran",
+          "truncated"
+        ],
+        "type": "object"
+      },
       "CronStatus": {
         "additionalProperties": false,
         "properties": {
@@ -2855,6 +2881,15 @@
       "Fail2ban": {
         "additionalProperties": false,
         "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/Fail2banBlocked"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "jails": {
             "items": {
               "$ref": "#/components/schemas/Fail2banJail"
@@ -2863,18 +2898,44 @@
               "array",
               "null"
             ]
+          },
+          "page": {
+            "type": "integer"
+          },
+          "perPage": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
           }
         },
         "required": [
-          "jails"
+          "addresses",
+          "jails",
+          "page",
+          "perPage",
+          "total",
+          "truncated"
         ],
         "type": "object"
       },
-      "Fail2banBan": {
+      "Fail2banBlocked": {
         "additionalProperties": false,
         "properties": {
           "address": {
             "type": "string"
+          },
+          "jails": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "since": {
             "format": "date-time",
@@ -2890,6 +2951,7 @@
         },
         "required": [
           "address",
+          "jails",
           "since",
           "until"
         ],
@@ -2898,15 +2960,6 @@
       "Fail2banJail": {
         "additionalProperties": false,
         "properties": {
-          "bans": {
-            "items": {
-              "$ref": "#/components/schemas/Fail2banBan"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "currentlyBanned": {
             "type": "integer"
           },
@@ -2927,7 +2980,6 @@
           }
         },
         "required": [
-          "bans",
           "currentlyBanned",
           "currentlyFailed",
           "name",
@@ -12546,6 +12598,44 @@
     "/api/v1/firewall/bans": {
       "get": {
         "operationId": "getFirewallBans",
+        "parameters": [
+          {
+            "description": "only addresses this jail blocks: sshd, hostashi-panel, hostashi-site-auth or recidive",
+            "in": "query",
+            "name": "jail",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "only addresses that contain this text, equal this address, or lie in this range such as 203.0.113.0/24",
+            "in": "query",
+            "name": "address",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "page number, from 1",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "addresses per page, 1 to 100, default 50",
+            "in": "query",
+            "name": "perPage",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -12578,7 +12668,7 @@
             ]
           }
         ],
-        "summary": "fail2ban's Hostashi jails and the addresses they block",
+        "summary": "fail2ban's Hostashi jails and one page of the addresses they block, newest first",
         "tags": [
           "firewall"
         ],
@@ -18508,6 +18598,67 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "cron:write"
+      }
+    },
+    "/api/v1/sites/{name}/cron/{id}/output": {
+      "get": {
+        "operationId": "getCronJobOutput",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronOutput"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "cron:read"
+            ]
+          }
+        ],
+        "summary": "What the last run of a cron job wrote",
+        "tags": [
+          "cron"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "cron:read"
       }
     },
     "/api/v1/sites/{name}/cron/{id}/run": {

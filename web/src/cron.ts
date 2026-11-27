@@ -41,6 +41,10 @@ export const updateCron = (site: string, id: number, j: CronInput) => request<Cr
 export const deleteCron = (site: string, id: number) => request<void>("DELETE", cronPath(site, id));
 export const runCron = (site: string, id: number) => request<void>("POST", cronPath(site, id) + "/run");
 
+/** CronOutput is what the last run of a job wrote (ADR-0028 Addendum 1). */
+export type CronOutput = { ran: boolean; lines: string[]; truncated: boolean };
+export const cronOutput = (site: string, id: number) => request<CronOutput>("GET", cronPath(site, id) + "/output");
+
 // inputOf turns a job back into what PUT expects, so a change keeps the
 // fields it does not touch.
 export const inputOf = (j: CronJob): CronInput => ({

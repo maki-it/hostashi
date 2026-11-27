@@ -1376,17 +1376,35 @@ grep -Eq 'Total failed:[[:space:]]+[1-9]' <<<"$f2b" || { f2b_restore; fail "jail
 grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" || { f2b_restore; fail "jail did not ban: $f2b"; }
 # The panel shows the ban and lifts it (ADR-0078). The panel itself is on
 # 127.0.0.1:8080 and not behind the site jail, so the ban does not block it.
-[ "$(api GET /api/v1/firewall/bans)" = 200 ] || { f2b_restore; fail "bans through the panel: $(x cat /tmp/api.out)"; }
+[ "$(api GET '/api/v1/firewall/bans?jail=hostashi-site-auth&address=127.0.0.1')" = 200 ] || { f2b_restore; fail "bans through the panel: $(x cat /tmp/api.out)"; }
 x cat /tmp/api.out | python3 -c 'import json,sys
-j = {x["name"]: x for x in json.load(sys.stdin)["jails"]}["hostashi-site-auth"]
+r = json.load(sys.stdin)
+j = {x["name"]: x for x in r["jails"]}["hostashi-site-auth"]
 assert j["running"] and j["totalFailed"] > 0, j
-assert "127.0.0.1" in [b["address"] for b in j["bans"]], j' || { f2b_restore; fail "panel does not show the ban: $(x cat /tmp/api.out)"; }
+assert r["total"] == 1 and r["addresses"][0]["address"] == "127.0.0.1", r
+assert "hostashi-site-auth" in r["addresses"][0]["jails"], r' || { f2b_restore; fail "panel does not show the ban: $(x cat /tmp/api.out)"; }
 [ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 200 ] || { f2b_restore; fail "unblock through the panel: $(x cat /tmp/api.out)"; }
 x grep -q '"hostashi-site-auth"' /tmp/api.out || { f2b_restore; fail "unblock did not name the jail: $(x cat /tmp/api.out)"; }
 f2b=$(x fail2ban-client status hostashi-site-auth)
 grep -q 'Banned IP list:.*127\.0\.0\.1' <<<"$f2b" && { f2b_restore; fail "address still banned after the unblock: $f2b"; }
 [ "$(api DELETE /api/v1/firewall/bans/127.0.0.1)" = 404 ] || { f2b_restore; fail "second unblock answered: $(x cat /tmp/api.out)"; }
 f2b_restore
+# Thousands of blocked addresses still list, filter and page: the agent
+# answers with one page, so its answer stays within one frame (ADR-0078).
+read -ra many <<<"$(python3 -c 'print(" ".join(f"198.18.{i // 250}.{i % 250 + 1}" for i in range(3000)))')"
+f2b_many_restore() { x fail2ban-client set hostashi-panel unbanip "${many[@]}" >/dev/null 2>&1 || true; }
+x fail2ban-client set hostashi-panel banip "${many[@]}" >/dev/null || { f2b_many_restore; fail "could not ban the test addresses"; }
+[ "$(api GET '/api/v1/firewall/bans?perPage=100&page=3')" = 200 ] || { f2b_many_restore; fail "many bans through the panel: $(x cat /tmp/api.out)"; }
+x cat /tmp/api.out | python3 -c 'import json,sys
+r = json.load(sys.stdin)
+assert r["total"] >= 3000 and len(r["addresses"]) == 100 and r["page"] == 3 and not r["truncated"], {k: r[k] for k in ("total", "page", "truncated")}' ||
+  { f2b_many_restore; fail "many bans not paged: $(x head -c 300 /tmp/api.out)"; }
+[ "$(api GET '/api/v1/firewall/bans?jail=hostashi-panel&address=198.18.3.0/24')" = 200 ] || { f2b_many_restore; fail "range filter: $(x cat /tmp/api.out)"; }
+x cat /tmp/api.out | python3 -c 'import json,sys
+r = json.load(sys.stdin)
+assert r["total"] == 250 and all(a["address"].startswith("198.18.3.") for a in r["addresses"]), r["total"]' ||
+  { f2b_many_restore; fail "range filter: $(x head -c 300 /tmp/api.out)"; }
+f2b_many_restore
 # recidive reads fail2ban's own Ban notices from the journal; the ban above
 # is one. fail2ban-regex ignores ignoreip, so loopback counts here.
 f2b=$(x fail2ban-regex systemd-journal recidive)
@@ -1566,6 +1584,17 @@ out=$(x cat /home/wp/cron.out)
 if [ "$(api GET /api/v1/sites/wp/cron)" != 200 ] || ! x grep -q '"result":"success"' /tmp/api.out || ! x grep -q '"exitStatus":0' /tmp/api.out; then
   fail "cron status: $(x cat /tmp/api.out)"
 fi
+# The next run comes from systemd as a Unix time, not "not planned".
+x grep -q '"next":[1-9][0-9]\{9\}' /tmp/api.out || fail "cron job without a next run: $(x cat /tmp/api.out)"
+# The output of the last run comes from the journal (ADR-0028 Addendum 1):
+# standard output and error of this run only.
+[ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"echo cron-stdout; echo cron-stderr >&2"}')" = 200 ] || fail "change cron job: $(x cat /tmp/api.out)"
+[ "$(api POST "/api/v1/sites/wp/cron/$cid/run")" = 202 ] || fail "run cron job again: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do
+  [ "$(api GET "/api/v1/sites/wp/cron/$cid/output")" = 200 ] && x grep -q cron-stderr /tmp/api.out && break
+  sleep 1
+done
+x grep -q "\"ran\":true,\"lines\":\[\"cron-stdout\",\"cron-stderr\"\]" /tmp/api.out || fail "cron job output: $(x cat /tmp/api.out)"
 # Pause, then a disabled site keeps the timer stopped until it is enabled.
 [ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"

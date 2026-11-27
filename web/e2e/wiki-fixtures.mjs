@@ -117,11 +117,20 @@ const firewall = {
 const inHours = (h) => new Date(Date.parse("2026-11-22T18:00:00Z") + h * 3_600_000).toISOString();
 const fail2ban = {
   jails: [
-    { name: "sshd", running: true, currentlyFailed: 2, totalFailed: 318, currentlyBanned: 1, totalBanned: 41, bans: [{ address: "192.0.2.77", since: inHours(-0.4), until: inHours(0.6) }] },
-    { name: "hostashi-panel", running: true, currentlyFailed: 0, totalFailed: 3, currentlyBanned: 0, totalBanned: 0, bans: [] },
-    { name: "hostashi-site-auth", running: true, currentlyFailed: 1, totalFailed: 24, currentlyBanned: 1, totalBanned: 2, bans: [{ address: "198.51.100.23", since: inHours(-0.2), until: inHours(0.8) }] },
-    { name: "recidive", running: true, currentlyFailed: 0, totalFailed: 9, currentlyBanned: 1, totalBanned: 3, bans: [{ address: "2001:db8:5::9", since: inHours(-30), until: inHours(138) }] },
+    { name: "sshd", running: true, currentlyFailed: 2, totalFailed: 318, currentlyBanned: 1, totalBanned: 41 },
+    { name: "hostashi-panel", running: true, currentlyFailed: 0, totalFailed: 3, currentlyBanned: 0, totalBanned: 0 },
+    { name: "hostashi-site-auth", running: true, currentlyFailed: 1, totalFailed: 24, currentlyBanned: 1, totalBanned: 2 },
+    { name: "recidive", running: true, currentlyFailed: 0, totalFailed: 9, currentlyBanned: 1, totalBanned: 3 },
   ],
+  addresses: [
+    { address: "198.51.100.23", jails: ["hostashi-site-auth"], since: inHours(-0.2), until: inHours(0.8) },
+    { address: "192.0.2.77", jails: ["sshd"], since: inHours(-0.4), until: inHours(0.6) },
+    { address: "2001:db8:5::9", jails: ["recidive"], since: inHours(-30), until: inHours(138) },
+  ],
+  total: 3,
+  page: 1,
+  perPage: 50,
+  truncated: false,
 };
 
 const node = { installed: [{ major: "24", version: "24.11.1" }], last: "", state: "idle", log: [], releases: [{ major: "24", version: "24.11.1", codename: "Krypton", end: "2028-04-30" }] };
@@ -497,7 +506,37 @@ const profileChoices = {
   maxPaths: 20,
 };
 
+// Cron jobs of blog: WP-Cron every 5 minutes and a nightly export that
+// writes some output (ADR-0028 Addendum 1). Times are Unix seconds.
+const unix = (d, h = 0, min = 0) => Date.UTC(2026, 10, 22 - d, h, min) / 1000;
+const cronJobs = [
+  {
+    id: 1, schedule: "*/5 * * * *", command: "php htdocs/wp-cron.php", timeoutSec: 0, nice: null, paused: false, createdAt: unix(9), updatedAt: unix(9),
+    status: { running: false, result: "success", exitStatus: 0, lastStart: unix(0, 16, 55), lastEnd: unix(0, 16, 55) + 2, next: unix(0, 17, 0) },
+  },
+  {
+    id: 2, schedule: "@daily", command: "php htdocs/wp-content/export.php --since=yesterday", timeoutSec: 0, nice: null, paused: false, createdAt: unix(9), updatedAt: unix(9),
+    status: { running: false, result: "exit-code", exitStatus: 1, lastStart: unix(0), lastEnd: unix(0) + 14, next: unix(-1) },
+  },
+];
+const cronOutputs = {
+  1: { ran: true, lines: [], truncated: false },
+  2: {
+    ran: true,
+    truncated: false,
+    lines: [
+      "Exporting orders since 2026-11-21 …",
+      "  143 orders, 512 line items",
+      "Writing exports/orders-2026-11-21.csv",
+      "PHP Warning:  fopen(exports/orders-2026-11-21.csv): Failed to open stream: No such file or directory in /home/blog/htdocs/wp-content/export.php on line 88",
+      "Export failed: cannot write exports/orders-2026-11-21.csv",
+    ],
+  },
+};
+
 const routes = [
+  ["GET", /^\/sites\/blog\/cron$/, () => ({ jobs: cronJobs, statusKnown: true })],
+  ["GET", /^\/sites\/blog\/cron\/(\d+)\/output$/, (m) => cronOutputs[m[1]]],
   ["GET", /^\/sites\/([^/]+)\/object-cache$/, (m) => ({
     enabled: true,
     memoryMb: 64,

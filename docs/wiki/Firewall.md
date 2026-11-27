@@ -4,7 +4,7 @@
 
 Hostashi runs its own firewall (nftables). It lets in SSH, the websites and the panel, and drops everything else. Outgoing traffic is not limited. If your provider has a firewall in front of the server as well, that one still applies: open a port there too.
 
-Open **Server → Firewall**.
+Open **Server → Firewall**. The tab **Firewall** holds the rules below and the allowlist for API tokens; the tab **Blocked addresses** shows what fail2ban blocks (see [Blocked after failed logins](#blocked-after-failed-logins)).
 
 ## What is always open
 
@@ -39,11 +39,11 @@ Independent of these rules, fail2ban blocks addresses for a while after repeated
 
 For IPv6, fail2ban blocks the whole /64 network of the address, because one connection usually has a /64 of its own and an attacker can pick a new address in it for every attempt. When the /64 also holds an address of this server (a network shared with other customers), only the single address is blocked. Unblocking an address lifts the block of its /64.
 
-The card **Blocked addresses** on the same page shows each blocked address, why it was blocked, since when and until when, and how many failed logins each kind of protection has counted. When a customer or you were locked out by mistake, choose **Unblock** next to the address and confirm. The address is unblocked everywhere at once; new failed logins block it again. Every unblock is in the audit log.
+The tab **Blocked addresses** on the Firewall page shows each blocked address, why it was blocked, since when and until when, and how many failed logins each kind of protection has counted. Filter the list by **Block type** (SSH logins, panel logins, password-protected sites, repeat offenders) and by IP address: a part such as `203.0.113.`, a full address, or a range such as `203.0.113.0/24` or `2001:db8::/32`. The list shows 50 addresses per page, newest first, so it stays quick with thousands of blocked addresses. When a customer or you were locked out by mistake, choose **Unblock** next to the address and confirm. The address is unblocked everywhere at once; new failed logins block it again. Every unblock is in the audit log.
 
 ![Blocked addresses on the Firewall page](images/firewall-bans.png)
 
-On the command line, `hostashi firewall bans` lists the blocked addresses and `hostashi firewall unban ADDRESS` unblocks one. If fail2ban does not run, the card says so and **Health** shows a warning.
+On the command line, `hostashi firewall bans` lists the blocked addresses (`-jail JAIL` and `-address TEXT` filter like the page) and `hostashi firewall unban ADDRESS` unblocks one. If fail2ban does not run, the card says so and **Health** shows a warning.
 
 ## Without the Hostashi firewall
 

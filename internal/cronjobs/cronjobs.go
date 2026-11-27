@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"unicode/utf8"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/cron"
@@ -52,6 +53,16 @@ type Controller interface {
 	StartNoBlock(ctx context.Context, unit string) error
 	// Show returns the named properties of a unit.
 	Show(ctx context.Context, unit string, props ...string) (map[string]string, error)
+	// NextElapse returns the next elapse of each named timer in Unix
+	// seconds; a timer without a next elapse is missing or 0. systemctl
+	// show prints NextElapseUSecRealtime as a local date whatever
+	// --timestamp= says, so it is read in another way.
+	NextElapse(ctx context.Context, timers ...string) (map[string]int64, error)
+	// Journal returns the last messages (at most
+	// agentapi.CronOutputMaxLines) that the processes of a service wrote
+	// in one invocation, oldest first; cut is true when journalctl gave
+	// more than could be read.
+	Journal(ctx context.Context, service, invocation string) (lines []string, cut bool, err error)
 }
 
 // Site is what Apply needs to know of a site.
@@ -380,7 +391,7 @@ func (m *Manager) Run(ctx context.Context, site string, id int64) error {
 
 var (
 	serviceProps = []string{"ActiveState", "Result", "ExecMainStatus", "ExecMainStartTimestamp", "ExecMainExitTimestamp"}
-	timerProps   = []string{"ActiveState", "NextElapseUSecRealtime", "LastTriggerUSec"}
+	timerProps   = []string{"ActiveState"}
 )
 
 // Status reports the jobs of a site with their last and next run.
@@ -395,6 +406,19 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.CronSiteSta
 
 	ss := st.Sites[site]
 	out := agentapi.CronSiteStatus{Site: site, Disabled: ss.Disabled, Jobs: []agentapi.CronJobStatus{}}
+
+	var next map[string]int64
+
+	if len(ss.Jobs) > 0 {
+		timers := make([]string, 0, len(ss.Jobs))
+		for _, j := range ss.Jobs {
+			timers = append(timers, unitName(site, j.ID)+".timer")
+		}
+
+		if next, err = m.Ctl.NextElapse(ctx, timers...); err != nil {
+			return agentapi.CronSiteStatus{}, err
+		}
+	}
 
 	for _, j := range ss.Jobs {
 		name := unitName(site, j.ID)
@@ -421,14 +445,95 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.CronSiteSta
 			}
 		}
 
-		if tm["ActiveState"] == "active" {
-			js.Next = unixTime(tm["NextElapseUSecRealtime"])
+		if tm["ActiveState"] == "active" && next[name+".timer"] > 0 {
+			js.Next = next[name+".timer"]
 		}
 
 		out.Jobs = append(out.Jobs, js)
 	}
 
 	return out, nil
+}
+
+// Output reads what the last run of a job wrote (ADR-0028 Addendum 1).
+func (m *Manager) Output(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+	m.mu.Lock()
+	st, err := m.load()
+	m.mu.Unlock()
+
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	if !slices.ContainsFunc(st.Sites[site].Jobs, func(j agentapi.CronJob) bool { return j.ID == id }) {
+		return agentapi.CronJobOutput{}, ErrUnknownJob
+	}
+
+	svc := unitName(site, id) + ".service"
+
+	props, err := m.Ctl.Show(ctx, svc, "InvocationID")
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	out := agentapi.CronJobOutput{Lines: []string{}}
+
+	inv := props["InvocationID"]
+	if inv == "" {
+		return out, nil // not run since the units were written or since boot
+	}
+
+	lines, cut, err := m.Ctl.Journal(ctx, svc, inv)
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	out.Ran = true
+	out.Lines, out.Truncated = limitOutput(lines)
+	out.Truncated = out.Truncated || cut
+
+	return out, nil
+}
+
+// limitOutput keeps the last lines within the limits of cron.output and
+// cuts each line to CronOutputMaxLineBytes at a UTF-8 boundary.
+func limitOutput(lines []string) ([]string, bool) {
+	cut := false
+
+	if len(lines) > agentapi.CronOutputMaxLines {
+		lines, cut = lines[len(lines)-agentapi.CronOutputMaxLines:], true
+	}
+
+	out := make([]string, 0, len(lines))
+	total := 0
+
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.ToValidUTF8(lines[i], "\uFFFD")
+		if len(l) > agentapi.CronOutputMaxLineBytes {
+			l, cut = truncateUTF8(l, agentapi.CronOutputMaxLineBytes), true
+		}
+
+		if total+len(l)+1 > agentapi.CronOutputMaxBytes {
+			cut = true
+
+			break
+		}
+
+		total += len(l) + 1
+		out = append(out, l)
+	}
+
+	slices.Reverse(out)
+
+	return out, cut
+}
+
+func truncateUTF8(s string, n int) string {
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+
+	return s[:n]
 }
 
 // unixTime reads a timestamp of systemctl show --timestamp=unix ("@1700000000"),

@@ -144,7 +144,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	// The jails only when fail2ban answers; otherwise the check above
 	// already says it (ADR-0078).
 	if d.f2b != nil && f2bCheck.Status == agentapi.DoctorOK {
-		st, err := d.f2b.Status(ctx)
+		st, err := d.f2b.Status(ctx, agentapi.Fail2banStatusRequest{Limit: 1})
 		out = append(out, doctor.Fail2banJails(st, err))
 	}
 

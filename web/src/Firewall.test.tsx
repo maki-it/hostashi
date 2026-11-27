@@ -20,16 +20,15 @@ const status = (state: Partial<FirewallState> = {}, extra: Partial<FirewallStatu
   ...extra,
 });
 
-// The API token card and the blocked addresses card load their own data.
+// The API token card loads its own data.
 const allow = {
   "GET /api/v1/settings/api-ip-allowlist": { body: { entries: [] } },
-  "GET /api/v1/firewall/bans": { body: { jails: [] } },
 };
 
 describe("Firewall", () => {
   it("explains a server installed without the firewall", async () => {
     mockFetch({ ...allow, "GET /api/v1/firewall": { body: status({}, { enabled: false }) } });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     expect(await screen.findByText(/installed with --no-firewall/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply rules" })).not.toBeInTheDocument();
   });
@@ -49,7 +48,7 @@ describe("Firewall", () => {
         return { body: current };
       },
     });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     await screen.findByText("No other port is open.");
 
     await user.click(screen.getByRole("button", { name: "Add port" }));
@@ -77,7 +76,7 @@ describe("Firewall", () => {
   it("refuses a port it cannot read", async () => {
     const user = userEvent.setup();
     const calls = mockFetch({ ...allow, "GET /api/v1/firewall": { body: status() } });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "Add port" }));
     await user.type(screen.getByLabelText("Port or range"), "http");
     await user.click(screen.getByRole("button", { name: "Apply rules" }));
@@ -106,7 +105,7 @@ describe("Firewall", () => {
         return { body: current };
       },
     });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
 
     await user.type(await screen.findByLabelText("SSH"), "203.0.113.0/24");
     await user.click(screen.getByRole("button", { name: "Apply rules" }));
@@ -129,7 +128,7 @@ describe("Firewall", () => {
   it("adds the admin's address", async () => {
     const user = userEvent.setup();
     mockFetch({ ...allow, "GET /api/v1/firewall": { body: status({ panelAllow: ["192.0.2.1"] }) } });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "Add my address to the panel" }));
     expect(screen.getByLabelText("Panel")).toHaveValue("192.0.2.1\n198.51.100.7");
     await user.click(screen.getByRole("button", { name: "Add my address to the panel" }));
@@ -142,7 +141,7 @@ describe("Firewall", () => {
         body: status({}, { rolledBack: "2026-11-20T10:00:00Z", pending: { deadline: inTwoMinutes() } }),
       },
     });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     expect(await screen.findByText(/was not confirmed in time and was rolled back/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "A change is waiting" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply rules" })).toBeDisabled();
@@ -155,7 +154,7 @@ describe("Firewall", () => {
       "PUT /api/v1/firewall": { body: status({}, { pending: { id: ID, deadline: inTwoMinutes() } }) },
       "POST /api/v1/firewall/confirm": { status: 404, body: { error: { code: "not_pending", message: "x" } } },
     });
-    render(<Firewall />);
+    render(<Firewall query={new URLSearchParams()} onQuery={() => undefined} />);
     const apply = await screen.findByRole("button", { name: "Apply rules" });
     expect(apply).toBeDisabled();
     expect(screen.getByText("No changes")).toBeInTheDocument();
