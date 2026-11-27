@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base32"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,6 +329,44 @@ func TestLoginRateLimitAndRecovery(t *testing.T) {
 
 	if _, _, err := e.svc.Login(ctx, "kim", testPassword, "", "6.6.6.6"); err != nil {
 		t.Fatalf("not unblocked after the window: %v", err)
+	}
+}
+
+func TestLoginRateLimitCountsIPv6By64(t *testing.T) {
+	e := newEnv(t)
+	e.setup(t)
+
+	ctx := context.Background()
+
+	// Ten other names from ten addresses of one /64: one client.
+	for i := range 10 {
+		ip := fmt.Sprintf("2001:db8:1:2::%x", i+1)
+		_, _, _ = e.svc.Login(ctx, fmt.Sprintf("guess%d", i), "wrong password!!", "", ip)
+	}
+
+	if _, _, err := e.svc.Login(ctx, "kim", testPassword, "", "2001:db8:1:2:ffff::1"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("another address of the /64: want ErrRateLimited, got %v", err)
+	}
+
+	// The next /64 and IPv4 are someone else.
+	if _, _, err := e.svc.Login(ctx, "kim", testPassword, "", "2001:db8:1:3::1"); err != nil {
+		t.Fatalf("other /64 blocked: %v", err)
+	}
+}
+
+func TestIPKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"203.0.113.7":          "ip:203.0.113.7",
+		"::ffff:203.0.113.7":   "ip:203.0.113.7",
+		"2001:db8:1:2:3:4:5:6": "ip:2001:db8:1:2::/64",
+		"2001:DB8:1:2::9":      "ip:2001:db8:1:2::/64",
+		"fe80::1%eth0":         "ip:fe80::/64",
+		"not an address":       "ip:not an address",
+		"":                     "ip:",
+	} {
+		if got := ipKey("ip:", in); got != want {
+			t.Errorf("ipKey(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
