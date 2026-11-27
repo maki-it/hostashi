@@ -1,0 +1,44 @@
+{
+  "site": {
+    "title": "Real visitor address",
+    "intro": "Behind a CDN or load balancer, every request seems to come from the proxy. With this on, nginx takes the visitor's address from a header, but only for requests that really come from the proxies listed here. Logs, PHP, the app and the maintenance allowlist then see the visitor.",
+    "behind": "This site is behind a proxy or CDN",
+    "direct": "Visitors can still reach the server directly, past the proxy. Let ports 80 and 443 through only from the proxy if the site must not be reached otherwise."
+  },
+  "panel": {
+    "title": "Real visitor address of the panel",
+    "intro": "Only for a panel address behind a CDN or load balancer. nginx then takes the visitor's address from a header, but only for requests from the proxies listed here. The audit log, the login limit and the panel allowlist then see the visitor instead of the proxy.",
+    "behind": "The panel is behind a proxy or CDN",
+    "direct": "Visitors can still reach the panel directly, past the proxy. The panel allowlist on the Firewall page also checks the visitor's address once this is on, so list the visitors there, not the proxy."
+  },
+  "trusted": "Trusted proxies",
+  "cloudflare_one": "Cloudflare ({{count}} range, as of {{date}})",
+  "cloudflare_other": "Cloudflare ({{count}} ranges, as of {{date}})",
+  "showRanges": "Show Cloudflare's ranges",
+  "own": {
+    "label": "Own proxies",
+    "hint": "Addresses or ranges of your load balancer or another CDN, one per line, at most {{max}}. Every hop in front of this server must be listed.",
+    "adminsOnlyRemove": "Only admins add addresses. You can remove them.",
+    "adminsOnly": "Only admins add addresses of other proxies.",
+    "remove": "Remove own addresses"
+  },
+  "header": {
+    "label": "Header",
+    "hint": "X-Forwarded-For works with Cloudflare and most proxies. Choose another only if your proxy sends the address there.",
+    "recommended": "{{header}} (recommended)"
+  },
+  "fail2ban": "fail2ban never bans the trusted proxies, so its bans do not stop visitors who come through them. Block those in the proxy, for example with Cloudflare's WAF rules.",
+  "saved": {
+    "on": "Saved. nginx takes the visitor's address from the proxy now.",
+    "off": "Saved. No proxy is trusted."
+  },
+  "problems": {
+    "noProxy": "Choose Cloudflare or enter the addresses of your proxy."
+  },
+  "errors": {
+    "rejected": "Refused: {{reason}}.",
+    "forbidden": "Only admins add own proxy addresses. You can switch Cloudflare and the header, or remove addresses.",
+    "siteGone": "The site does not exist anymore.",
+    "generic": "The setting could not be loaded or saved. Try again."
+  }
+}

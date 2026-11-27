@@ -1,0 +1,127 @@
+{
+  "saved": {
+    "waits": "Saved. The change waits for a certificate for {{domain}}; until then the site stays as it is.",
+    "http": "Domains saved. The site is served over HTTP until a certificate for the new domains is there.",
+    "done": "Domains saved."
+  },
+  "card": {
+    "title": "Domains",
+    "domainsOf": "Domains of {{site}}",
+    "domainsHint": "One per line. The first one is the primary domain.",
+    "redirect": "Redirect domains",
+    "redirectHint": "One per line. They answer with 301 to {{primary}} and stay on the certificate, so their DNS must keep pointing to this server.",
+    "thePrimary": "the primary domain",
+    "save": "Save domains",
+    "both": "“{{domain}}” is a served domain and a redirect domain.",
+    "tooMany": "A site can have at most {{max}} domains, redirect domains included."
+  },
+  "pending": {
+    "title": "Domain change waiting for its certificate",
+    "intro": "The site stays on HTTPS with its current domains until a certificate for the new ones is there.",
+    "requested": "Requested",
+    "label": "Pending domains",
+    "failed": "The certificate could not be obtained yet. The panel tries again within the hour.",
+    "checkDNS": "Check that the DNS of every new name points to this server.",
+    "getting": "Getting the certificate. This usually takes less than a minute.",
+    "hsts": "HSTS is on: browsers that know this site refuse plain HTTP, so changing without waiting makes it unreachable for them until the certificate is there.",
+    "retry": "Try again now",
+    "now": "Change now without HTTPS",
+    "cancel": "Cancel change",
+    "retried": "Trying again now.",
+    "changedNow": "Domains changed. The site is served over HTTP until a certificate for the new domains is there.",
+    "canceled": "Domain change canceled. The site keeps its domains."
+  },
+  "change": {
+    "title": "Change primary domain",
+    "intro": "The site keeps its name <code>{{site}}</code>, its Linux user, files, databases, backups and settings. Only the names it answers to change.",
+    "new": "New primary domain",
+    "today": "Today: {{domain}}",
+    "alreadyPrimary": "{{domain}} is already the primary domain.",
+    "enter": "Enter the new primary domain.",
+    "alsoWWW": "Also <code>{{name}}</code>",
+    "redirectOld": "Redirect <code>{{old}}</code> to the new domain (301)",
+    "redirectOldBoth": "Redirect <code1>{{old}}</code1> and <code2>{{www}}</code2> to the new domain (301)",
+    "after": "After the change",
+    "newOnCert": "new on the certificate",
+    "waits": "The site stays on HTTPS with its current domains until a certificate for the new names is there, usually within a minute. If the DNS of a new name is not ready, nothing changes and the error shows here.",
+    "http": "The site is served over HTTP until a certificate for the new names is there.",
+    "redirectDNS": "The redirect domains stay on the certificate, so their DNS must keep pointing to this server.",
+    "notChanged": "Not changed by the panel",
+    "dns": "DNS: point every new name to this server first.",
+    "appAddress": "Addresses stored by the app, such as the WordPress site address. For WordPress, after a backup:",
+    "copy": "Copy command",
+    "copied": "Command copied.",
+    "copyFailed": "Copying is not possible here. Select the text and copy it by hand.",
+    "appConfig": "Values with the old address in the app's environment or config files, such as APP_URL.",
+    "submit": "Change to {{domain}}",
+    "submitEmpty": "Change to the new domain",
+    "close": "Close"
+  },
+  "www": {
+    "title": "www redirect",
+    "legend": "Between a domain and its www name",
+    "off": "No redirect",
+    "offHint": "Every domain shows the site.",
+    "toNonWWW": "Redirect to the name without www",
+    "toWWW": "Redirect to the www name",
+    "needsPair": "The redirect needs a domain and its www name, both as domains of this site.",
+    "addMissing": "Add the missing name first; its certificate is requested with it.",
+    "add": "Add <mono>{{name}}</mono>",
+    "noEffect": "No domain has its www partner any more, so the redirect has no effect.",
+    "saved": {
+      "toWWW": "Saved. The names without www now redirect to the www names.",
+      "toNonWWW": "Saved. The www names now redirect to the names without www.",
+      "off": "Saved. Every domain shows the site again."
+    },
+    "added": {
+      "pending": "{{name}} is added as soon as its certificate is there. The site stays on HTTPS until then.",
+      "http": "{{name}} added. The site is served over HTTP until its certificate also names {{name}}.",
+      "done": "{{name}} added. You can choose the redirect now."
+    }
+  },
+  "redirect": {
+    "title": "Redirect",
+    "target": "Redirect to",
+    "targetHint": "The full address, for example https://www.example.com or https://example.com/new-shop.",
+    "status": "Status code",
+    "statusHint": "301 for a move that stays. Browsers remember 301 and 308; use 302 while you test.",
+    "statuses": {
+      "301": "301 Moved permanently",
+      "302": "302 Found (temporary)",
+      "307": "307 Temporary, keeps the method",
+      "308": "308 Permanent, keeps the method"
+    },
+    "keepPath": "Keep the path",
+    "keepPathHint": "On: /shop/cart?id=1 goes to the same path on the target. Off: every address goes to the target as it is.",
+    "save": "Save redirect",
+    "saved": "Every address of the site now goes to {{target}}."
+  },
+  "proxy": {
+    "title": "Reverse proxy",
+    "target": "Pass requests to",
+    "targetHint": "The address of the other web server, for example http://10.0.0.5:8080 or https://app.internal.example.com. Private networks are fine; this server's own addresses are not.",
+    "targetHost": "Send the target's host name",
+    "targetHostHint": "Off: the other server sees the visitor's domain as Host, as most apps expect. On: it sees the host of the address above.",
+    "insecure": "Do not verify the target's certificate",
+    "insecureHint": "Only for a target with a self-signed certificate in a network you trust.",
+    "insecureWarning": "The connection to the target is encrypted but not verified. Anyone between this server and the target could read it.",
+    "save": "Save reverse proxy",
+    "saved": "Requests to the site now go to {{target}}."
+  },
+  "target": {
+    "enterRedirect": "Enter the address to redirect to.",
+    "enterProxy": "Enter the address to pass requests to.",
+    "tooLong": "The address is too long.",
+    "scheme": "The address must start with https:// or http://.",
+    "characters": "Use a host and a path of letters, digits and - . _ ~ % ! * + , = : @ & ( ) / only, without ? or #.",
+    "invalid": "This is not a valid address.",
+    "noHost": "The address needs a host.",
+    "lowerCase": "Write the host in lower case.",
+    "itself": "The address points to the site itself.",
+    "thisServer": "The address points to this server.",
+    "linkLocalMetadata": "Link-local addresses (such as the cloud metadata service) are not allowed.",
+    "multicastBroadcast": "Multicast and broadcast addresses are not allowed.",
+    "linkLocal": "Link-local addresses are not allowed.",
+    "multicast": "Multicast addresses are not allowed."
+  }
+}

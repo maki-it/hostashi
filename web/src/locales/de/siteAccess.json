@@ -1,0 +1,82 @@
+{
+  "settings": {
+    "title": "Zugriffsschutz",
+    "intro": "nginx prüft diese Regeln, bevor die Site eine Anfrage sieht, für jede Datei und Seite. Let's Encrypt erreicht die Site weiterhin, Zertifikate werden also weiter erneuert. Hinter einem CDN wie Cloudflare schalte zuerst unter Betrieb die <a>Besucheradresse</a> ein, sonst sehen die Regeln das CDN statt des Besuchers.",
+    "ipRule": "IP-Regel",
+    "everybody": "Alle dürfen zugreifen",
+    "allow": "Nur diese Adressen dürfen zugreifen",
+    "deny": "Diese Adressen sperren",
+    "addresses": "Adressen",
+    "addressesHint": "Adressen oder Bereiche wie 203.0.113.0/24, eine pro Zeile, höchstens {{max}}. Andere bekommen 403 Forbidden.",
+    "yourAddress": "Deine Adresse, wie das Panel sie sieht: <code>{{address}}</code>",
+    "lockout": "Deine eigene Adresse steht nicht auf der Liste. Nach dem Speichern kannst du die Site von hier aus nicht mehr öffnen.",
+    "password": "Passwort",
+    "askPassword": "Benutzername und Passwort abfragen",
+    "addUserFirst": "Lege zuerst unten einen Benutzer an.",
+    "wholeSite": "Für die ganze Site",
+    "onlyPaths": "Nur für diese Pfade",
+    "paths": "Pfade",
+    "pathsHint": "Einer pro Zeile, höchstens {{max}}. Ein Pfad gilt für alles darunter, in beliebiger Groß- und Kleinschreibung: /wp-admin gilt für /wp-admin/ und /WP-Admin/users.php, nicht für /wp-administrator.",
+    "bypass": "Kein Passwort von diesen Adressen",
+    "bypassHint": "Optional, zum Beispiel dein Büro oder ein Uptime-Monitor, eine pro Zeile, höchstens {{max}}.",
+    "passwordNote": "Die Anwendung der Site bekommt auf geschützten Pfaden den Authorization-Header des Browsers nicht mehr. Jede geschützte Anfrage kostet nginx einige Millisekunden; auf einer stark besuchten Site schütze nur die Admin-Pfade. Nach 10 falschen Passwörtern in 10 Minuten sperrt fail2ban die Adresse für eine Stunde."
+  },
+  "summary": {
+    "allow_one": "nur 1 Adresse darf zugreifen",
+    "allow_other": "nur {{count}} Adressen dürfen zugreifen",
+    "deny_one": "1 Adresse ist gesperrt",
+    "deny_other": "{{count}} Adressen sind gesperrt",
+    "paths_one": "auf 1 Pfad wird ein Passwort abgefragt",
+    "paths_other": "auf {{count}} Pfaden wird ein Passwort abgefragt",
+    "site": "für die ganze Site wird ein Passwort abgefragt",
+    "open": "Gespeichert. Alle dürfen ohne Passwort zugreifen.",
+    "saved": "Gespeichert: {{parts}}."
+  },
+  "users": {
+    "title": "Benutzer",
+    "user": "Benutzer",
+    "passwordSet": "Passwort gesetzt",
+    "actions": "Aktionen",
+    "newPassword": "Neues Passwort",
+    "newPasswordFor": "Neues Passwort für {{user}}",
+    "remove": "Entfernen",
+    "removeUser": "{{user}} entfernen",
+    "removeConfirm": "{{user}} entfernen?",
+    "lastStays": "Der letzte Benutzer bleibt, solange das Passwort an ist",
+    "none": "Noch keine Benutzer.",
+    "addLegend": "Benutzer hinzufügen",
+    "name": "Benutzername",
+    "nameHint": "Buchstaben, Ziffern und . _ @ -, höchstens 64 Zeichen.",
+    "generate": "Starkes Passwort erzeugen (wird einmal angezeigt)",
+    "choose": "Passwort selbst wählen",
+    "passwordHint": "{{min}} bis {{max}} Zeichen.",
+    "add": "Benutzer hinzufügen",
+    "enterName": "Gib einen Benutzernamen ein.",
+    "tooShort": "Das Passwort braucht mindestens {{min}} Zeichen.",
+    "added": "Benutzer {{user}} hinzugefügt.",
+    "renewed": "Benutzer {{user}} hat ein neues Passwort.",
+    "removed": "Benutzer {{user}} entfernt."
+  },
+  "secret": {
+    "title": "Speichere dieses Passwort jetzt",
+    "text": "Hostashi speichert nur einen Hash und kann es nicht noch einmal anzeigen. Geht es verloren, setze ein neues.",
+    "site": "Site",
+    "copy": "Passwort kopieren",
+    "saved": "Ich habe es gespeichert",
+    "copyFailed": "Kopieren geht hier nicht. Markiere das Passwort und kopiere es von Hand."
+  },
+  "problems": {
+    "noAddress": "Gib mindestens eine Adresse für die IP-Regel ein.",
+    "noUser": "Lege zuerst einen Benutzer an und schalte dann das Passwort ein.",
+    "noPath": "Gib mindestens einen Pfad ein oder schütze die ganze Site.",
+    "badPath": "Der Pfad {{path}} muss mit / beginnen."
+  },
+  "errors": {
+    "rejected": "Abgelehnt: {{reason}}.",
+    "conflict": "Ein eigenes nginx-Snippet dieser Site setzt schon Zugriffsregeln. Entferne sie zuerst aus dem Snippet (Tab nginx): {{reason}}.",
+    "userExists": "Die Site hat schon einen Benutzer mit diesem Namen.",
+    "userNotFound": "Diesen Benutzer gibt es nicht mehr.",
+    "siteGone": "Diese Site gibt es nicht mehr.",
+    "generic": "Die Einstellung ließ sich nicht laden oder speichern. Versuch es noch einmal."
+  }
+}
