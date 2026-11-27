@@ -2,14 +2,16 @@
 
 import { ArrowLeft, PencilSimple, Plus, Star, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { ApiError } from "./api";
+import i18n from "./i18n";
 import {
   bounds,
   createPreset,
   deletePreset,
+  displayCores,
   fieldsOf,
   formatBytes,
-  formatCores,
   formatCount,
   getSiteLimits,
   limitsMessage,
@@ -55,37 +57,38 @@ const defaultLimits: Limits = {
 const messageOf = (err: unknown) =>
   err instanceof Error && !(err instanceof ApiError) && !(err instanceof TypeError) ? err.message : limitsMessage(err, "preset");
 
-const cpuCoresText = (percent: number) => {
-  const c = formatCores(percent);
-  return c === "1" ? "1 CPU core" : c + " CPU cores";
-};
+const cpuCoresText = (percent: number) => i18n.t("limits.cpuCores", { count: Math.round(percent) / 100, cores: displayCores(percent) });
 
-const Unlimited = () => <Badge tone="warn">Unlimited</Badge>;
+const Unlimited = () => {
+  const { t } = useTranslation();
+  return <Badge tone="warn">{t("limits.unlimited")}</Badge>;
+};
 
 // LimitFacts lists limits; an unlimited one is marked, so it is never
 // mistaken for a small number.
 export function LimitFacts({ limits, label }: { limits: Limits; label: string }) {
+  const { t } = useTranslation();
   return (
     <dl className="ui-facts" aria-label={label}>
-      <dt>Disk space</dt>
+      <dt>{t("limits.facts.disk")}</dt>
       <dd>{limits.diskBytes ? formatBytes(limits.diskBytes) : <Unlimited />}</dd>
-      <dt>Files</dt>
+      <dt>{t("limits.facts.files")}</dt>
       <dd>{limits.diskInodes ? formatCount(limits.diskInodes) : <Unlimited />}</dd>
-      <dt>Memory</dt>
+      <dt>{t("limits.facts.memory")}</dt>
       <dd>{limits.memoryBytes ? formatBytes(limits.memoryBytes) : <Unlimited />}</dd>
-      <dt>Processes</dt>
+      <dt>{t("limits.facts.processes")}</dt>
       <dd>{limits.tasks ? formatCount(limits.tasks) : <Unlimited />}</dd>
-      <dt>PHP workers</dt>
+      <dt>{t("limits.facts.workers")}</dt>
       <dd>{limits.phpWorkers}</dd>
-      <dt>CPU</dt>
+      <dt>{t("limits.facts.cpu")}</dt>
       <dd>
-        {priorityLabel[limits.cpuPriority]} priority
-        {limits.cpuQuotaPercent > 0 ? `, at most ${cpuCoresText(limits.cpuQuotaPercent)}` : ", no hard limit"}
+        {t("limits.facts.priority", { priority: priorityLabel(limits.cpuPriority) })}
+        {limits.cpuQuotaPercent > 0 ? t("limits.facts.atMost", { cores: cpuCoresText(limits.cpuQuotaPercent) }) : t("limits.facts.noHardLimit")}
       </dd>
-      <dt>Database size</dt>
-      <dd>{limits.databaseBytes ? `warning at ${formatBytes(limits.databaseBytes)}` : <Badge tone="off">No warning</Badge>}</dd>
-      <dt>Database connections</dt>
-      <dd>{limits.databaseConnections ? `${formatCount(limits.databaseConnections)} per database user` : <Unlimited />}</dd>
+      <dt>{t("limits.facts.dbSize")}</dt>
+      <dd>{limits.databaseBytes ? t("limits.facts.warnAt", { size: formatBytes(limits.databaseBytes) }) : <Badge tone="off">{t("limits.facts.noWarning")}</Badge>}</dd>
+      <dt>{t("limits.facts.dbConnections")}</dt>
+      <dd>{limits.databaseConnections ? t("limits.facts.perUser", { n: formatCount(limits.databaseConnections) }) : <Unlimited />}</dd>
     </dl>
   );
 }
@@ -93,12 +96,13 @@ export function LimitFacts({ limits, label }: { limits: Limits; label: string })
 // UsageFacts shows the disk use and, when measured, the size of the site's
 // local databases (ADR-0057) in one list.
 function UsageFacts({ usage, db, limits }: { usage?: Usage | undefined; db?: DatabaseUsage | undefined; limits: Limits }) {
+  const { t } = useTranslation();
   if (!usage?.enforced) {
     return (
       <>
-        {usage && <p className="ui-hint ui-flush">Disk limits are not enforced on this server: its file system has no project quota.</p>}
+        {usage && <p className="ui-hint ui-flush">{t("limits.usage.notEnforced")}</p>}
         {db && (
-          <dl className="ui-facts" aria-label="Use">
+          <dl className="ui-facts" aria-label={t("limits.usage.label")}>
             {databaseRows(db, limits)}
           </dl>
         )}
@@ -108,28 +112,28 @@ function UsageFacts({ usage, db, limits }: { usage?: Usage | undefined; db?: Dat
   }
   const badge =
     usage.level === "critical" ? (
-      <Badge tone="warn">Almost full</Badge>
+      <Badge tone="warn">{t("limits.usage.almostFull")}</Badge>
     ) : usage.level === "warning" ? (
-      <Badge tone="warn">Filling up</Badge>
+      <Badge tone="warn">{t("limits.usage.fillingUp")}</Badge>
     ) : null;
   return (
     <>
-      <dl className="ui-facts" aria-label="Use">
-        <dt>Disk use</dt>
+      <dl className="ui-facts" aria-label={t("limits.usage.label")}>
+        <dt>{t("limits.usage.disk")}</dt>
         <dd>
           {formatBytes(usage.bytes)}
-          {limits.diskBytes > 0 && ` of ${formatBytes(limits.diskBytes)} (${String(usage.bytesPercent)} %)`} {badge}
+          {limits.diskBytes > 0 && t("limits.usage.ofLimit", { limit: formatBytes(limits.diskBytes), percent: formatCount(usage.bytesPercent) })} {badge}
         </dd>
-        <dt>Files</dt>
+        <dt>{t("limits.usage.files")}</dt>
         <dd>
           {formatCount(usage.inodes)}
-          {limits.diskInodes > 0 && ` of ${formatCount(limits.diskInodes)} (${String(usage.inodesPercent)} %)`}
+          {limits.diskInodes > 0 && t("limits.usage.ofLimit", { limit: formatCount(limits.diskInodes), percent: formatCount(usage.inodesPercent) })}
         </dd>
         {db && databaseRows(db, limits)}
       </dl>
       {databaseNotice(db)}
       {usage.level === "critical" && (
-        <Notice tone="err" title="The site has used 95 % or more of a disk limit. When it is full, writing new files fails." />
+        <Notice tone="err" title={t("limits.usage.full")} />
       )}
     </>
   );
@@ -140,24 +144,27 @@ function UsageFacts({ usage, db, limits }: { usage?: Usage | undefined; db?: Dat
 function databaseRows(usage: DatabaseUsage, limits: Limits) {
   const badge =
     usage.level === "critical" ? (
-      <Badge tone="warn">Above the warning</Badge>
+      <Badge tone="warn">{i18n.t("limits.usage.aboveWarning")}</Badge>
     ) : usage.level === "warning" ? (
-      <Badge tone="warn">Growing</Badge>
+      <Badge tone="warn">{i18n.t("limits.usage.growing")}</Badge>
     ) : null;
   return (
     <>
-      <dt>Databases</dt>
+      <dt>{i18n.t("limits.usage.databases")}</dt>
       <dd>
         {usage.databases === 0 ? (
-          <span className="ui-hint">No local databases</span>
+          <span className="ui-hint">{i18n.t("limits.usage.noDatabases")}</span>
         ) : (
           <>
             {formatBytes(usage.bytes)}
-            {limits.databaseBytes > 0 && ` of ${formatBytes(limits.databaseBytes)} (${String(usage.percent)} %)`} {badge}
+            {limits.databaseBytes > 0 && i18n.t("limits.usage.ofLimit", { limit: formatBytes(limits.databaseBytes), percent: formatCount(usage.percent) })} {badge}
             <span className="ui-hint">
               {" "}
-              in {String(usage.databases)} {usage.databases === 1 ? "database" : "databases"}, measured{" "}
-              <RelTime iso={new Date(usage.measuredAt * 1000).toISOString()} />
+              <Trans
+                i18nKey="limits.usage.measured"
+                count={usage.databases}
+                components={{ time: <RelTime iso={new Date(usage.measuredAt * 1000).toISOString()} /> }}
+              />
             </span>
           </>
         )}
@@ -172,7 +179,7 @@ const databaseNotice = (usage: DatabaseUsage | undefined) =>
   usage?.level === "critical" ? (
     <Notice
       tone="warn"
-      title="The databases have reached 95 % of the warning size. They keep growing and fill the server's disk: clean them up or raise the value."
+      title={i18n.t("limits.usage.dbFull")}
     />
   ) : null;
 
@@ -190,9 +197,11 @@ function LimitInputs({
   /** The server's CPU cores, when known. */
   cpus?: number | undefined;
 }) {
+  const { t } = useTranslation();
   const row = (
     label: string,
     unit: string,
+    unlimitedLabel: string,
     value: string,
     onValue: (v: string) => void,
     unlimited: boolean,
@@ -205,7 +214,7 @@ function LimitInputs({
       {(allowUnlimited || unlimited) && (
         <label className="ui-check">
           <input type="checkbox" checked={unlimited} onChange={(e) => onUnlimited(e.target.checked)} />
-          Unlimited {label.toLowerCase()}
+          {unlimitedLabel}
         </label>
       )}
     </div>
@@ -213,19 +222,21 @@ function LimitInputs({
   return (
     <>
       <fieldset className="ui-fieldset ui-group ui-stack">
-        <legend>Storage</legend>
+        <legend>{t("limits.inputs.storage")}</legend>
         <div className="ui-form-grid">
           {row(
-            "Disk space",
+            t("limits.facts.disk"),
             "GiB",
+            t("limits.inputs.diskUnlimited"),
             f.diskGiB,
             (v) => set({ ...f, diskGiB: v }),
             f.diskUnlimited,
             (v) => set({ ...f, diskUnlimited: v }),
           )}
           {row(
-            "Files",
-            "files, directories and links",
+            t("limits.facts.files"),
+            t("limits.inputs.filesHint"),
+            t("limits.inputs.filesUnlimited"),
             f.inodes,
             (v) => set({ ...f, inodes: v }),
             f.inodesUnlimited,
@@ -234,58 +245,65 @@ function LimitInputs({
         </div>
       </fieldset>
       <fieldset className="ui-fieldset ui-group ui-stack">
-        <legend>Memory and processes</legend>
+        <legend>{t("limits.inputs.memoryProcesses")}</legend>
         <div className="ui-form-grid">
           {row(
-            "Memory",
-            "MiB for PHP, cron jobs and other processes of the site",
+            t("limits.facts.memory"),
+            t("limits.inputs.memoryHint"),
+            t("limits.inputs.memoryUnlimited"),
             f.memoryMiB,
             (v) => set({ ...f, memoryMiB: v }),
             f.memoryUnlimited,
             (v) => set({ ...f, memoryUnlimited: v }),
           )}
           {row(
-            "Processes",
+            t("limits.facts.processes"),
             "",
+            t("limits.inputs.processesUnlimited"),
             f.tasks,
             (v) => set({ ...f, tasks: v }),
             f.tasksUnlimited,
             (v) => set({ ...f, tasksUnlimited: v }),
           )}
-          <Field label="PHP workers" hint={`Requests the site's PHP handles at the same time, ${String(bounds.workers.min)} to ${String(bounds.workers.max)}`}>
+          <Field label={t("limits.facts.workers")} hint={t("limits.inputs.workersHint", { min: bounds.workers.min, max: bounds.workers.max })}>
             <input className="ui-input" inputMode="numeric" value={f.workers} onChange={(e) => set({ ...f, workers: e.target.value })} />
           </Field>
         </div>
       </fieldset>
       <fieldset className="ui-fieldset ui-group ui-stack">
-        <legend>CPU</legend>
+        <legend>{t("limits.inputs.cpu")}</legend>
         <div className="ui-form-grid">
-          <Field label="CPU priority" hint="The share of the CPU the site gets when the server is busy">
+          <Field label={t("limits.inputs.priority")} hint={t("limits.inputs.priorityHint")}>
             <select className="ui-select" value={f.cpuPriority} onChange={(e) => set({ ...f, cpuPriority: e.target.value as CPUPriority })}>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
+              <option value="low">{priorityLabel("low")}</option>
+              <option value="normal">{priorityLabel("normal")}</option>
+              <option value="high">{priorityLabel("high")}</option>
             </select>
           </Field>
-          <Field label="CPU cores" hint={"Hard limit, such as 2 or 0.5. 0 means no hard limit: the site may use every free core, and only the CPU priority decides its share when the server is busy." + (cpus ? ` This server has ${String(cpus)} ${cpus === 1 ? "core" : "cores"}.` : "")}>
+          <Field
+            label={t("limits.inputs.cores")}
+            hint={t("limits.inputs.coresHint") + (cpus ? " " + t("limits.inputs.serverCores", { count: cpus }) : "")}
+          >
             <input className="ui-input" inputMode="decimal" value={f.cpuCores} onChange={(e) => set({ ...f, cpuCores: e.target.value })} />
           </Field>
         </div>
       </fieldset>
       <fieldset className="ui-fieldset ui-group ui-stack">
-        <legend>Database</legend>
+        <legend>{t("limits.inputs.database")}</legend>
         <div className="ui-form-grid">
           {row(
-            "Database size",
-            "GiB for all local databases of the site. Only a warning: databases can grow past it",
+            t("limits.facts.dbSize"),
+            t("limits.inputs.dbSizeHint"),
+            t("limits.inputs.dbSizeUnlimited"),
             f.dbGiB,
             (v) => set({ ...f, dbGiB: v }),
             f.dbUnlimited,
             (v) => set({ ...f, dbUnlimited: v }),
           )}
           {row(
-            "Database connections",
-            "At the same time, per database user",
+            t("limits.facts.dbConnections"),
+            t("limits.inputs.dbConnectionsHint"),
+            t("limits.inputs.dbConnectionsUnlimited"),
             f.dbConnections,
             (v) => set({ ...f, dbConnections: v }),
             f.dbConnectionsUnlimited,
@@ -299,14 +317,13 @@ function LimitInputs({
 
 const unlimitedWarning = (f: LimitFields) =>
   f.diskUnlimited || f.inodesUnlimited || f.memoryUnlimited || f.tasksUnlimited ? (
-    <p className="ui-hint ui-flush">
-      An unlimited value lets this site fill the disk or take the memory of the whole server. Use it only for a site you trust.
-    </p>
+    <p className="ui-hint ui-flush">{i18n.t("limits.inputs.unlimitedWarning")}</p>
   ) : null;
 
 // LimitSettings shows a site's limits and disk use and lets an admin give
 // it a preset or custom values.
 export function LimitSettings({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [state, setState] = useState<SiteLimits | null>(null);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [cpus, setCPUs] = useState<number | undefined>(undefined);
@@ -353,7 +370,7 @@ export function LimitSettings({ site }: { site: Site }) {
     try {
       const s = custom ? await setSiteCustom(site.name, custom) : await setSitePreset(site.name, choice);
       setState({ ...s, ...(state?.usage ? { usage: state.usage } : {}), ...(state?.databaseUsage ? { databaseUsage: state.databaseUsage } : {}) });
-      setDone(custom ? "Custom limits saved." : `${site.name} now uses the preset ${choice}.`);
+      setDone(custom ? t("limits.site.customSaved") : t("limits.site.nowUses", { site: site.name, preset: choice }));
       await load();
     } catch (err) {
       setError(limitsMessage(err));
@@ -373,13 +390,13 @@ export function LimitSettings({ site }: { site: Site }) {
     (choice === "" && JSON.stringify(fields) !== JSON.stringify(fieldsOf(state.limits)));
 
   return (
-    <Card title="Resource limits">
+    <Card title={t("limits.site.card")}>
       <div className="ui-stack">
         {!state ? (
           loadError ? (
             <Notice tone="err" title={loadError} />
           ) : (
-            <p aria-busy="true">Loading limits…</p>
+            <p aria-busy="true">{t("limits.site.loading")}</p>
           )
         ) : (
           <>
@@ -388,25 +405,24 @@ export function LimitSettings({ site }: { site: Site }) {
             )}
             {state.set ? (
               <>
-                <p className="ui-flush">{state.preset ? `Preset: ${state.preset}` : "Custom values"}</p>
-                <LimitFacts limits={state.limits} label={"Limits of " + site.name} />
+                <p className="ui-flush">{state.preset ? t("limits.site.preset", { name: state.preset }) : t("limits.site.custom")}</p>
+                <LimitFacts limits={state.limits} label={t("limits.site.limitsOf", { site: site.name })} />
                 {state.applyError && (
-                  <Notice tone="err" title={`The limits are saved but could not be applied on the server: ${state.applyError}. Save again to retry.`} />
+                  <Notice tone="err" title={t("limits.site.applyError", { error: state.applyError })} />
                 )}
               </>
             ) : (
-              <p className="ui-hint ui-flush">This site has no limits yet: it was created before limits existed. Choose a preset to limit it.</p>
+              <p className="ui-hint ui-flush">{t("limits.site.notSet")}</p>
             )}
             <form className="ui-stack" onSubmit={save} noValidate>
-              <Field label="Limits">
+              <Field label={t("limits.site.field")}>
                 <select className="ui-select" value={choice} onChange={(e) => setChoice(e.target.value)}>
                   {presets.map((p) => (
                     <option key={p.name} value={p.name}>
-                      Preset {p.name}
-                      {p.default ? " (default)" : ""}
+                      {p.default ? t("limits.site.optionDefault", { name: p.name }) : t("limits.site.option", { name: p.name })}
                     </option>
                   ))}
-                  <option value="">Custom values</option>
+                  <option value="">{t("limits.site.custom")}</option>
                 </select>
               </Field>
               {choice === "" ? (
@@ -418,11 +434,11 @@ export function LimitSettings({ site }: { site: Site }) {
                 // The values of the current preset are shown above already.
                 presets
                   .filter((p) => p.name === choice && !(state.set && state.preset === choice))
-                  .map((p) => <LimitFacts key={p.name} limits={p.limits} label={"Values of preset " + p.name} />)
+                  .map((p) => <LimitFacts key={p.name} limits={p.limits} label={t("limits.site.valuesOf", { name: p.name })} />)
               )}
               <div className="ui-row">
                 <Button variant="primary" type="submit" disabled={busy || !dirty}>
-                  Save limits
+                  {t("limits.site.save")}
                 </Button>
                 <UnsavedNote dirty={dirty} />
               </div>
@@ -443,12 +459,13 @@ type QueryProps = {
   onQuery?: (q: URLSearchParams) => void;
 };
 
-const limitCell = (v: number, text: (v: number) => string) => (v ? text(v) : <Badge tone="warn">Unlimited</Badge>);
+const limitCell = (v: number, text: (v: number) => string) => (v ? text(v) : <Unlimited />);
 
 // Presets is the page of the limit presets (ADR-0037): a table that can be
 // sorted and filtered, with the CPU limit in cores, and a form for a new
 // preset (?new=1) or a change (?edit=<name>).
 export function Presets({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
+  const { t } = useTranslation();
   const [presets, setPresets] = useState<Preset[] | null>(null);
   const [cpus, setCPUs] = useState<number | undefined>(undefined);
   const [loadError, setLoadError] = useState("");
@@ -505,15 +522,15 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
   const listLink = (
     <a className="ui-btn" href={formatHash({ page: "limits" })}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All presets
+      {t("limits.presets.allLink")}
     </a>
   );
 
   if (!presets) {
     return (
       <>
-        <PageHead title="Limit presets" />
-        {loadError ? <Notice tone="err" title={loadError} /> : <p aria-busy="true">Loading presets…</p>}
+        <PageHead title={t("limits.presets.title")} />
+        {loadError ? <Notice tone="err" title={loadError} /> : <p aria-busy="true">{t("limits.presets.loading")}</p>}
       </>
     );
   }
@@ -524,34 +541,34 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
     if (editName !== null && !initial) {
       return (
         <>
-          <PageHead title="Limit presets" actions={listLink} />
-          <Notice tone="warn" title={`There is no preset named ${editName}.`} />
+          <PageHead title={t("limits.presets.title")} actions={listLink} />
+          <Notice tone="warn" title={t("limits.presets.noSuch", { name: editName })} />
         </>
       );
     }
-    const title = initial ? "Change preset " + initial.name : "New preset";
+    const title = initial ? t("limits.presets.change", { name: initial.name }) : t("limits.presets.new");
     return (
       <>
         <PageHead
           title={title}
-          description={initial ? "Sites that use this preset get the new values." : "A preset is a named set of limits for sites."}
+          description={initial ? t("limits.presets.changeDescription") : t("limits.presets.newDescription")}
           actions={listLink}
         />
         <Card>
           <PresetForm
             key={editName ?? "new"}
             title={title}
-            submitLabel={initial ? "Save preset" : "Add preset"}
+            submitLabel={initial ? t("limits.presets.save") : t("limits.presets.add")}
             cpus={cpus}
             onCancel={() => set({ new: "", edit: "" })}
             {...(initial ? { initial } : {})}
             onSubmit={async (name, isDefault, limits, caches) => {
               if (initial) {
                 await updatePreset(initial.name, name, isDefault, limits, caches);
-                await changed(`Preset ${name} saved. Sites that use it get the new values.`);
+                await changed(t("limits.presets.saved", { name }));
               } else {
                 await createPreset(name, isDefault, limits, caches);
-                await changed(`Preset ${name} added.`);
+                await changed(t("limits.presets.added", { name }));
               }
             }}
           />
@@ -563,79 +580,84 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
   const columns: Column<Preset>[] = [
     {
       key: "name",
-      header: "Preset",
+      header: t("limits.presets.columns.name"),
       sortValue: (p) => p.name,
       cell: (p) => (
         <span className="ui-row ui-nowrap">
           <strong>{p.name}</strong>
-          {p.default && <Badge tone="ok">Default</Badge>}
+          {p.default && <Badge tone="ok">{t("limits.presets.default")}</Badge>}
         </span>
       ),
     },
     {
       key: "disk",
-      header: "Disk space",
+      header: t("limits.presets.columns.disk"),
       sortValue: (p) => p.limits.diskBytes || Infinity,
       cell: (p) => (
         <div className="ui-cell-main">
           <span className="ui-row">{limitCell(p.limits.diskBytes, formatBytes)}</span>
-          {p.limits.diskInodes ? <span>{formatCount(p.limits.diskInodes)} files</span> : <span>unlimited files</span>}
+          {p.limits.diskInodes ? (
+            <span>{t("limits.presets.files", { count: p.limits.diskInodes, n: formatCount(p.limits.diskInodes) })}</span>
+          ) : (
+            <span>{t("limits.presets.unlimitedFiles")}</span>
+          )}
         </div>
       ),
     },
-    { key: "memory", header: "Memory", sortValue: (p) => p.limits.memoryBytes || Infinity, cell: (p) => limitCell(p.limits.memoryBytes, formatBytes) },
-    { key: "tasks", header: "Processes", sortValue: (p) => p.limits.tasks || Infinity, cell: (p) => limitCell(p.limits.tasks, formatCount) },
-    { key: "workers", header: "PHP workers", sortValue: (p) => p.limits.phpWorkers, cell: (p) => p.limits.phpWorkers },
+    { key: "memory", header: t("limits.presets.columns.memory"), sortValue: (p) => p.limits.memoryBytes || Infinity, cell: (p) => limitCell(p.limits.memoryBytes, formatBytes) },
+    { key: "tasks", header: t("limits.presets.columns.processes"), sortValue: (p) => p.limits.tasks || Infinity, cell: (p) => limitCell(p.limits.tasks, formatCount) },
+    { key: "workers", header: t("limits.presets.columns.workers"), sortValue: (p) => p.limits.phpWorkers, cell: (p) => p.limits.phpWorkers },
     {
       key: "cpu",
-      header: "CPU cores",
+      header: t("limits.presets.columns.cores"),
       sortValue: (p) => p.limits.cpuQuotaPercent || Infinity,
-      cell: (p) => (p.limits.cpuQuotaPercent ? formatCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">No limit</span>),
+      cell: (p) => (p.limits.cpuQuotaPercent ? displayCores(p.limits.cpuQuotaPercent) : <span className="ui-hint">{t("limits.presets.noLimit")}</span>),
     },
     {
       key: "objectCache",
-      header: "Object cache",
+      header: t("limits.presets.columns.objectCache"),
       sortValue: (p) => p.caches?.objectCacheMb ?? 0,
-      cell: (p) => (p.caches?.objectCacheMb ? `${String(p.caches.objectCacheMb)} MiB` : <span className="ui-hint">Off</span>),
+      cell: (p) =>
+        p.caches?.objectCacheMb ? t("limits.presets.mib", { n: formatCount(p.caches.objectCacheMb) }) : <span className="ui-hint">{t("limits.presets.off")}</span>,
     },
     {
       key: "pageCache",
-      header: "Page cache",
+      header: t("limits.presets.columns.pageCache"),
       sortValue: (p) => p.caches?.pageCacheMb ?? 0,
-      cell: (p) => (p.caches?.pageCacheMb ? formatSize(p.caches.pageCacheMb) : <span className="ui-hint">Off</span>),
+      cell: (p) => (p.caches?.pageCacheMb ? formatSize(p.caches.pageCacheMb) : <span className="ui-hint">{t("limits.presets.off")}</span>),
     },
     {
       key: "priority",
-      header: "CPU priority",
+      header: t("limits.presets.columns.priority"),
       sortValue: (p) => ["low", "normal", "high"].indexOf(p.limits.cpuPriority),
-      cell: (p) => priorityLabel[p.limits.cpuPriority],
+      cell: (p) => priorityLabel(p.limits.cpuPriority),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("limits.presets.columns.actions"),
       srHeader: true,
       cell: (p) => (
         <RowActions>
           {!p.default && (
             <IconButton
-              label={`Make ${p.name} the default`}
-              text="Make default" icon={<Star size={16} />}
+              label={t("limits.presets.actions.makeDefaultLabel", { name: p.name })}
+              text={t("limits.presets.actions.makeDefault")} icon={<Star size={16} />}
               disabled={busy}
               onClick={() =>
                 void act(async () => {
                   const l = limitsOf(fieldsOf(p.limits), true);
                   if (typeof l === "string") throw new Error(l);
                   await updatePreset(p.name, p.name, true, p.limits, p.caches ?? noCaches);
-                  return `New sites now get the preset ${p.name}.`;
+                  return t("limits.presets.madeDefault", { name: p.name });
                 })
               }
             />
           )}
-          <IconLink label={`Change ${p.name}`} text="Change" icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
+          <IconLink label={t("limits.presets.actions.changeLabel", { name: p.name })} text={t("limits.presets.actions.change")} icon={<PencilSimple size={16} />} href={formatHash({ page: "limits", query: new URLSearchParams({ edit: p.name }) })} />
           {!p.default && (
             <IconButton
-              label={`Delete ${p.name}`}
-              text="Delete" icon={<Trash size={16} />}
+              label={t("limits.presets.actions.deleteLabel", { name: p.name })}
+              text={t("limits.presets.actions.delete")} icon={<Trash size={16} />}
               danger
               disabled={busy}
               onClick={() => {
@@ -657,12 +679,12 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
   return (
     <>
       <PageHead
-        title="Limit presets"
-        description="A new site gets the default preset. Changing a preset changes every site that uses it; a site with custom values stays as it is."
+        title={t("limits.presets.title")}
+        description={t("limits.presets.description")}
         actions={
           <a className="ui-btn ui-btn-primary" href={formatHash({ page: "limits", query: new URLSearchParams({ new: "1" }) })}>
             <Plus size={16} aria-hidden="true" />
-            New preset
+            {t("limits.presets.new")}
           </a>
         }
       />
@@ -671,9 +693,9 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
       {deleting && (
         <section className="ui-card ui-card-body ui-stack" role="alertdialog" aria-labelledby="preset-delete-title">
           <h2 id="preset-delete-title" className="ui-flush">
-            Delete the preset {deleting}?
+            {t("limits.presets.delete.title", { name: deleting })}
           </h2>
-          <p className="ui-flush">Its sites keep the values as custom values.</p>
+          <p className="ui-flush">{t("limits.presets.delete.text")}</p>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button
@@ -682,14 +704,14 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
               onClick={() =>
                 void act(async () => {
                   await deletePreset(deleting);
-                  return `Preset ${deleting} deleted.`;
+                  return t("limits.presets.delete.done", { name: deleting });
                 })
               }
             >
-              Delete preset
+              {t("limits.presets.delete.confirm")}
             </Button>
             <Button disabled={busy} onClick={() => setDeleting(null)}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </section>
@@ -700,25 +722,24 @@ export function Presets({ query = new URLSearchParams(), onQuery = () => undefin
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter presets"
-            placeholder="Filter by name"
+            aria-label={t("limits.presets.filter.label")}
+            placeholder={t("limits.presets.filter.placeholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
           {cpus !== undefined && (
-            <p className="ui-hint ui-filters-note">
-              This server has {cpus} CPU {cpus === 1 ? "core" : "cores"}.
-            </p>
+            <p className="ui-hint ui-filters-note">{t("limits.presets.cpus", { count: cpus })}</p>
           )}
         </div>
         <Table
-          label="Limit presets"
+          label={t("limits.presets.table.label")}
+          actionsBelow
           columns={columns}
           rows={shown}
           rowKey={(p) => p.name}
           sort={sort}
           onSort={(x) => set({ sort: x.key, dir: x.dir })}
-          empty={presets.length === 0 ? "No presets yet." : "No preset matches the filter."}
+          empty={presets.length === 0 ? t("limits.presets.table.none") : t("limits.presets.table.noMatch")}
         />
       </Card>
     </>
@@ -740,6 +761,7 @@ function PresetForm({
   onSubmit: (name: string, isDefault: boolean, limits: Limits, caches: PresetCaches) => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
   const [objectCacheMb, setObjectCacheMb] = useState(initial?.caches?.objectCacheMb ?? 0);
   const [pageCacheMb, setPageCacheMb] = useState(initial?.caches?.pageCacheMb ?? 0);
@@ -793,40 +815,34 @@ function PresetForm({
 
   return (
     <form className="ui-stack" onSubmit={submit} noValidate aria-label={title}>
-      <Field label="Name" hint="Lower-case letters, digits and dashes">
+      <Field label={t("limits.form.name")} hint={t("limits.form.nameHint")}>
         <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" spellCheck={false} />
       </Field>
       {!initial?.default && (
         <label className="ui-check">
           <input type="checkbox" checked={isDefault} onChange={(e) => setDefault(e.target.checked)} />
-          Default for new sites
+          {t("limits.form.default")}
         </label>
       )}
       <LimitInputs f={fields} set={setFields} allowUnlimited={!isDefault && !initial?.default} cpus={cpus} />
       {unlimitedWarning(fields)}
       <fieldset className="ui-fieldset ui-group ui-stack">
-        <legend>Caches for new sites</legend>
-        <p className="ui-hint">
-          A site that gets this preset, when it is created, imported or switched to it, starts with these settings. Changing them here later
-          only changes the size for sites that follow the preset and have the cache on; it never turns a cache on or off.
-        </p>
+        <legend>{t("limits.form.caches")}</legend>
+        <p className="ui-hint">{t("limits.form.cachesHint")}</p>
         <div className="ui-form-grid">
-            <Field label="Object cache" hint="Valkey for the site's PHP, on a socket only the site can open. At most half of the memory limit.">
+            <Field label={t("limits.form.objectCache")} hint={t("limits.form.objectCacheHint")}>
               <select className="ui-select" value={objectCacheMb} onChange={(e) => setObjectCacheMb(Number(e.target.value))}>
-                <option value={0}>Off</option>
+                <option value={0}>{t("limits.form.off")}</option>
                 {cacheSizes.map((n) => (
                   <option key={n} value={n}>
-                    {n} MiB
+                    {t("limits.presets.mib", { n: formatCount(n) })}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field
-              label="Page cache"
-              hint="nginx keeps whole PHP pages, with the strict preset for any application. Cached pages count against the disk limit."
-            >
+            <Field label={t("limits.form.pageCache")} hint={t("limits.form.pageCacheHint")}>
               <select className="ui-select" value={pageCacheMb} onChange={(e) => setPageCacheMb(Number(e.target.value))}>
-                <option value={0}>Off</option>
+                <option value={0}>{t("limits.form.off")}</option>
                 {pageCacheSizes.map((n) => (
                   <option key={n} value={n}>
                     {formatSize(n)}
@@ -841,7 +857,7 @@ function PresetForm({
           {submitLabel}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("common.actions.cancel")}
         </Button>
       </div>
       {error && <Notice tone="err" title={error} />}

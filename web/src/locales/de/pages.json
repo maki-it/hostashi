@@ -1,0 +1,97 @@
+{
+  "title": "Wartungsseiten",
+  "description": "Seiten, die eine Site während der Wartung zeigt (mit 503), und Seiten, die eine geparkte Domain zeigt. Sites wählen ihre in den eigenen Einstellungen.",
+  "allLink": "Alle Seiten",
+  "gone": "Diese Seite gibt es nicht mehr.",
+  "builtin": "Mitgeliefert",
+  "builtinChanged": "Mitgeliefert",
+  "noDomain": "Keine Domain",
+  "noSite": "Keine Site",
+  "kinds": {
+    "maintenance": "Wartung",
+    "parking": "Parken"
+  },
+  "delete": {
+    "title": "Seite „{{name}}“ löschen?",
+    "inUse": "{{users}} nutzen diese Seite noch. Wähle dort zuerst eine andere Seite.",
+    "filesRemoved": "Ihre Dateien werden entfernt.",
+    "unused": "Keine Site und keine Domain nutzt diese Seite.",
+    "card": "Löschen",
+    "confirm": "{{name}} löschen",
+    "done": "Seite „{{name}}“ gelöscht."
+  },
+  "columns": {
+    "name": "Seite",
+    "kind": "Art",
+    "users": "Genutzt von",
+    "files": "Dateien",
+    "updated": "Geändert",
+    "actions": "Aktionen"
+  },
+  "actions": {
+    "preview": "Vorschau",
+    "previewLabel": "Vorschau von {{name}}",
+    "manage": "Verwalten",
+    "manageLabel": "{{name}} verwalten",
+    "delete": "Löschen",
+    "deleteLabel": "{{name}} löschen"
+  },
+  "filter": {
+    "label": "Seiten filtern",
+    "placeholder": "Nach Name filtern",
+    "kind": "Art",
+    "allKinds": "Alle Arten"
+  },
+  "table": {
+    "label": "Seiten",
+    "noMatch": "Keine Seite passt zum Filter."
+  },
+  "upload": {
+    "button": "Seite hochladen",
+    "title": "Seite hochladen",
+    "description": "Eine eigene Wartungs- oder Parkseite.",
+    "name": "Name",
+    "kind": "Art",
+    "kindMaintenance": "Wartung: wird mit 503 gezeigt, solange eine Site in Wartung ist",
+    "kindParking": "Parken: wird auf Domains ohne Site gezeigt",
+    "file": "Datei",
+    "fileHint": "Eine .html-Datei oder eine .zip-Datei mit index.html auf oberster Ebene und dazu CSS, JavaScript, Bilder (png, jpg, webp, gif, svg, ico) und woff2-Schriften. Höchstens 2 MiB, 100 Dateien und zwei Ordnerebenen. Dateien werden nur von der Seite selbst geladen. %%DOMAIN%% im HTML zeigt die Domain, die der Besucher aufgerufen hat.",
+    "scripts": "Skripte in der Seite laufen auf der Domain der Site, solange die Seite gezeigt wird. Lade nur Seiten hoch, denen du vertraust.",
+    "uploading": "Wird hochgeladen…",
+    "submit": "Seite hochladen",
+    "done_one": "Seite „{{name}}“ mit {{count}} Datei hochgeladen.",
+    "done_other": "Seite „{{name}}“ mit {{count}} Dateien hochgeladen."
+  },
+  "view": {
+    "details": "Details",
+    "sha256": "SHA-256",
+    "builtinNotice": "Mitgelieferte Seiten kommen mit Hostashi und lassen sich nicht ändern.",
+    "replace": "Dateien ersetzen",
+    "newFile": "Neue Datei für {{name}}",
+    "newFileHint": "Eine .html- oder .zip-Datei. Sie ersetzt alle Dateien der Seite.",
+    "replaced": "Dateien ersetzt.",
+    "replacedUsed": "Dateien ersetzt. Sites und Domains, die sie zeigen, nutzen jetzt die neue Seite.",
+    "rename": "Umbenennen",
+    "newName": "Neuer Name für {{name}}",
+    "saveName": "Name speichern",
+    "renamed": "Seite umbenannt."
+  },
+  "problems": {
+    "chooseFile": "Wähle eine .html- oder .zip-Datei.",
+    "fileType": "Lade eine .html- oder .zip-Datei hoch.",
+    "tooLarge": "Die Datei ist größer als 2 MiB.",
+    "empty": "Die Datei ist leer.",
+    "enterName": "Gib einen Namen ein.",
+    "nameTooLong": "Verwende höchstens 64 Zeichen.",
+    "popupBlocked": "Der Browser hat den neuen Tab blockiert. Erlaube Pop-ups für das Panel und versuch es noch einmal."
+  },
+  "errors": {
+    "page_in_use": "Eine Site oder geparkte Domain nutzt diese Seite. Wähle dort zuerst eine andere Seite.",
+    "page_builtin": "Mitgelieferte Seiten lassen sich nicht ändern oder löschen.",
+    "page_not_found": "Diese Seite gibt es nicht mehr. Lade die Seite neu.",
+    "too_large": "Die Datei ist größer als 2 MiB.",
+    "forbidden": "Nur Admins können Seiten verwalten.",
+    "not_found": "Diese Site gibt es nicht mehr. Lade die Seite neu.",
+    "site_busy": "Die Site wird gerade angelegt oder gelöscht. Lade die Seite gleich neu."
+  }
+}
