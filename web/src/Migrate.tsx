@@ -2,6 +2,8 @@
 
 import { ArrowLeft, Copy, ListChecks, Trash, UploadSimple } from "@phosphor-icons/react";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import { Cutover } from "./Cutover";
 import { SnippetField } from "./Snippets";
 import { setSnippets, sizeProblem, snippetDraft, snippetMessage, snippetProblems, type DraftItem, type SnippetDraft, type SnippetProblems } from "./snippets";
@@ -12,7 +14,6 @@ import {
   deleteReport,
   deleteSource,
   existsHere,
-  formatBytes,
   getImport,
   listLoads,
   startLoads,
@@ -41,6 +42,7 @@ import { formatHash } from "./routes";
 import { getNode, type NodeStatus } from "./node";
 import { getPython, type PythonStatus } from "./python";
 import { presetLabel, type Preset } from "./pagecache";
+import { formatBytes, formatCount } from "./format";
 import { defaultPool, listPools, phpVersions, poolLabel, poolNote, type Pool } from "./sites";
 import {
   Badge,
@@ -69,15 +71,10 @@ type QueryProps = {
   onQuery?: (q: URLSearchParams) => void;
 };
 
-// typeLabel names the scanned site types.
-const typeLabel: Record<string, string> = {
-  static: "Static",
-  php: "PHP",
-  wordpress: "WordPress",
-  nodejs: "Node.js",
-  python: "Python",
-  proxy: "Reverse proxy",
-};
+// typeLabel names the scanned site types; an unknown type keeps its name.
+const siteTypes = ["static", "php", "wordpress", "nodejs", "python", "proxy"] as const;
+const typeLabel = (type: string): string =>
+  (siteTypes as readonly string[]).includes(type) ? i18n.t(`migrate.types.${type as (typeof siteTypes)[number]}`) : type;
 
 const importHash = (q?: Record<string, string>) => formatHash({ page: "import", ...(q ? { query: new URLSearchParams(q) } : {}) });
 const siteKey = (s: PlanSite) => s.name || s.source;
@@ -89,6 +86,7 @@ const siteKey = (s: PlanSite) => s.name || s.source;
 export function Migrate({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
   const [source, setInfo] = useState<SourceInfo | null>(null);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   useEffect(() => {
     getSource()
@@ -98,8 +96,8 @@ export function Migrate({ query = new URLSearchParams(), onQuery = () => undefin
 
   const head = (
     <PageHead
-      title="CloudPanel import"
-      description="Move sites from a CloudPanel server to this one: connect the old server, upload its scan report, then create and copy the sites."
+      title={t("migrate.title")}
+      description={t("migrate.description")}
     />
   );
 
@@ -107,7 +105,7 @@ export function Migrate({ query = new URLSearchParams(), onQuery = () => undefin
     return (
       <>
         {head}
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>}
       </>
     );
   }
@@ -135,14 +133,15 @@ export function Migrate({ query = new URLSearchParams(), onQuery = () => undefin
 async function copyText(text: string): Promise<string> {
   try {
     await navigator.clipboard.writeText(text);
-    return "Copied.";
+    return i18n.t("common.status.copied");
   } catch {
-    return "Copying is not possible here. Select the text and copy it by hand.";
+    return i18n.t("migrate.copyFailed");
   }
 }
 
 function CopyBlock({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState("");
+  const { t } = useTranslation();
   return (
     <div className="ui-stack-tight">
       <pre className="ui-code" aria-label={label}>
@@ -150,7 +149,7 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
       </pre>
       <div className="ui-row">
         <Button icon={<Copy size={16} aria-hidden="true" />} onClick={() => void copyText(text).then(setCopied)}>
-          Copy
+          {t("migrate.copy")}
         </Button>
         {copied && (
           <span role="status" className="ui-hint">
@@ -169,6 +168,7 @@ function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: Source
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const { t } = useTranslation();
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -207,58 +207,57 @@ function SourceCard({ info, onChange }: { info: SourceInfo; onChange: (i: Source
     }
   }
 
-  const state = !info.source ? null : info.ready ? <Badge tone="ok">Ready</Badge> : <Badge tone="warn">Not ready</Badge>;
+  const state = !info.source ? null : info.ready ? <Badge tone="ok">{t("migrate.source.ready")}</Badge> : <Badge tone="warn">{t("migrate.source.notReady")}</Badge>;
 
   return (
-    <Card title="Old server" {...(state ? { actions: state } : {})}>
+    <Card title={t("migrate.source.title")} {...(state ? { actions: state } : {})}>
       <div className="ui-stack">
         <p className="ui-flush">
-          Hostashi reads the sites over SSH from the CloudPanel server. It only reads there and changes nothing.
-          {info.source && (info.ready ? " The connection is ready." : " The connection is not ready yet: finish the steps below.")}
+          {t("migrate.source.intro")}
+          {info.source && (info.ready ? t("migrate.source.introReady") : t("migrate.source.introNotReady"))}
         </p>
         <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate>
           <div className="ui-host-port">
-            <Field label="Address" hint="Prefer the IP address: DNS names move during the migration.">
+            <Field label={t("migrate.source.address")} hint={t("migrate.source.addressHint")}>
               <input className="ui-input ui-mono" value={host} onChange={(e) => setHost(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
-            <Field label="SSH port">
+            <Field label={t("migrate.source.port")}>
               <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
             </Field>
           </div>
           {error && <Notice tone="err" title={error} />}
-          {saved && <Notice tone="ok" title="Saved." />}
+          {saved && <Notice tone="ok" title={t("migrate.source.saved")} />}
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={busy}>
-              {info.source ? "Save" : "Connect old server"}
+              {info.source ? t("common.actions.save") : t("migrate.source.connect")}
             </Button>
           </div>
         </form>
         {info.authorizedKeysLine && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              On the old server, add this line to <code>/root/.ssh/authorized_keys</code>. It only allows reading files over SFTP and a tunnel
-              to its database.
+              <Trans i18nKey="migrate.source.authorizedKeys" components={{ code: <code /> }} />
             </p>
-            <CopyBlock label="authorized_keys line" text={info.authorizedKeysLine} />
+            <CopyBlock label={t("migrate.source.authorizedKeysLabel")} text={info.authorizedKeysLine} />
           </div>
         )}
         {info.source &&
           (confirmRemove ? (
-            <div className="ui-stack-tight" role="alertdialog" aria-label="Forget old server">
-              <p className="ui-flush">Forget the old server? Its key and host key are deleted here. Remove the line from authorized_keys there as well.</p>
+            <div className="ui-stack-tight" role="alertdialog" aria-label={t("migrate.source.forget")}>
+              <p className="ui-flush">{t("migrate.source.forgetText")}</p>
               <div className="ui-row">
                 <Button variant="danger" disabled={busy} onClick={() => void remove()}>
-                  Forget old server
+                  {t("migrate.source.forget")}
                 </Button>
                 <Button disabled={busy} onClick={() => setConfirmRemove(false)}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="ui-row">
               <Button variant="danger" onClick={() => setConfirmRemove(true)}>
-                Forget old server
+                {t("migrate.source.forget")}
               </Button>
             </div>
           ))}
@@ -271,6 +270,7 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
   const [scanned, setScanned] = useState<{ key: string; fingerprint: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   async function run(f: () => Promise<void>) {
     setBusy(true);
@@ -285,22 +285,24 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
   }
 
   return (
-    <Card title="Host key of the old server" actions={info.hostKey ? <Badge tone="ok">Trusted</Badge> : <Badge tone="warn">Not confirmed</Badge>}>
+    <Card
+      title={t("migrate.hostKey.title")}
+      actions={info.hostKey ? <Badge tone="ok">{t("migrate.hostKey.trusted")}</Badge> : <Badge tone="warn">{t("migrate.hostKey.notConfirmed")}</Badge>}
+    >
       <div className="ui-stack">
         {info.hostKey ? (
           <p className="ui-flush ui-break">
-            Trusted: <code>{info.hostKey}</code>
+            <Trans i18nKey="migrate.hostKey.trustedKey" values={{ key: info.hostKey }} components={{ code: <code /> }} />
           </p>
         ) : (
-          <p className="ui-flush">The old server&apos;s SSH host key is not confirmed yet. Nothing is copied until it is.</p>
+          <p className="ui-flush">{t("migrate.hostKey.missing")}</p>
         )}
         {scanned && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              The old server presents <code>{scanned.fingerprint}</code>. On the old server, run this and trust the key only if one line shows
-              the same fingerprint:
+              <Trans i18nKey="migrate.hostKey.presents" values={{ fingerprint: scanned.fingerprint }} components={{ code: <code /> }} />
             </p>
-            <pre className="ui-code" aria-label="Fingerprint command">
+            <pre className="ui-code" aria-label={t("migrate.hostKey.commandLabel")}>
               {fingerprintCommand}
             </pre>
             <div className="ui-row">
@@ -314,7 +316,7 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
                   })
                 }
               >
-                Trust this key
+                {t("migrate.hostKey.trust")}
               </Button>
             </div>
           </div>
@@ -322,7 +324,7 @@ function HostKeyCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sourc
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void run(async () => setScanned(await scanSourceHostKey()))}>
-            {info.hostKey ? "Check the host key again" : "Fetch the host key"}
+            {info.hostKey ? t("migrate.hostKey.checkAgain") : t("migrate.hostKey.fetch")}
           </Button>
         </div>
       </div>
@@ -336,6 +338,7 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (creds) heading.current?.focus();
@@ -360,16 +363,15 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
     return (
       <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="mig-dbsql">
         <h2 id="mig-dbsql" className="ui-flush" ref={heading} tabIndex={-1}>
-          Run this SQL on the old server now
+          {t("migrate.db.sqlTitle")}
         </h2>
         <p className="ui-flush">
-          Run it as the MariaDB administrator there, for example in <code>mysql</code> as root. It creates the user <code>{creds.user}</code>{" "}
-          that may only read. Hostashi shows it only this once.
+          <Trans i18nKey="migrate.db.sqlText" values={{ user: creds.user }} components={{ code1: <code />, code2: <code /> }} />
         </p>
-        <CopyBlock label="SQL for the old server" text={creds.sql} />
+        <CopyBlock label={t("migrate.db.sqlLabel")} text={creds.sql} />
         <div className="ui-row">
           <Button variant="primary" onClick={() => setCreds(null)}>
-            I have run it
+            {t("migrate.db.sqlDone")}
           </Button>
         </div>
       </section>
@@ -377,25 +379,25 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
   }
 
   return (
-    <Card title="Database access">
+    <Card title={t("migrate.db.title")}>
       <div className="ui-stack">
         {info.dbUser ? (
           <p className="ui-flush">
-            Databases are read as <code>{info.dbUser}</code> on the old server.
+            <Trans i18nKey="migrate.db.readAs" values={{ user: info.dbUser }} components={{ code: <code /> }} />
           </p>
         ) : (
-          <p className="ui-flush">To copy databases, Hostashi needs a read-only database user on the old server. Files are copied without it.</p>
+          <p className="ui-flush">{t("migrate.db.needUser")}</p>
         )}
         {error && <Notice tone="err" title={error} />}
         {info.dbUser && confirmNew ? (
           <div className="ui-stack-tight">
-            <p className="ui-flush">A new password replaces the old one. Run the new SQL on the old server, or database copies fail.</p>
+            <p className="ui-flush">{t("migrate.db.newPasswordText")}</p>
             <div className="ui-row">
               <Button variant="primary" disabled={busy} onClick={() => void generate()}>
-                Make a new password
+                {t("migrate.db.newPassword")}
               </Button>
               <Button disabled={busy} onClick={() => setConfirmNew(false)}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </div>
@@ -406,7 +408,7 @@ function DumpUserCard({ info, onChange }: { info: SourceInfo; onChange: (i: Sour
               disabled={busy}
               onClick={() => (info.dbUser ? setConfirmNew(true) : void generate())}
             >
-              {info.dbUser ? "Make a new password" : "Create the database user"}
+              {info.dbUser ? t("migrate.db.newPassword") : t("migrate.db.createUser")}
             </Button>
           </div>
         )}
@@ -421,6 +423,7 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState("");
   const file = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
@@ -438,11 +441,11 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
     e.preventDefault();
     const f = file.current?.files?.[0];
     if (!f) {
-      setError("Choose the report file.");
+      setError(t("migrate.reports.chooseFile"));
       return;
     }
     if (f.size > 16 << 20) {
-      setError("The report is larger than 16 MiB.");
+      setError(t("migrate.errors.too_large"));
       return;
     }
     setBusy(true);
@@ -473,48 +476,48 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
   }
 
   const columns: Column<Report>[] = [
-    { key: "created", header: "Uploaded", sortValue: (r) => r.createdAt, cell: (r) => <RelTime iso={r.createdAt} /> },
-    { key: "sites", header: "Sites", sortValue: (r) => r.sites, cell: (r) => r.sites },
+    { key: "created", header: t("migrate.reports.uploaded"), sortValue: (r) => r.createdAt, cell: (r) => <RelTime iso={r.createdAt} /> },
+    { key: "sites", header: t("migrate.reports.sites"), sortValue: (r) => r.sites, cell: (r) => r.sites },
     {
       key: "actions",
-      header: "Actions",
+      header: t("migrate.reports.actions"),
       srHeader: true,
       cell: (r) => (
         <RowActions>
-          <IconLink label="Show plan" text="Show plan" icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
-          <IconButton label="Delete report" text="Delete" icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
+          <IconLink label={t("migrate.reports.showPlan")} text={t("migrate.reports.showPlan")} icon={<ListChecks size={16} />} href={importHash({ report: r.id })} />
+          <IconButton label={t("migrate.reports.deleteReport")} text={t("migrate.reports.delete")} icon={<Trash size={16} />} danger disabled={busy} onClick={() => setConfirmDelete(r.id)} />
         </RowActions>
       ),
     },
   ];
 
   return (
-    <Card title="Scan reports" padded={false}>
+    <Card title={t("migrate.reports.title")} padded={false}>
       <div className="ui-card-body ui-stack">
-        <p className="ui-flush">Run the scan on the old server as root. It only reads the CloudPanel configuration.</p>
-        <pre className="ui-code" aria-label="Scan command">
+        <p className="ui-flush">{t("migrate.reports.intro")}</p>
+        <pre className="ui-code" aria-label={t("migrate.reports.commandLabel")}>
           {scanCommand}
         </pre>
         <form className="ui-stack" onSubmit={(e) => void upload(e)} noValidate>
-          <Field label="Report file">
+          <Field label={t("migrate.reports.file")}>
             <input className="ui-file" ref={file} type="file" accept="application/json,.json" />
           </Field>
           {error && <Notice tone="err" title={error} />}
           <div className="ui-row">
             <Button type="submit" variant="primary" icon={<UploadSimple size={16} aria-hidden="true" />} disabled={busy}>
-              {busy ? "Uploading…" : "Upload report"}
+              {busy ? t("migrate.reports.uploading") : t("migrate.reports.upload")}
             </Button>
           </div>
         </form>
         {confirmDelete && (
-          <div className="ui-stack-tight" role="alertdialog" aria-label="Delete report">
-            <p className="ui-flush">Delete this report? Sites created from it stay.</p>
+          <div className="ui-stack-tight" role="alertdialog" aria-label={t("migrate.reports.deleteReport")}>
+            <p className="ui-flush">{t("migrate.reports.deleteText")}</p>
             <div className="ui-row">
               <Button variant="danger" disabled={busy} onClick={() => void remove(confirmDelete)}>
-                Delete report
+                {t("migrate.reports.deleteReport")}
               </Button>
               <Button disabled={busy} onClick={() => setConfirmDelete("")}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </div>
@@ -522,35 +525,31 @@ function ReportsCard({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
       {reports === null ? (
         <p className="ui-card-body" aria-busy="true">
-          Loading…
+          {t("common.status.loading")}
         </p>
       ) : (
         <Table
-          label="Scan reports"
+          label={t("migrate.reports.title")}
           columns={columns}
           rows={reports}
           rowKey={(r) => r.id}
           sort={{ key: "created", dir: "desc" }}
-          empty="No report is uploaded."
+          empty={t("migrate.reports.empty")}
         />
       )}
     </Card>
   );
 }
 
-const tlsLabel: Record<PlanSite["tls"], string> = {
-  none: "None on the old server",
-  reissue: "New certificate after the DNS switch",
-  copy: "Purchased certificate, copied",
-};
+const tlsLabel = (tls: PlanSite["tls"]): string => (["none", "reissue", "copy"].includes(tls) ? i18n.t(`migrate.tls.${tls}`) : tls);
 
 type Status = { word: string; tone: Tone; rank: number; value: string };
 
 function statusOf(s: PlanSite): Status {
-  if (existsHere(s)) return { word: "Created", tone: "ok", rank: 2, value: "created" };
-  if (s.action === "import") return { word: "Ready", tone: "ok", rank: 1, value: "import" };
-  if (s.action === "review") return { word: "Review", tone: "warn", rank: 0, value: "review" };
-  return { word: "Skipped", tone: "off", rank: 3, value: "skip" };
+  if (existsHere(s)) return { word: i18n.t("migrate.status.created"), tone: "ok", rank: 2, value: "created" };
+  if (s.action === "import") return { word: i18n.t("migrate.status.ready"), tone: "ok", rank: 1, value: "import" };
+  if (s.action === "review") return { word: i18n.t("migrate.status.review"), tone: "warn", rank: 0, value: "review" };
+  return { word: i18n.t("migrate.status.skipped"), tone: "off", rank: 3, value: "skip" };
 }
 
 const sentence = (m: string) => m.charAt(0).toUpperCase() + m.slice(1) + ".";
@@ -563,6 +562,7 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   const [rep, setRep] = useState<Report | null>(null);
   const [php, setPHP] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
@@ -592,15 +592,15 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   const back = (
     <a className="ui-btn" href={importHash()}>
       <ArrowLeft size={16} aria-hidden="true" />
-      Old server and reports
+      {t("migrate.plan.back")}
     </a>
   );
 
   if (!rep?.plan) {
     return (
       <>
-        <PageHead title="Plan" actions={back} />
-        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading…</p>}
+        <PageHead title={t("migrate.plan.title")} actions={back} />
+        {error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("common.status.loading")}</p>}
       </>
     );
   }
@@ -611,14 +611,14 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
     const planLink = (
       <a className="ui-btn" href={importHash({ report })}>
         <ArrowLeft size={16} aria-hidden="true" />
-        Plan
+        {t("migrate.plan.title")}
       </a>
     );
     if (!site) {
       return (
         <>
-          <PageHead title="Plan" actions={planLink} />
-          <Notice tone="warn" title={`The plan has no site ${name}.`} />
+          <PageHead title={t("migrate.plan.title")} actions={planLink} />
+          <Notice tone="warn" title={t("migrate.plan.noSite", { name })} />
         </>
       );
     }
@@ -629,20 +629,20 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   const columns: Column<PlanSite>[] = [
     {
       key: "site",
-      header: "Site",
+      header: t("migrate.plan.site"),
       sortValue: siteKey,
       cell: (p) => (
         <div className="ui-cell-main">
           <a href={importHash({ report, site: siteKey(p) })}>{p.name || p.source}</a>
-          <span>{p.domains.length ? p.domains.join(", ") : "No domain"}</span>
+          <span>{p.domains.length ? p.domains.join(", ") : t("migrate.plan.noDomain")}</span>
         </div>
       ),
     },
-    { key: "type", header: "Type", sortValue: (p) => p.type, cell: (p) => typeLabel[p.type] ?? p.type },
-    { key: "php", header: "PHP", sortValue: (p) => p.php, cell: (p) => p.php || <span className="ui-hint">None</span> },
+    { key: "type", header: t("migrate.plan.type"), sortValue: (p) => p.type, cell: (p) => typeLabel(p.type) },
+    { key: "php", header: t("migrate.plan.php"), sortValue: (p) => p.php, cell: (p) => p.php || <span className="ui-hint">{t("migrate.plan.none")}</span> },
     {
       key: "status",
-      header: "Status",
+      header: t("migrate.plan.status"),
       sortValue: (p) => statusOf(p).rank,
       cell: (p) => {
         const st = statusOf(p);
@@ -669,17 +669,12 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
   return (
     <>
       <PageHead
-        title="Plan"
-        description={
-          <>
-            From the report uploaded <RelTime iso={rep.createdAt} />. It is worked out again on every view, so sites created here show as
-            created.
-          </>
-        }
+        title={t("migrate.plan.title")}
+        description={<Trans i18nKey="migrate.plan.from" components={{ time: <RelTime iso={rep.createdAt} /> }} />}
         actions={back}
       />
-      <Notice tone="info" title={`${s.sites} sites: ${s.import} ready, ${s.review} to review, ${s.skip} skipped.`}>
-        {!ready ? "Imports can start once the old server and its host key are set up." : "Open a site to create it here and copy it."}
+      <Notice tone="info" title={t("migrate.plan.summary", { sites: s.sites, ready: s.import, review: s.review, skip: s.skip })}>
+        {!ready ? t("migrate.plan.notReady") : t("migrate.plan.open")}
       </Notice>
       {error && <Notice tone="err" title={error} />}
       <Card padded={false}>
@@ -687,27 +682,27 @@ function PlanView({ report, ready, query, onQuery }: PlanProps) {
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter sites"
-            placeholder="Filter by site or domain"
+            aria-label={t("migrate.plan.filter")}
+            placeholder={t("migrate.plan.filterPlaceholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
-          <select className="ui-select" aria-label="Status" value={status} onChange={(e) => set({ status: e.target.value })}>
-            <option value="">All sites</option>
-            <option value="review">Review</option>
-            <option value="import">Ready</option>
-            <option value="created">Created</option>
-            <option value="skip">Skipped</option>
+          <select className="ui-select" aria-label={t("migrate.plan.status")} value={status} onChange={(e) => set({ status: e.target.value })}>
+            <option value="">{t("migrate.plan.allSites")}</option>
+            <option value="review">{t("migrate.status.review")}</option>
+            <option value="import">{t("migrate.status.ready")}</option>
+            <option value="created">{t("migrate.status.created")}</option>
+            <option value="skip">{t("migrate.status.skipped")}</option>
           </select>
         </div>
         <Table
-          label="Plan"
+          label={t("migrate.plan.title")}
           columns={columns}
           rows={shown}
           rowKey={(p) => siteKey(p)}
           sort={sort}
           onSort={(x) => set({ sort: x.key, dir: x.dir })}
-          empty="No site matches the filter."
+          empty={t("migrate.plan.empty")}
         />
       </Card>
     </>
@@ -720,6 +715,7 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
   const created = existsHere(site);
   const st = statusOf(site);
   const title = site.name || site.source;
+  const { t } = useTranslation();
 
   return (
     <>
@@ -733,100 +729,96 @@ function PlanSiteView({ report, site, php, ready, back, onChange }: SiteViewProp
         actions={back}
       />
       {site.reasons.length > 0 && !created && (
-        <Notice tone={site.action === "skip" ? "info" : "warn"} title={site.action === "review" ? "Check these points first" : "Why"}>
-          <ul className="ui-plain-list" aria-label={"Reasons for " + title}>
+        <Notice tone={site.action === "skip" ? "info" : "warn"} title={site.action === "review" ? t("migrate.site.checkFirst") : t("migrate.site.why")}>
+          <ul className="ui-plain-list" aria-label={t("migrate.site.reasons", { name: title })}>
             {site.reasons.map((r) => (
               <li key={r.code + r.msg}>{sentence(r.msg)}</li>
             ))}
           </ul>
         </Notice>
       )}
-      <Card title="On the old server">
-        <dl className="ui-facts" aria-label={"Plan for " + title}>
-          <dt>Domains</dt>
-          <dd>{site.domains.length ? site.domains.join(", ") : "None"}</dd>
+      <Card title={t("migrate.site.oldServer")}>
+        <dl className="ui-facts" aria-label={t("migrate.site.planFor", { name: title })}>
+          <dt>{t("migrate.site.domains")}</dt>
+          <dd>{site.domains.length ? site.domains.join(", ") : t("migrate.plan.none")}</dd>
           {site.redirectFrom.length > 0 && (
             <>
-              <dt>Redirects</dt>
+              <dt>{t("migrate.site.redirects")}</dt>
               <dd>
                 {site.redirectFrom.join(", ")}
                 {site.wwwRedirect && (
                   <span className="ui-hint ui-flush">
-                    {" "}
-                    · taken over as the site's www redirect ({site.wwwRedirect === "to-www" ? "to the www name" : "to the name without www"})
+                    {site.wwwRedirect === "to-www" ? t("migrate.site.wwwRedirect") : t("migrate.site.nonWwwRedirect")}
                   </span>
                 )}
               </dd>
             </>
           )}
-          <dt>Type</dt>
-          <dd>{typeLabel[site.type] ?? site.type}</dd>
+          <dt>{t("migrate.site.type")}</dt>
+          <dd>{typeLabel(site.type)}</dd>
           {site.proxy && (
             <>
-              <dt>Target</dt>
+              <dt>{t("migrate.site.target")}</dt>
               <dd className="ui-mono ui-break">{site.proxy}</dd>
             </>
           )}
           {site.php && (
             <>
-              <dt>PHP</dt>
+              <dt>{t("migrate.plan.php")}</dt>
               <dd>{site.php}</dd>
             </>
           )}
-          <dt>HTTPS</dt>
-          <dd>{tlsLabel[site.tls] ?? site.tls}</dd>
+          <dt>{t("migrate.site.https")}</dt>
+          <dd>{tlsLabel(site.tls)}</dd>
           {!site.proxy && (
             <>
-              <dt>Old files</dt>
+              <dt>{t("migrate.site.oldFiles")}</dt>
               <dd className="ui-mono ui-break">{site.docRoot}</dd>
             </>
           )}
           {site.customSnippets > 0 && (
             <>
-              <dt>Custom nginx</dt>
-              <dd>{site.customSnippets} directives</dd>
+              <dt>{t("migrate.site.customNginx")}</dt>
+              <dd>{t("migrate.site.directives", { count: site.customSnippets })}</dd>
             </>
           )}
           {site.cronJobs > 0 && (
             <>
-              <dt>Cron jobs</dt>
+              <dt>{t("migrate.site.cronJobs")}</dt>
               <dd>{cronLabel(site)}</dd>
             </>
           )}
         </dl>
       </Card>
       {(site.action === "import" || site.action === "review") && (
-        <Card title="Create the site">
+        <Card title={t("migrate.site.createTitle")}>
           <CreateForm report={report} site={site} php={php} onChange={onChange} />
         </Card>
       )}
       {created && site.cronImport > 0 && (
-        <Notice
-          tone="info"
-          title={`${site.cronImport} cron ${site.cronImport === 1 ? "job was created paused. Start it" : "jobs were created paused. Start them"} after the DNS switch.`}
-        />
+        <Notice tone="info" title={t("migrate.site.cronPaused", { count: site.cronImport })} />
       )}
       {created && site.proxy && (
-        <Notice tone="info" title="A reverse proxy site has no Linux account here: there are no files or databases to copy." />
+        <Notice tone="info" title={t("migrate.site.proxyNoAccount")} />
       )}
       {created && site.node && (
-        <Notice tone="info" title="The app stays stopped. After the final sync, set its start command on the site's Web tab." />
+        <Notice tone="info" title={t("migrate.site.nodeStopped")} />
       )}
       {created && site.python && (
-        <Notice tone="info" title="The app stays stopped. After the final sync, install its packages into ~/.venv over SSH and set its start command on the site's Web tab." />
+        <Notice tone="info" title={t("migrate.site.pythonStopped")} />
       )}
       {created && !site.proxy && (
-        <Card title="Files and databases">
+        <Card title={t("migrate.site.filesTitle")}>
           <ImportForm report={report} site={site} ready={ready} />
         </Card>
       )}
       {created && !site.proxy && site.customSnippets > 0 && (
-        <Card title="Custom nginx">
+        <Card title={t("migrate.site.customNginx")}>
           <SnippetDraftForm report={report} site={site} />
         </Card>
       )}
       {created && (
-        <Card title="DNS switch">
+        <Card title={t("migrate.site.dnsTitle")}>
           <Cutover site={site.name} />
         </Card>
       )}
@@ -847,6 +839,7 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   const [pools, setPools] = useState<Pool[]>([]);
   const [pool, setPool] = useState("default");
   const review = site.action === "review";
+  const { t } = useTranslation();
 
   // The pool choice shows only with a second pool (ADR-0016); a reverse
   // proxy site has no home.
@@ -883,7 +876,7 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (review && !reviewed) {
-      setError("Confirm that you checked the points above.");
+      setError(t("migrate.create.confirmChecked"));
       return;
     }
     setBusy(true);
@@ -909,15 +902,15 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
 
   return (
     <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-      <p className="ui-flush">The site gets the old domains without a certificate. HTTPS follows after the DNS switch.</p>
+      <p className="ui-flush">{t("migrate.create.intro")}</p>
       {site.php && choices.length > 0 && (
         <div className="ui-narrow">
-          <Field label={"PHP version for " + site.name}>
+          <Field label={t("migrate.create.php", { name: site.name })}>
             <select className="ui-select" value={version} onChange={(e) => setVersion(e.target.value)}>
               {choices.map((v) => (
                 <option key={v} value={v}>
                   {v}
-                  {php.includes(v) ? "" : " (not installed)"}
+                  {php.includes(v) ? "" : t("migrate.notInstalled")}
                 </option>
               ))}
             </select>
@@ -926,12 +919,12 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
       )}
       {site.node && lines.length > 0 && (
         <div className="ui-narrow">
-          <Field label={"Node.js for " + site.name} hint="The old Node.js version is not known. The app stays stopped until you set its start command.">
+          <Field label={t("migrate.create.node", { name: site.name })} hint={t("migrate.create.nodeHint")}>
             <select className="ui-select" value={line} onChange={(e) => setLine(e.target.value)}>
               {lines.map((v) => (
                 <option key={v} value={v}>
                   Node.js {v}
-                  {node && !installed.includes(v) ? " (not installed)" : ""}
+                  {node && !installed.includes(v) ? t("migrate.notInstalled") : ""}
                 </option>
               ))}
             </select>
@@ -940,12 +933,12 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
       )}
       {site.python && pyLines.length > 0 && (
         <div className="ui-narrow">
-          <Field label={"Python for " + site.name} hint="The old Python version is not known. Hostashi makes the environment ~/.venv; install the packages into it after the copy. The app stays stopped until you set its start command.">
+          <Field label={t("migrate.create.python", { name: site.name })} hint={t("migrate.create.pythonHint")}>
             <select className="ui-select" value={pyLine} onChange={(e) => setPyLine(e.target.value)}>
               {pyLines.map((v) => (
                 <option key={v} value={v}>
-                  Python {v}
-                  {python && !installedPy.includes(v) ? " (not installed)" : ""}
+                  {t("migrate.create.pythonLine", { line: v })}
+                  {python && !installedPy.includes(v) ? t("migrate.notInstalled") : ""}
                 </option>
               ))}
             </select>
@@ -954,14 +947,14 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
       )}
       {site.proxy && (
         <p className="ui-flush">
-          It passes every request on to <code>{site.proxy}</code>, without a Linux account, files or cron jobs.
+          <Trans i18nKey="migrate.create.proxy" values={{ target: site.proxy }} components={{ code: <code /> }} />
         </p>
       )}
       {choosePool && (
         <div className="ui-narrow">
           <Field
-            label={"Storage pool for " + site.name}
-            hint={site.homeBytes ? `The old home uses ${formatBytes(site.homeBytes)}.` : "Where the site's home lives. A site stays on its pool."}
+            label={t("migrate.create.pool", { name: site.name })}
+            hint={site.homeBytes ? t("migrate.create.poolHomeUses", { size: formatBytes(site.homeBytes) }) : t("migrate.create.poolHint")}
           >
             <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
               {pools.map((p) => (
@@ -973,29 +966,29 @@ function CreateForm({ report, site, php, onChange }: { report: string; site: Pla
           </Field>
         </div>
       )}
-      {choosePool && tooSmall && <Notice tone="err" title={`Pool ${pool} has less free space than the old home uses. Choose another pool.`} />}
+      {choosePool && tooSmall && <Notice tone="err" title={t("migrate.create.poolTooSmall", { pool })} />}
       {choosePool && !tooSmall && poolNote(chosen) && <Notice tone="warn" title={poolNote(chosen)} />}
       {site.pageCache && (
         <label className="ui-check">
           <input type="checkbox" checked={cache} onChange={(e) => setCache(e.target.checked)} />
-          Switch on the page cache ({presetLabel[site.pageCache as Preset] ?? site.pageCache} preset)
+          {t("migrate.create.pageCache", { preset: presetLabel[site.pageCache as Preset] ?? site.pageCache })}
         </label>
       )}
       {site.profile === "wordpress" && (
         <p className="ui-hint">
-          The site gets the WordPress profile: <code>xmlrpc.php</code> is blocked, PHP never runs in <code>wp-content/uploads</code>, and{" "}
-          <code>wp-login.php</code> is rate limited. Change the rules on the site's Hardening tab after the import.
+          <Trans i18nKey="migrate.create.wordpress" components={{ code1: <code />, code2: <code />, code3: <code /> }} />
         </p>
       )}
       {review && (
         <label className="ui-check">
-          <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />I checked the points above for {site.name}
+          <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />
+          {t("migrate.create.reviewed", { name: site.name })}
         </label>
       )}
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy || (choosePool && tooSmall)}>
-          {busy ? "Creating…" : "Create " + site.name}
+          {busy ? t("migrate.create.creating") : t("migrate.create.submit", { name: site.name })}
         </Button>
       </div>
     </form>
@@ -1008,6 +1001,7 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
   const [job, setJob] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   useEffect(() => {
     listImports(site.name)
@@ -1043,15 +1037,15 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
   return (
     <div className="ui-stack">
       <p className="ui-flush">
-        The site exists here. The import copies the old files to <code>cloudpanel-import</code> in its home and leaves the web root as it is.
-        Run it again shortly before the DNS switch for the final sync.
+        <Trans i18nKey="migrate.import.intro" components={{ code: <code /> }} />
       </p>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
         <Field
-          label={"Databases to copy for " + site.name}
+          label={t("migrate.import.databases", { name: site.name })}
           hint={
-            "One per line: the database on the old server, a space, the database of this site here. " +
-            (here.length ? "This site has: " + here.join(", ") + "." : "Create the databases on the Databases page first.")
+            t("migrate.import.databasesHint") +
+            " " +
+            (here.length ? t("migrate.import.siteHas", { list: here.join(", ") }) : t("migrate.import.createFirst"))
           }
         >
           <textarea className="ui-input ui-textarea ui-mono" value={dbs} onChange={(e) => setDbs(e.target.value)} rows={2} spellCheck={false} />
@@ -1059,7 +1053,7 @@ function ImportForm({ report, site, ready }: { report: string; site: PlanSite; r
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !ready}>
-            {busy ? "Starting…" : job ? "Import " + site.name + " again" : "Import " + site.name}
+            {busy ? t("migrate.import.starting") : job ? t("migrate.import.again", { name: site.name }) : t("migrate.import.submit", { name: site.name })}
           </Button>
         </div>
       </form>
@@ -1073,6 +1067,7 @@ const jobTone: Record<ImportJob["state"], Tone> = { queued: "off", running: "war
 function ImportStatus({ id }: { id: string }) {
   const [job, setJob] = useState<ImportJob | null>(null);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
@@ -1095,37 +1090,37 @@ function ImportStatus({ id }: { id: string }) {
     return () => clearInterval(t);
   }, [active, load]);
 
-  if (!job) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading the import…</p>;
+  if (!job) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("migrate.import.loading")}</p>;
 
-  const state = { queued: "Waiting to start", running: "Copying…", done: "Done", failed: "Failed" }[job.state] ?? job.state;
+  const state =
+    { queued: t("migrate.import.queued"), running: t("migrate.import.running"), done: t("migrate.import.done"), failed: t("migrate.import.failed") }[job.state] ??
+    job.state;
   return (
-    <section className="ui-stack ui-subsection" aria-label={"Import of " + job.site}>
+    <section className="ui-stack ui-subsection" aria-label={t("migrate.import.label", { name: job.site })}>
       <dl className="ui-facts">
-        <dt>Import</dt>
+        <dt>{t("migrate.import.import")}</dt>
         <dd>
           <span className="ui-row">
             <Badge tone={jobTone[job.state] ?? "off"}>{state}</Badge>
             {job.finished && <RelTime iso={job.finished} />}
           </span>
         </dd>
-        <dt>Copied</dt>
-        <dd>
-          {job.files} files, {formatBytes(job.bytes)}
-        </dd>
-        <dt>Unchanged</dt>
-        <dd>{job.unchanged}</dd>
-        <dt>Deleted</dt>
-        <dd>{job.deleted}</dd>
-        <dt>Skipped</dt>
-        <dd>{job.skipped}</dd>
+        <dt>{t("migrate.import.copied")}</dt>
+        <dd>{t("migrate.import.copiedValue", { count: job.files, size: formatBytes(job.bytes) })}</dd>
+        <dt>{t("migrate.import.unchanged")}</dt>
+        <dd>{formatCount(job.unchanged)}</dd>
+        <dt>{t("migrate.import.deleted")}</dt>
+        <dd>{formatCount(job.deleted)}</dd>
+        <dt>{t("migrate.import.skipped")}</dt>
+        <dd>{formatCount(job.skipped)}</dd>
         {job.dumps && job.dumps.length > 0 && (
           <>
-            <dt>Database dumps</dt>
+            <dt>{t("migrate.import.dumps")}</dt>
             <dd>
               {job.dumps.map((d, i) => (
                 <div key={d}>
                   <span className="ui-mono ui-break">{d}</span>
-                  {job.databases?.[i] && " for " + job.databases[i].to}
+                  {job.databases?.[i] && t("migrate.import.dumpFor", { database: job.databases[i].to })}
                 </div>
               ))}
             </dd>
@@ -1136,7 +1131,7 @@ function ImportStatus({ id }: { id: string }) {
       {job.error && <Notice tone="err" title={job.error} />}
       {job.skippedPaths && job.skippedPaths.length > 0 && (
         <details>
-          <summary>Skipped entries</summary>
+          <summary>{t("migrate.import.skippedEntries")}</summary>
           <ul>
             {job.skippedPaths.map((p) => (
               <li key={p}>
@@ -1153,10 +1148,10 @@ function ImportStatus({ id }: { id: string }) {
 }
 
 function loadLabel(l: DumpLoad): { word: string; tone: Tone } {
-  if (!l.job) return { word: "Not started", tone: "off" };
-  if (l.job.state === "running") return { word: "Loading…", tone: "warn" };
-  if (l.job.state === "done") return { word: "Loaded", tone: "ok" };
-  return { word: "Failed", tone: "err" };
+  if (!l.job) return { word: i18n.t("migrate.loads.notStarted"), tone: "off" };
+  if (l.job.state === "running") return { word: i18n.t("migrate.loads.loading"), tone: "warn" };
+  if (l.job.state === "done") return { word: i18n.t("migrate.loads.loaded"), tone: "ok" };
+  return { word: i18n.t("migrate.loads.failed"), tone: "err" };
 }
 
 // DumpLoads shows how the copied dumps are loaded into the site's
@@ -1166,6 +1161,7 @@ function DumpLoads({ id }: { id: string }) {
   const [loads, setLoads] = useState<DumpLoad[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
@@ -1202,12 +1198,12 @@ function DumpLoads({ id }: { id: string }) {
   const unfinished = loads?.some((l) => !l.job || l.job.state === "failed") ?? false;
 
   return (
-    <div className="ui-stack-tight" aria-label="Database loads" role="group">
-      <strong>Database loads</strong>
+    <div className="ui-stack-tight" aria-label={t("migrate.loads.title")} role="group">
+      <strong>{t("migrate.loads.title")}</strong>
       {loads === null ? (
-        !error && <p aria-busy="true">Loading the database loads…</p>
+        !error && <p aria-busy="true">{t("migrate.loads.loadingList")}</p>
       ) : loads.length === 0 ? (
-        <p className="ui-hint ui-flush">The dumps are loaded into the databases shortly.</p>
+        <p className="ui-hint ui-flush">{t("migrate.loads.soon")}</p>
       ) : (
         <dl className="ui-facts">
           {loads.map((l) => {
@@ -1232,7 +1228,7 @@ function DumpLoads({ id }: { id: string }) {
       {(unfinished || loads?.length === 0) && (
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void retry()}>
-            {busy ? "Starting…" : "Load the dumps again"}
+            {busy ? t("migrate.import.starting") : t("migrate.loads.again")}
           </Button>
         </div>
       )}
@@ -1247,13 +1243,14 @@ function Activate({ site }: { site: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const { t } = useTranslation();
 
   async function activate() {
     setBusy(true);
     setError("");
     try {
       const r = await activateImport(site);
-      setDone(`The imported files are the web root of ${r.site} now. The old web root is kept as ${r.previous} in its home.`);
+      setDone(t("migrate.activate.done", { site: r.site, previous: r.previous }));
       setConfirm(false);
     } catch (err) {
       setError(migrationMessage(err));
@@ -1267,23 +1264,20 @@ function Activate({ site }: { site: string }) {
   return (
     <div className="ui-stack-tight">
       {confirm ? (
-        <div className="ui-stack-tight" role="alertdialog" aria-label={"Use imported files for " + site}>
-          <p className="ui-flush">
-            Make the imported files the web root of {site}? Do this after the final sync, before the DNS switch. The current web root is kept and
-            nothing is deleted.
-          </p>
+        <div className="ui-stack-tight" role="alertdialog" aria-label={t("migrate.activate.label", { site })}>
+          <p className="ui-flush">{t("migrate.activate.text", { site })}</p>
           <div className="ui-row">
             <Button variant="primary" disabled={busy} onClick={() => void activate()}>
-              Use imported files for {site}
+              {t("migrate.activate.confirm", { site })}
             </Button>
             <Button disabled={busy} onClick={() => setConfirm(false)}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
           </div>
         </div>
       ) : (
         <div className="ui-row">
-          <Button onClick={() => setConfirm(true)}>Use imported files as web root</Button>
+          <Button onClick={() => setConfirm(true)}>{t("migrate.activate.button")}</Button>
         </div>
       )}
       {error && <Notice tone="err" title={error} />}
@@ -1291,7 +1285,7 @@ function Activate({ site }: { site: string }) {
   );
 }
 
-const draftActionLabel: Record<DraftItem["action"], string> = { kept: "Kept", rewritten: "Kept, paths changed", dropped: "Left out" };
+const draftActionLabel = (a: DraftItem["action"]): string => (["kept", "rewritten", "dropped"].includes(a) ? i18n.t(`migrate.snippets.${a}`) : a);
 
 // SnippetDraftForm reviews the custom nginx directives of an imported site
 // once (ADR-0017): the draft drops what Hostashi does itself, points paths
@@ -1304,6 +1298,7 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
   const [problems, setProblems] = useState<SnippetProblems | null>(null);
+  const { t } = useTranslation();
 
   async function load() {
     setBusy(true);
@@ -1333,7 +1328,7 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
     setProblems(null);
     try {
       await setSnippets(site.name, { server, root });
-      setDone("Snippets saved and active on " + site.name + ".");
+      setDone(t("migrate.snippets.saved", { site: site.name }));
     } catch (err) {
       setProblems(snippetProblems(err));
       setError(snippetMessage(err));
@@ -1345,13 +1340,10 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
   if (!draft) {
     return (
       <div className="ui-stack">
-        <p className="ui-flush">
-          The old site has {site.customSnippets} custom nginx directives. Review them once: the draft leaves out what Hostashi does itself and
-          points paths at this server.
-        </p>
+        <p className="ui-flush">{t("migrate.snippets.intro", { count: site.customSnippets })}</p>
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void load()}>
-            Review custom nginx
+            {t("migrate.snippets.review")}
           </Button>
         </div>
         {error && <Notice tone="err" title={error} />}
@@ -1360,22 +1352,26 @@ function SnippetDraftForm({ report, site }: { report: string; site: PlanSite }) 
   }
 
   return (
-    <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate aria-label={"Custom nginx of " + site.name}>
-      <ul className="ui-plain-list ui-stack-tight" aria-label={"Directives of " + site.name}>
+    <form className="ui-stack" onSubmit={(e) => void save(e)} noValidate aria-label={t("migrate.snippets.formLabel", { site: site.name })}>
+      <ul className="ui-plain-list ui-stack-tight" aria-label={t("migrate.snippets.listLabel", { site: site.name })}>
         {draft.items.map((it, i) => (
           <li key={String(i)}>
-            <code>{it.context}</code> (line {it.line}): {draftActionLabel[it.action]}
+            <Trans
+              i18nKey="migrate.snippets.item"
+              values={{ context: it.context, line: it.line, action: draftActionLabel(it.action) }}
+              components={{ code: <code /> }}
+            />
             {it.reason ? ". " + it.reason.charAt(0).toUpperCase() + it.reason.slice(1) + "." : ""}
           </li>
         ))}
       </ul>
-      <SnippetField label="Inside the server block" hint="Check every line once before you save." value={server} onChange={setServer} problems={problems?.server} />
-      <SnippetField label="Inside location /" hint="From the old site's location /, without its try_files." value={root} onChange={setRoot} problems={problems?.root} />
+      <SnippetField label={t("migrate.snippets.server")} hint={t("migrate.snippets.serverHint")} value={server} onChange={setServer} problems={problems?.server} />
+      <SnippetField label={t("migrate.snippets.root")} hint={t("migrate.snippets.rootHint")} value={root} onChange={setRoot} problems={problems?.root} />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy}>
-          Save as snippets of {site.name}
+          {t("migrate.snippets.save", { site: site.name })}
         </Button>
       </div>
     </form>

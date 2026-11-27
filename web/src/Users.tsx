@@ -2,6 +2,7 @@
 
 import { ArrowLeft, GearSix, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { formatHash } from "./routes";
 import { listSites } from "./sites";
 import { Badge, Button, Card, Field, IconLink, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort } from "./ui";
@@ -14,6 +15,8 @@ import {
   inviteLink,
   listUsers,
   resetUser,
+  roleHint,
+  roleName,
   roles,
   setGrants,
   setUserPolicy,
@@ -24,8 +27,6 @@ import {
   type Role,
   type UserPolicy,
 } from "./users";
-
-const roleLabel = (r: Role) => roles.find((x) => x.value === r)?.label ?? r;
 
 type QueryProps = {
   /** The address query: q, role, sort, dir; new=1 or user=<name> for one view. */
@@ -39,19 +40,20 @@ const usersHash = (q?: Record<string, string>) => formatHash({ page: "users", ..
 // StatusBadges says in a few words whether an account can log in and how
 // well it is protected.
 function StatusBadges({ a }: { a: Account }) {
+  const { t } = useTranslation();
   return (
     <span className="ui-row">
-      {a.disabled && <Badge tone="err">Disabled</Badge>}
+      {a.disabled && <Badge tone="err">{t("users.status.disabled")}</Badge>}
       {a.invited ? (
         a.invitationExpiresAt ? (
-          <Badge tone="off">Invited</Badge>
+          <Badge tone="off">{t("users.status.invited")}</Badge>
         ) : (
-          <Badge tone="warn">Invitation expired</Badge>
+          <Badge tone="warn">{t("users.status.invitationExpired")}</Badge>
         )
       ) : hasSecondFactor(a) ? (
-        <Badge tone="ok">Second factor on</Badge>
+        <Badge tone="ok">{t("users.status.secondFactorOn")}</Badge>
       ) : (
-        <Badge tone="warn">No second factor</Badge>
+        <Badge tone="warn">{t("users.status.noSecondFactor")}</Badge>
       )}
     </span>
   );
@@ -60,6 +62,7 @@ function StatusBadges({ a }: { a: Account }) {
 // Users lists the panel accounts for admins (ADR-0035): new accounts get a
 // one-time invitation link, users get the sites they may work on.
 export function Users({ me, query = new URLSearchParams(), onQuery = () => undefined }: { me: string } & QueryProps) {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<Account[] | null>(null);
   const [policy, setPolicy] = useState<UserPolicy>({ requireSecondFactor: false });
   const [sites, setSites] = useState<string[]>([]);
@@ -95,20 +98,20 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
   const listLink = (
     <a className="ui-btn" href={usersHash()}>
       <ArrowLeft size={16} aria-hidden="true" />
-      All users
+      {t("users.allUsers")}
     </a>
   );
 
   if (!users) {
     return (
       <>
-        <PageHead title="Users" />
+        <PageHead title={t("users.title")} />
         {error ? (
           <Notice tone="err" title={error}>
-            <Button onClick={() => void load()}>Try again</Button>
+            <Button onClick={() => void load()}>{t("common.actions.tryAgain")}</Button>
           </Notice>
         ) : (
-          <p aria-busy="true">Loading users…</p>
+          <p aria-busy="true">{t("users.loading")}</p>
         )}
       </>
     );
@@ -124,7 +127,7 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
   if (query.get("new") === "1") {
     return (
       <>
-        <PageHead title="Invite someone" description="The new account gets a one-time link to set its password." actions={listLink} />
+        <PageHead title={t("users.invite.title")} description={t("users.invite.description")} actions={listLink} />
         <Card>
           <CreateForm
             onCancel={() => set({ new: "" })}
@@ -144,8 +147,8 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
     if (!account) {
       return (
         <>
-          <PageHead title="Users" actions={listLink} />
-          <Notice tone="warn" title={`There is no account named ${name}.`} />
+          <PageHead title={t("users.title")} actions={listLink} />
+          <Notice tone="warn" title={t("users.noSuchAccount", { name })} />
         </>
       );
     }
@@ -172,31 +175,31 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
   const columns: Column<Account>[] = [
     {
       key: "username",
-      header: "User",
+      header: t("users.list.user"),
       sortValue: (a) => a.username,
       cell: (a) => (
         <span className="ui-row ui-nowrap">
           {a.username === me ? <strong>{a.username}</strong> : <a href={usersHash({ user: a.username })}>{a.username}</a>}
-          {a.username === me && <Badge tone="off">You</Badge>}
+          {a.username === me && <Badge tone="off">{t("users.list.you")}</Badge>}
         </span>
       ),
     },
     {
       key: "role",
-      header: "Role",
-      sortValue: (a) => roles.findIndex((r) => r.value === a.role),
-      cell: (a) => roleLabel(a.role),
+      header: t("users.list.role"),
+      sortValue: (a) => roles.indexOf(a.role),
+      cell: (a) => roleName(a.role),
     },
     {
       key: "status",
-      header: "Status",
+      header: t("users.list.status"),
       sortValue: (a) => (a.disabled ? 0 : a.invited ? 1 : a.totpEnabled || a.passkeys > 0 ? 3 : 2),
       cell: (a) => (
         <div className="ui-cell-main">
           <StatusBadges a={a} />
           {a.invited && a.invitationExpiresAt && (
             <p className="ui-hint ui-flush">
-              Link expires <RelTime iso={a.invitationExpiresAt} />
+              <Trans i18nKey="users.status.linkExpires" components={{ time: <RelTime iso={a.invitationExpiresAt} /> }} />
             </p>
           )}
         </div>
@@ -204,12 +207,12 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("users.list.actions"),
       srHeader: true,
       cell: (a) =>
         a.username === me ? null : (
           <RowActions>
-            <IconLink label={`Manage ${a.username}`} text="Manage" icon={<GearSix size={16} />} href={usersHash({ user: a.username })} />
+            <IconLink label={t("users.list.manageUser", { name: a.username })} text={t("users.list.manage")} icon={<GearSix size={16} />} href={usersHash({ user: a.username })} />
           </RowActions>
         ),
     },
@@ -224,12 +227,12 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
   return (
     <>
       <PageHead
-        title="Users"
-        description="The accounts of this panel. Admins manage everything, managers every site, users only the sites you grant."
+        title={t("users.title")}
+        description={t("users.description")}
         actions={
           <a className="ui-btn ui-btn-primary" href={usersHash({ new: "1" })}>
             <Plus size={16} aria-hidden="true" />
-            Invite someone
+            {t("users.invite.button")}
           </a>
         }
       />
@@ -241,28 +244,28 @@ export function Users({ me, query = new URLSearchParams(), onQuery = () => undef
           <input
             className="ui-input"
             type="search"
-            aria-label="Filter users"
-            placeholder="Filter by name"
+            aria-label={t("users.list.filter")}
+            placeholder={t("users.list.filterPlaceholder")}
             value={query.get("q") ?? ""}
             onChange={(e) => set({ q: e.target.value })}
           />
-          <select className="ui-select" aria-label="Role" value={role} onChange={(e) => set({ role: e.target.value })}>
-            <option value="">All roles</option>
+          <select className="ui-select" aria-label={t("users.list.role")} value={role} onChange={(e) => set({ role: e.target.value })}>
+            <option value="">{t("users.list.allRoles")}</option>
             {roles.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
+              <option key={r} value={r}>
+                {roleName(r)}
               </option>
             ))}
           </select>
         </div>
         <Table
-          label="Users"
+          label={t("users.title")}
           columns={columns}
           rows={shown}
           rowKey={(a) => String(a.id)}
           {...(sort ? { sort } : {})}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
-          empty="No account matches the filter."
+          empty={t("users.list.empty")}
         />
       </Card>
       <PolicyCard users={users} policy={policy} onChange={setPolicy} />
@@ -279,6 +282,7 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const { t } = useTranslation();
 
   const without = users.filter((u) => !u.disabled && !u.invited && !hasSecondFactor(u)).map((u) => u.username);
 
@@ -289,7 +293,7 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
     try {
       onChange(await setUserPolicy(on));
       setConfirm(false);
-      setDone(on ? "Every account now needs a second factor." : "A second factor is optional again for users.");
+      setDone(on ? t("users.policy.on") : t("users.policy.off"));
     } catch (err) {
       setError(usersMessage(err));
     } finally {
@@ -298,7 +302,7 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
   }
 
   return (
-    <Card title="Second factor">
+    <Card title={t("users.policy.title")}>
       <div className="ui-stack">
         <label className="ui-check">
           <input
@@ -311,16 +315,13 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
               else void save(true);
             }}
           />
-          Require a second factor for every account
+          {t("users.policy.require")}
         </label>
-        <p className="ui-hint ui-flush">
-          Admins and managers always need TOTP or a passkey. With this on, users need one too, whatever is set for the single account. Without
-          one, an account is led to set it up right after logging in and can do nothing else until then; its API tokens stop working.
-        </p>
+        <p className="ui-hint ui-flush">{t("users.policy.hint")}</p>
         {confirm && (
           <div className="ui-stack" role="alertdialog" aria-labelledby="policy-confirm-title">
             <h3 id="policy-confirm-title" className="ui-flush">
-              {without.length === 1 ? "1 account has no second factor yet" : `${String(without.length)} accounts have no second factor yet`}
+              {t("users.policy.without", { count: without.length })}
             </h3>
             <p className="ui-flush">
               {without.map((n, i) => (
@@ -329,14 +330,14 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
                   <strong>{n}</strong>
                 </span>
               ))}
-              . They can still log in, but only to set one up. Their API tokens answer “second factor required” until then.
+              . {t("users.policy.withoutText")}
             </p>
             <div className="ui-row">
               <Button variant="primary" disabled={busy} onClick={() => void save(true)}>
-                Require for every account
+                {t("users.policy.confirm")}
               </Button>
               <Button disabled={busy} onClick={() => setConfirm(false)}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </div>
@@ -349,13 +350,14 @@ function PolicyCard({ users, policy, onChange }: { users: Account[]; policy: Use
 }
 
 function RoleSelect({ value, onChange }: { value: Role; onChange: (r: Role) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="ui-narrow">
-      <Field label="Role" hint={roles.find((r) => r.value === value)?.hint ?? ""}>
+      <Field label={t("users.list.role")} hint={roleHint(value)}>
         <select className="ui-select" value={value} onChange={(e) => onChange(e.target.value as Role)}>
           {roles.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
+            <option key={r} value={r}>
+              {roleName(r)}
             </option>
           ))}
         </select>
@@ -370,6 +372,7 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -386,9 +389,9 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
   }
 
   return (
-    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label="Invite someone">
+    <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={t("users.invite.title")}>
       <div className="ui-narrow">
-        <Field label="Username" hint="3 to 32 characters: lowercase letters, digits, dot, dash and underscore.">
+        <Field label={t("users.invite.username")} hint={t("users.invite.usernameHint")}>
           <input
             className="ui-input"
             value={username}
@@ -401,7 +404,7 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
       </div>
       <RoleSelect value={role} onChange={setRole} />
       <div className="ui-narrow">
-        <Field label="Email (optional)" hint="The link is sent there, and the address becomes the account's once the link is used. Needs email set up.">
+        <Field label={t("users.invite.email")} hint={t("users.invite.emailHint")}>
           <input
             className="ui-input"
             type="email"
@@ -416,9 +419,9 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button type="submit" variant="primary" disabled={busy || username.trim() === ""}>
-          {busy ? "Creating…" : "Create invitation"}
+          {busy ? t("users.invite.creating") : t("users.invite.submit")}
         </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{t("common.actions.cancel")}</Button>
       </div>
     </form>
   );
@@ -426,36 +429,36 @@ function CreateForm({ onCreated, onCancel }: { onCreated: (username: string, inv
 
 function LinkCard({ username, invitation, onClose }: { username: string; invitation: Invitation; onClose: () => void }) {
   const [copied, setCopied] = useState("");
+  const { t } = useTranslation();
   const link = inviteLink(invitation.token);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
-      setCopied("Copied.");
+      setCopied(t("common.status.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the link and copy it by hand.");
+      setCopied(t("users.link.copyFailed"));
     }
   }
 
   return (
-    <Card title={"Invitation for " + username}>
+    <Card title={t("users.link.title", { name: username })}>
       <div className="ui-stack">
         {invitation.emailedTo && (
-          <Notice tone="ok" title={"The link was emailed to " + invitation.emailedTo + "."}>
-            If it does not arrive, send the link below yourself.
+          <Notice tone="ok" title={t("users.link.emailed", { email: invitation.emailedTo })}>
+            {t("users.link.emailedHint")}
           </Notice>
         )}
         <p className="ui-flush">
-          Send this link to {username} on a channel you trust. It works once, expires <RelTime iso={invitation.expiresAt} /> and is shown only
-          now.
+          <Trans i18nKey="users.link.text" values={{ name: username }} components={{ time: <RelTime iso={invitation.expiresAt} /> }} />
         </p>
-        <input className="ui-input ui-mono" aria-label="Invitation link" value={link} readOnly onFocus={(e) => e.target.select()} />
+        <input className="ui-input ui-mono" aria-label={t("users.link.label")} value={link} readOnly onFocus={(e) => e.target.select()} />
         {copied && <p role="status" className="ui-hint ui-flush">{copied}</p>}
         <div className="ui-row">
           <Button variant="primary" onClick={() => void copy()}>
-            Copy link
+            {t("users.link.copy")}
           </Button>
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{t("users.link.done")}</Button>
         </div>
       </div>
     </Card>
@@ -482,6 +485,7 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (self || a.role !== "user") return;
@@ -508,10 +512,10 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
 
   const head = (
     <PageHead
-      title={"User " + a.username}
+      title={t("users.account.title", { name: a.username })}
       description={
         <span className="ui-row">
-          {roleLabel(a.role)}
+          {roleName(a.role)}
           <StatusBadges a={a} />
         </span>
       }
@@ -523,8 +527,8 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
     return (
       <>
         {head}
-        <Notice tone="info" title="This is your own account.">
-          Change your password and second factor under Settings. Another admin changes your role.
+        <Notice tone="info" title={t("users.account.self")}>
+          {t("users.account.selfText")}
         </Notice>
       </>
     );
@@ -538,30 +542,30 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
 
-      <Card title="Role">
+      <Card title={t("users.account.role")}>
         <form
           className="ui-stack"
           onSubmit={(e) => {
             e.preventDefault();
             void act(async () => {
               await updateUser(a.id, { role });
-              return "Role changed. Its sessions ended.";
+              return t("users.account.roleChanged");
             });
           }}
         >
           <RoleSelect value={role} onChange={setRole} />
           <div className="ui-row">
             <Button type="submit" variant="primary" disabled={busy || role === a.role}>
-              Save role
+              {t("users.account.saveRole")}
             </Button>
           </div>
         </form>
       </Card>
 
       {a.role === "user" && (
-        <Card title="Sites">
+        <Card title={t("users.account.sites")}>
           {grants === null ? (
-            <p aria-busy="true">Loading sites…</p>
+            <p aria-busy="true">{t("users.account.loadingSites")}</p>
           ) : (
             <form
               className="ui-stack"
@@ -570,13 +574,13 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
                 void act(async () => {
                   const g = await setGrants(a.id, grants);
                   setGrantsState(g);
-                  return g.length === 0 ? "No site granted." : "Sites: " + g.join(", ") + ".";
+                  return g.length === 0 ? t("users.account.noneGranted") : t("users.account.granted", { sites: g.join(", ") });
                 });
               }}
             >
               <fieldset className="ui-fieldset ui-stack-tight">
-                <legend>Sites {a.username} may work on</legend>
-                {sites.length === 0 && <p className="ui-hint ui-flush">There are no sites yet.</p>}
+                <legend>{t("users.account.sitesLegend", { name: a.username })}</legend>
+                {sites.length === 0 && <p className="ui-hint ui-flush">{t("users.account.noSites")}</p>}
                 {sites.map((s) => (
                   <label key={s} className="ui-check">
                     <input type="checkbox" checked={grants.includes(s)} onChange={(e) => toggle(s, e.target.checked)} />
@@ -586,7 +590,7 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
               </fieldset>
               <div className="ui-row">
                 <Button type="submit" variant="primary" disabled={busy}>
-                  Save sites
+                  {t("users.account.saveSites")}
                 </Button>
               </div>
             </form>
@@ -594,16 +598,16 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
         </Card>
       )}
 
-      <Card title="Sign-in">
+      <Card title={t("users.account.signIn")}>
         <div className="ui-stack">
           {a.role === "user" && policy.requireSecondFactor && (
             <>
               <label className="ui-check">
                 <input type="checkbox" checked disabled />
-                Require a second factor
+                {t("users.account.requireSecondFactor")}
               </label>
               <p className="ui-hint ui-flush">
-                Required for every account. Turn it off under <a href={usersHash()}>Users</a>, Second factor.
+                <Trans i18nKey="users.account.requiredForAll" components={{ a: <a href={usersHash()} /> }} />
               </p>
             </>
           )}
@@ -617,19 +621,19 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
                   const on = e.target.checked;
                   void act(async () => {
                     await updateUser(a.id, { requireSecondFactor: on });
-                    return on ? "A second factor is now required." : "A second factor is now optional.";
+                    return on ? t("users.account.secondFactorRequired") : t("users.account.secondFactorOptional");
                   });
                 }}
               />
-              Require a second factor
+              {t("users.account.requireSecondFactor")}
             </label>
           )}
           {confirm === "reset" ? (
             <div className="ui-stack" role="alertdialog" aria-labelledby="user-reset-title">
               <h3 id="user-reset-title" className="ui-flush">
-                Reset {a.username}?
+                {t("users.account.resetTitle", { name: a.username })}
               </h3>
-              <p className="ui-flush">This removes the password and every second factor and makes a new invitation link. Its sessions end.</p>
+              <p className="ui-flush">{t("users.account.resetText")}</p>
               <div className="ui-row">
                 <Button
                   variant="danger"
@@ -641,34 +645,34 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
                     })
                   }
                 >
-                  Reset {a.username}
+                  {t("users.account.resetConfirm", { name: a.username })}
                 </Button>
                 <Button disabled={busy} onClick={() => setConfirm("")}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="ui-row">
-              <Button onClick={() => setConfirm("reset")}>Reset password and second factor</Button>
+              <Button onClick={() => setConfirm("reset")}>{t("users.account.reset")}</Button>
             </div>
           )}
         </div>
       </Card>
 
-      <Card title="Disable or delete">
+      <Card title={t("users.account.disableTitle")}>
         <div className="ui-stack">
           <p className="ui-flush">
             {a.disabled
-              ? "This account is disabled and cannot log in. Its API tokens do not work."
-              : "Disabling ends its sessions and stops its API tokens until you enable it again."}
+              ? t("users.account.disabledText")
+              : t("users.account.disableText")}
           </p>
           {confirm === "delete" ? (
             <div className="ui-stack" role="alertdialog" aria-labelledby="user-delete-title">
               <h3 id="user-delete-title" className="ui-flush">
-                Delete {a.username}?
+                {t("users.account.deleteTitle", { name: a.username })}
               </h3>
-              <p className="ui-flush">The account and its API tokens are gone for good.</p>
+              <p className="ui-flush">{t("users.account.deleteText")}</p>
               <div className="ui-row">
                 <Button
                   variant="danger"
@@ -677,17 +681,17 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
                     setBusy(true);
                     setError("");
                     deleteUser(a.id)
-                      .then(() => onDeleted(`Account ${a.username} deleted.`))
+                      .then(() => onDeleted(t("users.account.deleted", { name: a.username })))
                       .catch((err: unknown) => {
                         setError(usersMessage(err));
                         setBusy(false);
                       });
                   }}
                 >
-                  Delete {a.username}
+                  {t("users.account.deleteConfirm", { name: a.username })}
                 </Button>
                 <Button disabled={busy} onClick={() => setConfirm("")}>
-                  Cancel
+                  {t("common.actions.cancel")}
                 </Button>
               </div>
             </div>
@@ -698,14 +702,14 @@ function AccountView({ account: a, policy, self, sites, back, onChange, onLink, 
                 onClick={() =>
                   void act(async () => {
                     await updateUser(a.id, { disabled: !a.disabled });
-                    return a.disabled ? "Enabled." : "Disabled. Its sessions ended.";
+                    return a.disabled ? t("users.account.enabled") : t("users.account.disabled");
                   })
                 }
               >
-                {a.disabled ? "Enable" : "Disable"}
+                {a.disabled ? t("users.account.enable") : t("users.account.disable")}
               </Button>
               <Button variant="danger" onClick={() => setConfirm("delete")}>
-                Delete account
+                {t("users.account.delete")}
               </Button>
             </div>
           )}

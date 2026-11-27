@@ -1,0 +1,59 @@
+{
+  "title": "Security headers",
+  "intro": "Sent with every answer of the site, error pages included. A header switched on here replaces the same header from the application. Switched off, the application's own header passes through unchanged.",
+  "basic": "Basic",
+  "off": "Off",
+  "sniff": {
+    "label": "MIME type sniffing",
+    "hint": "Browsers trust the declared type of every file."
+  },
+  "frames": {
+    "label": "Show in frames",
+    "hint": "Protects against clickjacking.",
+    "sameOrigin": "SAMEORIGIN: only on this site",
+    "deny": "DENY: never"
+  },
+  "referrer": {
+    "label": "Referrer",
+    "hint": "What other sites learn about the page a visitor came from."
+  },
+  "permissions": {
+    "legend": "Permissions",
+    "label": "Browser features",
+    "hint": "Which features the site and embedded frames may use.",
+    "strict": "Strict: camera, microphone, location, payment and USB off",
+    "own": "Own policy",
+    "ownHint": "Comma-separated, for example camera=(), geolocation=(self \"https://maps.example.com\"). At most {{max}} bytes."
+  },
+  "csp": {
+    "legend": "Content Security Policy",
+    "mode": "Mode",
+    "modeHint": "Report only shows violations in the browser console without blocking anything.",
+    "report": "Report only (test first)",
+    "enforce": "Enforce",
+    "policy": "Policy",
+    "policyHint": "Directives separated by \";\", for example default-src 'self'; img-src 'self' data:. At most {{max}} bytes.",
+    "enforceWarning": "A policy that is too strict breaks the site at once: blocked scripts, styles or fonts. Test it with report only first."
+  },
+  "save": "Save security headers",
+  "saved": "Saved. nginx sends the new headers now.",
+  "recommended": "Use recommended",
+  "recommendedOn": "The recommended headers are on.",
+  "search": {
+    "title": "Search engines",
+    "label": "Ask search engines not to index the site",
+    "hint": "Every answer gets <mono>X-Robots-Tag: noindex, nofollow</mono>, so well-behaved crawlers keep the site out of their results. On for staging copies. It does not hide the site: use a password under Security, Access for that.",
+    "doneOn": "Search engines are asked not to index the site.",
+    "doneOff": "Search engines may index the site."
+  },
+  "problems": {
+    "permissions": "Enter a Permissions-Policy or switch it off.",
+    "csp": "Enter a Content-Security-Policy or switch it off."
+  },
+  "errors": {
+    "rejected": "A value was refused: {{reason}}.",
+    "conflict": "{{reason}}. Remove it from the snippet first.",
+    "siteGone": "The site does not exist anymore.",
+    "generic": "The security headers could not be loaded or saved. Try again."
+  }
+}

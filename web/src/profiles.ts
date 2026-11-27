@@ -4,6 +4,7 @@
 // types, API calls and the form model of the card in the Security tab.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type WebHardening = {
   configFiles?: boolean;
@@ -144,9 +145,9 @@ const nameRe = /^[a-z][a-z0-9-]*$/;
 /** profileNameProblem checks a new name; the names in taken exist. */
 export function profileNameProblem(name: string, taken: string[]): string {
   if (name.length > maxNameLength || !nameRe.test(name)) {
-    return `Use up to ${String(maxNameLength)} lower-case letters, digits and dashes for the name, starting with a letter.`;
+    return i18n.t("profiles.problems.name", { max: maxNameLength });
   }
-  if (taken.includes(name)) return `A profile named ${name} exists already.`;
+  if (taken.includes(name)) return i18n.t("profiles.problems.nameTaken", { name });
   return "";
 }
 
@@ -202,7 +203,7 @@ export function parseCron(text: string, before: CronJob[] = []): CronJob[] | str
   for (const line of lines(text)) {
     const words = line.split(/\s+/);
     const n = words[0]?.startsWith("@") ? 1 : 5;
-    if (words.length <= n) return `The cron job "${line}" needs a schedule and a command.`;
+    if (words.length <= n) return i18n.t("profiles.problems.cron", { line });
     const job: CronJob = { schedule: words.slice(0, n).join(" "), command: words.slice(n).join(" ") };
     const note = before.find((c) => c.schedule === job.schedule && c.command === job.command)?.note;
     out.push(note ? { ...job, note } : job);
@@ -213,9 +214,9 @@ export function parseCron(text: string, before: CronJob[] = []): CronJob[] | str
 /** fromProfileForm turns the form into the request, or a problem to show. */
 export function fromProfileForm(f: ProfileForm, before?: CronJob[]): ProfileInput | string {
   const php = f.type === "php";
-  if (f.title.trim() === "") return "Give the profile a title.";
+  if (f.title.trim() === "") return i18n.t("profiles.problems.title");
   const minPhp = f.minPhp.trim();
-  if (php && minPhp !== "" && !/^\d{1,2}\.\d{1,2}$/.test(minPhp)) return "Write the lowest PHP version like 8.2, or leave it empty.";
+  if (php && minPhp !== "" && !/^\d{1,2}\.\d{1,2}$/.test(minPhp)) return i18n.t("profiles.problems.minPhp");
   const cron = parseCron(f.cron, before);
   if (typeof cron === "string") return cron;
   const p: ProfileInput = { name: f.name.trim(), title: f.title.trim(), type: f.type, hardening: fromHardeningForm(f, php) };
@@ -235,19 +236,17 @@ export function ownProfileMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
       case "not_found":
-        return "The profile does not exist anymore.";
       case "profile_exists":
-        return "A profile with this name exists already.";
       case "profile_builtin":
-        return "Built-in profiles cannot be changed or deleted. Copy one instead.";
-      case "profile_in_use":
-        return sentence(err.message) + " Give those sites another profile first.";
       case "forbidden":
-        return "Only administrators can manage profiles.";
+        return i18n.t(`profiles.errors.${err.code}`);
+      case "profile_in_use":
+        // The server names the sites, in English (ADR-0071: the API stays English).
+        return i18n.t("profiles.errors.profile_in_use", { message: sentence(err.message) });
       case "invalid_argument":
         return sentence(err.message.replace(/^hosting: invalid input: (hardening: )?/, ""));
     }
     return err.message;
   }
-  return "The profile could not be saved. Try again.";
+  return i18n.t("profiles.errors.failed");
 }

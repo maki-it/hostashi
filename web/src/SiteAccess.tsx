@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   accessMessage,
   addAccessUser,
@@ -20,9 +22,14 @@ import { formatHash } from "./routes";
 import { Key, Trash } from "@phosphor-icons/react";
 import { Button, Card, Field, IconButton, Notice, RelTime, RowActions, Table, UnsavedNote, type Column } from "./ui";
 
+// Examples in the fields, the same in every language.
+const ipExample = "203.0.113.7\n2001:db8::/48";
+const pathExample = "/wp-admin\n/wp-login.php";
+
 // SiteAccess is the "Access" tab of a site (ADR-0066): an IP rule and
 // password protection for the whole site or some paths, with its users.
 export function SiteAccess({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const name = site.name;
   const [view, setView] = useState<AccessView | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -42,7 +49,7 @@ export function SiteAccess({ site }: { site: Site }) {
   }, [load]);
 
   if (loadError) return <Notice tone="err" title={loadError} />;
-  if (!view) return <p aria-busy="true">Loading…</p>;
+  if (!view) return <p aria-busy="true">{t("common.status.loading")}</p>;
 
   return (
     <>
@@ -54,6 +61,7 @@ export function SiteAccess({ site }: { site: Site }) {
 }
 
 function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView; onSaved: (v: AccessView) => void }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<AccessForm>(() => toAccessForm(view));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -86,80 +94,77 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
   const dirty = JSON.stringify(form) !== JSON.stringify(toAccessForm(view));
 
   return (
-    <Card title="Access protection">
+    <Card title={t("siteAccess.settings.title")}>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
         <p className="ui-hint">
-          nginx checks these rules before the site sees a request, for every file and page. Let's Encrypt still reaches the site, so certificates keep
-          renewing. Behind a CDN such as Cloudflare, switch on the{" "}
-          <a href={formatHash({ page: "sites", site: { name: site, tab: "realip" } })}>real visitor address</a> under Operations first, or the
-          rules see the CDN instead of the visitor.
+          <Trans i18nKey="siteAccess.settings.intro" components={{ a: <a href={formatHash({ page: "sites", site: { name: site, tab: "realip" } })} /> }} />
         </p>
         <fieldset className="ui-fieldset ui-stack" disabled={busy}>
-          <legend>IP rule</legend>
+          <legend>{t("siteAccess.settings.ipRule")}</legend>
           <label className="ui-check">
             <input type="radio" name={site + "-ipmode"} checked={form.ipMode === ""} onChange={() => set({ ipMode: "" })} />
-            Everybody may visit
+            {t("siteAccess.settings.everybody")}
           </label>
           <label className="ui-check">
             <input type="radio" name={site + "-ipmode"} checked={form.ipMode === "allow"} onChange={() => set({ ipMode: "allow" })} />
-            Only these addresses may visit
+            {t("siteAccess.settings.allow")}
           </label>
           <label className="ui-check">
             <input type="radio" name={site + "-ipmode"} checked={form.ipMode === "deny"} onChange={() => set({ ipMode: "deny" })} />
-            Block these addresses
+            {t("siteAccess.settings.deny")}
           </label>
           {form.ipMode !== "" && (
-            <Field label="Addresses" hint={`Addresses or ranges such as 203.0.113.0/24, one per line, at most ${view.limits.ips}. Others get 403 Forbidden.`}>
+            <Field label={t("siteAccess.settings.addresses")} hint={t("siteAccess.settings.addressesHint", { max: view.limits.ips })}>
               <textarea
                 className="ui-input ui-textarea ui-mono"
                 rows={4}
                 value={form.ips}
                 spellCheck={false}
-                placeholder={"203.0.113.7\n2001:db8::/48"}
+                placeholder={ipExample}
                 onChange={(e) => set({ ips: e.target.value })}
               />
             </Field>
           )}
           {form.ipMode !== "" && view.clientAddress && (
             <p className="ui-hint">
-              Your address as the panel sees it: <code>{view.clientAddress}</code>
+              <Trans i18nKey="siteAccess.settings.yourAddress" values={{ address: view.clientAddress }} components={{ code: <code /> }} />
             </p>
           )}
-          {locked && <Notice tone="warn" title="Your own address is not on the list. You will not be able to open the site from here after saving." />}
+          {locked && <Notice tone="warn" title={t("siteAccess.settings.lockout")} />}
         </fieldset>
         <fieldset className="ui-fieldset ui-stack" disabled={busy}>
-          <legend>Password</legend>
+          <legend>{t("siteAccess.settings.password")}</legend>
           <label className="ui-check">
             <input type="checkbox" checked={form.password} onChange={(e) => set({ password: e.target.checked })} />
-            Ask for a user name and password
+            {t("siteAccess.settings.askPassword")}
           </label>
-          {form.password && view.users.length === 0 && <Notice tone="warn" title="Add a user below first." />}
+          {form.password && view.users.length === 0 && <Notice tone="warn" title={t("siteAccess.settings.addUserFirst")} />}
           {form.password && (
             <>
               <label className="ui-check">
                 <input type="radio" name={site + "-scope"} checked={form.scope === "site"} onChange={() => set({ scope: "site" })} />
-                For the whole site
+                {t("siteAccess.settings.wholeSite")}
               </label>
               <label className="ui-check">
                 <input type="radio" name={site + "-scope"} checked={form.scope === "paths"} onChange={() => set({ scope: "paths" })} />
-                Only for these paths
+                {t("siteAccess.settings.onlyPaths")}
               </label>
               {form.scope === "paths" && (
                 <Field
-                  label="Paths"
-                  hint={`One per line, at most ${view.limits.paths}. A path covers everything below it, in any upper or lower case: /wp-admin covers /wp-admin/ and /WP-Admin/users.php, not /wp-administrator.`}
+                  label={t("siteAccess.settings.paths")}
+                  hint={t("siteAccess.settings.pathsHint", { max: view.limits.paths })}
                 >
                   <textarea
                     className="ui-input ui-textarea ui-mono"
                     rows={3}
                     value={form.paths}
                     spellCheck={false}
-                    placeholder={"/wp-admin\n/wp-login.php"}
+                    placeholder={pathExample}
                     onChange={(e) => set({ paths: e.target.value })}
                   />
                 </Field>
               )}
-              <Field label="No password from these addresses" hint={`Optional, for example your office or an uptime monitor, one per line, at most ${view.limits.bypass}.`}>
+              <Field label={t("siteAccess.settings.bypass")} hint={t("siteAccess.settings.bypassHint", { max: view.limits.bypass })}>
                 <textarea
                   className="ui-input ui-textarea ui-mono"
                   rows={2}
@@ -169,10 +174,7 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
                   onChange={(e) => set({ bypass: e.target.value })}
                 />
               </Field>
-              <p className="ui-hint">
-                The site's application no longer gets the browser's Authorization header on protected paths. Each protected request costs nginx a few
-                milliseconds; on a busy site, protect only the admin paths. After 10 wrong passwords in 10 minutes, fail2ban blocks the address for an hour.
-              </p>
+              <p className="ui-hint">{t("siteAccess.settings.passwordNote")}</p>
             </>
           )}
         </fieldset>
@@ -180,7 +182,7 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy || !dirty}>
-            Save
+            {t("common.actions.save")}
           </Button>
           <UnsavedNote dirty={dirty} />
         </div>
@@ -191,11 +193,11 @@ function SettingsCard({ site, view, onSaved }: { site: string; view: AccessView;
 
 function summary(v: AccessView): string {
   const parts: string[] = [];
-  if (v.ipMode === "allow") parts.push(`only ${v.ips.length === 1 ? "1 address" : `${v.ips.length} addresses`} may visit`);
-  if (v.ipMode === "deny") parts.push(`${v.ips.length === 1 ? "1 address is" : `${v.ips.length} addresses are`} blocked`);
-  if (v.password) parts.push(v.paths.length > 0 ? `a password is asked on ${v.paths.length === 1 ? "1 path" : `${v.paths.length} paths`}` : "a password is asked for the whole site");
-  if (parts.length === 0) return "Saved. Everybody may visit without a password.";
-  return "Saved: " + parts.join(", ") + ".";
+  if (v.ipMode === "allow") parts.push(i18n.t("siteAccess.summary.allow", { count: v.ips.length }));
+  if (v.ipMode === "deny") parts.push(i18n.t("siteAccess.summary.deny", { count: v.ips.length }));
+  if (v.password) parts.push(v.paths.length > 0 ? i18n.t("siteAccess.summary.paths", { count: v.paths.length }) : i18n.t("siteAccess.summary.site"));
+  if (parts.length === 0) return i18n.t("siteAccess.summary.open");
+  return i18n.t("siteAccess.summary.saved", { parts: parts.join(", ") });
 }
 
 function UsersCard({
@@ -209,6 +211,7 @@ function UsersCard({
   onChange: () => Promise<void>;
   onSecret: (s: { user: string; password: string }) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [own, setOwn] = useState(false);
   const [password, setPassword] = useState("");
@@ -236,11 +239,11 @@ function UsersCard({
     e.preventDefault();
     const user = name.trim();
     if (!user) {
-      setError("Enter a user name.");
+      setError(t("siteAccess.users.enterName"));
       return;
     }
     if (own && password.length < view.limits.minPassword) {
-      setError(`The password needs at least ${view.limits.minPassword} characters.`);
+      setError(t("siteAccess.users.tooShort", { min: view.limits.minPassword }));
       return;
     }
     void run(async () => {
@@ -248,7 +251,7 @@ function UsersCard({
       setName("");
       setPassword("");
       if (r.password) onSecret({ user, password: r.password });
-      return `User ${user} added.`;
+      return t("siteAccess.users.added", { user });
     });
   }
 
@@ -256,35 +259,35 @@ function UsersCard({
     run(async () => {
       const r = await setAccessUserPassword(site, user, "");
       if (r.password) onSecret({ user, password: r.password });
-      return `User ${user} has a new password.`;
+      return t("siteAccess.users.renewed", { user });
     });
 
   const remove = (user: string) =>
     run(async () => {
       await deleteAccessUser(site, user);
-      return `User ${user} removed.`;
+      return t("siteAccess.users.removed", { user });
     });
 
   const last = view.password && view.users.length === 1;
 
   const columns: Column<AccessUser>[] = [
-    { key: "name", header: "User", cell: (u) => <code>{u.name}</code>, sortValue: (u) => u.name },
-    { key: "updated", header: "Password set", cell: (u) => <RelTime iso={u.updatedAt} /> },
+    { key: "name", header: t("siteAccess.users.user"), cell: (u) => <code>{u.name}</code>, sortValue: (u) => u.name },
+    { key: "updated", header: t("siteAccess.users.passwordSet"), cell: (u) => <RelTime iso={u.updatedAt} /> },
     {
       key: "actions",
-      header: "Actions",
+      header: t("siteAccess.users.actions"),
       srHeader: true,
       cell: (u) => (
         <RowActions>
-          <IconButton label={`New password for ${u.name}`} text="New password" icon={<Key size={16} aria-hidden="true" />} tipBelow={u === view.users[0]} disabled={busy} onClick={() => void renew(u.name)} />
+          <IconButton label={t("siteAccess.users.newPasswordFor", { user: u.name })} text={t("siteAccess.users.newPassword")} icon={<Key size={16} aria-hidden="true" />} tipBelow={u === view.users[0]} disabled={busy} onClick={() => void renew(u.name)} />
           {confirm === u.name ? (
             <Button variant="danger" disabled={busy} onClick={() => void remove(u.name)}>
-              Remove {u.name}?
+              {t("siteAccess.users.removeConfirm", { user: u.name })}
             </Button>
           ) : (
             <IconButton
-              label={last ? "The last user stays while the password is on" : `Remove ${u.name}`}
-              text="Remove" icon={<Trash size={16} aria-hidden="true" />}
+              label={last ? t("siteAccess.users.lastStays") : t("siteAccess.users.removeUser", { user: u.name })}
+              text={t("siteAccess.users.remove")} icon={<Trash size={16} aria-hidden="true" />}
               danger
               tipBelow={u === view.users[0]}
               disabled={busy || last}
@@ -297,31 +300,31 @@ function UsersCard({
   ];
 
   return (
-    <Card title="Users">
+    <Card title={t("siteAccess.users.title")}>
       <div className="ui-stack">
-        <Table label="Users" columns={columns} rows={view.users} rowKey={(u) => u.name} empty="No users yet." />
+        <Table label={t("siteAccess.users.title")} actionsBelow columns={columns} rows={view.users} rowKey={(u) => u.name} empty={t("siteAccess.users.none")} />
         <form className="ui-stack" onSubmit={add} noValidate>
           <fieldset className="ui-fieldset ui-stack" disabled={busy || view.users.length >= view.limits.users}>
-            <legend>Add a user</legend>
-            <Field label="User name" hint="Letters, digits and . _ @ -, at most 64 characters.">
+            <legend>{t("siteAccess.users.addLegend")}</legend>
+            <Field label={t("siteAccess.users.name")} hint={t("siteAccess.users.nameHint")}>
               <input className="ui-input" value={name} autoComplete="off" spellCheck={false} onChange={(e) => setName(e.target.value)} />
             </Field>
             <label className="ui-check">
               <input type="radio" name={site + "-pw"} checked={!own} onChange={() => setOwn(false)} />
-              Generate a strong password (shown once)
+              {t("siteAccess.users.generate")}
             </label>
             <label className="ui-check">
               <input type="radio" name={site + "-pw"} checked={own} onChange={() => setOwn(true)} />
-              Choose a password
+              {t("siteAccess.users.choose")}
             </label>
             {own && (
-              <Field label="Password" hint={`${view.limits.minPassword} to ${view.limits.maxPassword} characters.`}>
+              <Field label={t("siteAccess.settings.password")} hint={t("siteAccess.users.passwordHint", { min: view.limits.minPassword, max: view.limits.maxPassword })}>
                 <input className="ui-input" type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
               </Field>
             )}
             <div className="ui-row">
               <Button type="submit" variant="primary">
-                Add user
+                {t("siteAccess.users.add")}
               </Button>
             </div>
           </fieldset>
@@ -336,6 +339,7 @@ function UsersCard({
 // PasswordNotice shows a generated password once. The panel cannot show it
 // again; closing the notice drops it from memory.
 function PasswordNotice({ site, secret, onClose }: { site: Site; secret: { user: string; password: string }; onClose: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -348,29 +352,29 @@ function PasswordNotice({ site, secret, onClose }: { site: Site; secret: { user:
   async function copy() {
     try {
       await navigator.clipboard.writeText(secret.password);
-      setCopied("Copied.");
+      setCopied(t("common.status.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the password and copy it by hand.");
+      setCopied(t("siteAccess.secret.copyFailed"));
     }
   }
 
   return (
     <section className="ui-card ui-card-body ui-stack ui-attention" aria-labelledby="access-secret">
       <h2 id="access-secret" ref={heading} tabIndex={-1}>
-        Save this password now
+        {t("siteAccess.secret.title")}
       </h2>
-      <p className="ui-flush">Hostashi stores only a hash and cannot show it again. If it is lost, set a new one.</p>
+      <p className="ui-flush">{t("siteAccess.secret.text")}</p>
       <dl className="ui-facts">
-        <dt>Site</dt>
+        <dt>{t("siteAccess.secret.site")}</dt>
         <dd>
           <code>{site.domains[0]}</code>
         </dd>
-        <dt>User</dt>
+        <dt>{t("siteAccess.users.user")}</dt>
         <dd>
           <code>{secret.user}</code>
         </dd>
       </dl>
-      <Field label="Password">
+      <Field label={t("siteAccess.settings.password")}>
         <input
           readOnly
           value={secret.password}
@@ -381,9 +385,9 @@ function PasswordNotice({ site, secret, onClose }: { site: Site; secret: { user:
         />
       </Field>
       <div className="ui-row">
-        <Button onClick={() => void copy()}>Copy password</Button>
+        <Button onClick={() => void copy()}>{t("siteAccess.secret.copy")}</Button>
         <Button variant="primary" onClick={onClose}>
-          I have saved it
+          {t("siteAccess.secret.saved")}
         </Button>
       </div>
       {copied && <Notice tone="ok" title={copied} />}

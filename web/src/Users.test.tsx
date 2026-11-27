@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 import { Users } from "./Users";
 
@@ -233,5 +234,24 @@ describe("Users", () => {
     expect(box).toBeChecked();
     expect(box).toBeDisabled();
     expect(screen.getByText(/Required for every account/)).toBeInTheDocument();
+  });
+
+  it("speaks German, including the second-factor rule", async () => {
+    setLanguage("de");
+    const user = userEvent.setup();
+    mockFetch({
+      "GET /api/v1/users": { body: { users: [kim, uma] } },
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "GET /api/v1/users/policy": { body: { requireSecondFactor: false } },
+    });
+    render(<Harness />);
+    expect(await screen.findByRole("heading", { name: "Benutzer" })).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Benutzer" });
+    expect(within(table).getByText("Kein zweiter Faktor")).toBeInTheDocument();
+    expect(within(table).getByRole("link", { name: "uma verwalten" })).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Zweiten Faktor für jedes Konto verlangen"));
+    const dialog = screen.getByRole("alertdialog", { name: "1 Konto hat noch keinen zweiten Faktor" });
+    expect(within(dialog).getByText("uma").tagName).toBe("STRONG");
+    expect(within(dialog).getByRole("button", { name: "Für jedes Konto verlangen" })).toBeInTheDocument();
   });
 });

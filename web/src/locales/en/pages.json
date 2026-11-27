@@ -1,0 +1,97 @@
+{
+  "title": "Maintenance pages",
+  "description": "Pages a site shows during maintenance (with 503) and pages a parked domain shows. Sites choose theirs in their settings.",
+  "allLink": "All pages",
+  "gone": "This page does not exist any more.",
+  "builtin": "Built-in",
+  "builtinChanged": "Built in",
+  "noDomain": "No domain",
+  "noSite": "No site",
+  "kinds": {
+    "maintenance": "Maintenance",
+    "parking": "Parking"
+  },
+  "delete": {
+    "title": "Delete the page “{{name}}”?",
+    "inUse": "{{users}} still use this page. Choose another page there first.",
+    "filesRemoved": "Its files are removed.",
+    "unused": "No site or domain uses this page.",
+    "card": "Delete",
+    "confirm": "Delete {{name}}",
+    "done": "Page “{{name}}” deleted."
+  },
+  "columns": {
+    "name": "Page",
+    "kind": "Kind",
+    "users": "Used by",
+    "files": "Files",
+    "updated": "Changed",
+    "actions": "Actions"
+  },
+  "actions": {
+    "preview": "Preview",
+    "previewLabel": "Preview {{name}}",
+    "manage": "Manage",
+    "manageLabel": "Manage {{name}}",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{name}}"
+  },
+  "filter": {
+    "label": "Filter pages",
+    "placeholder": "Filter by name",
+    "kind": "Kind",
+    "allKinds": "All kinds"
+  },
+  "table": {
+    "label": "Pages",
+    "noMatch": "No page matches the filter."
+  },
+  "upload": {
+    "button": "Upload a page",
+    "title": "Upload a page",
+    "description": "A maintenance or parking page of your own.",
+    "name": "Name",
+    "kind": "Kind",
+    "kindMaintenance": "Maintenance: shown with 503 while a site is in maintenance",
+    "kindParking": "Parking: shown on domains without a site",
+    "file": "File",
+    "fileHint": "One .html file, or a .zip file with index.html at the top and its CSS, JavaScript, images (png, jpg, webp, gif, svg, ico) and woff2 fonts. At most 2 MiB, 100 files and two folder levels. Files load only from the page itself. %%DOMAIN%% in the HTML shows the domain the visitor opened.",
+    "scripts": "Scripts in the page run on the site's domain while the page is shown. Upload only pages you trust.",
+    "uploading": "Uploading…",
+    "submit": "Upload page",
+    "done_one": "Page “{{name}}” uploaded with {{count}} file.",
+    "done_other": "Page “{{name}}” uploaded with {{count}} files."
+  },
+  "view": {
+    "details": "Details",
+    "sha256": "SHA-256",
+    "builtinNotice": "Built-in pages come with Hostashi and cannot be changed.",
+    "replace": "Replace files",
+    "newFile": "New file for {{name}}",
+    "newFileHint": "An .html or .zip file. It replaces all files of the page.",
+    "replaced": "Files replaced.",
+    "replacedUsed": "Files replaced. Sites and domains that show it use the new page now.",
+    "rename": "Rename",
+    "newName": "New name for {{name}}",
+    "saveName": "Save name",
+    "renamed": "Page renamed."
+  },
+  "problems": {
+    "chooseFile": "Choose an .html or .zip file.",
+    "fileType": "Upload an .html file or a .zip file.",
+    "tooLarge": "The file is larger than 2 MiB.",
+    "empty": "The file is empty.",
+    "enterName": "Enter a name.",
+    "nameTooLong": "Use at most 64 characters.",
+    "popupBlocked": "The browser blocked the new tab. Allow pop-ups for the panel and try again."
+  },
+  "errors": {
+    "page_in_use": "A site or parked domain uses this page. Choose another page there first.",
+    "page_builtin": "Built-in pages cannot be changed or deleted.",
+    "page_not_found": "This page does not exist any more. Reload the page.",
+    "too_large": "The file is larger than 2 MiB.",
+    "forbidden": "Only administrators can manage pages.",
+    "not_found": "This site does not exist any more. Reload the page.",
+    "site_busy": "The site is being created or deleted. Reload the page in a moment."
+  }
+}
