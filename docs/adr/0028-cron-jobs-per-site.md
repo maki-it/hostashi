@@ -106,4 +106,3 @@ No database change: nothing is stored by the panel.
 - Who may see a job may see its output. A job that prints secrets shows them there; the same people can already read the command and the site's files [A].
 - Output is available as long as journald keeps it. With volatile storage it is gone after a reboot; Debian 13 and Ubuntu 26.04 keep the journal on disk by default [A].
 - journald rate limiting (by default 10,000 messages in 30 s per service) can drop lines of a very chatty job [U: journald.conf defaults].
-
