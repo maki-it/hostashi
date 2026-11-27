@@ -5,6 +5,7 @@
 import account from "./account.json";
 import auth from "./auth.json";
 import backups from "./backups.json";
+import certificate from "./certificate.json";
 import common from "./common.json";
 import cron from "./cron.json";
 import errors from "./errors.json";
@@ -12,11 +13,15 @@ import limits from "./limits.json";
 import pages from "./pages.json";
 import parked from "./parked.json";
 import profiles from "./profiles.json";
+import realIp from "./realIp.json";
 import shell from "./shell.json";
+import siteAccess from "./siteAccess.json";
 import siteApp from "./siteApp.json";
+import siteDomains from "./siteDomains.json";
+import siteHeaders from "./siteHeaders.json";
 import tokens from "./tokens.json";
 
-const en = { account, auth, backups, common, cron, errors, limits, pages, parked, profiles, shell, siteApp, tokens };
+const en = { account, auth, backups, certificate, common, cron, errors, limits, pages, parked, profiles, realIp, shell, siteAccess, siteApp, siteDomains, siteHeaders, tokens };
 
 export type Catalog = typeof en;
 

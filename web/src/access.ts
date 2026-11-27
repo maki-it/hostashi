@@ -4,6 +4,7 @@
 // and the form model of the "Access" tab.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { splitRanges } from "./realip";
 
 export type IPMode = "" | "allow" | "deny";
@@ -83,11 +84,11 @@ export function fromAccessForm(f: AccessForm, users: number): { settings: Access
   const ips = f.ipMode ? splitRanges(f.ips) : [];
   const paths = f.scope === "paths" ? splitPaths(f.paths) : [];
   const settings: AccessSettings = { ipMode: f.ipMode, ips, password: f.password, paths, bypass: splitRanges(f.bypass) };
-  if (f.ipMode && ips.length === 0) return { settings, error: "Enter at least one address for the IP rule." };
-  if (f.password && users === 0) return { settings, error: "Add a user first, then switch the password on." };
-  if (f.password && f.scope === "paths" && paths.length === 0) return { settings, error: "Enter at least one path, or protect the whole site." };
+  if (f.ipMode && ips.length === 0) return { settings, error: i18n.t("siteAccess.problems.noAddress") };
+  if (f.password && users === 0) return { settings, error: i18n.t("siteAccess.problems.noUser") };
+  if (f.password && f.scope === "paths" && paths.length === 0) return { settings, error: i18n.t("siteAccess.problems.noPath") };
   const bad = paths.find((p) => !p.startsWith("/"));
-  if (bad) return { settings, error: `The path ${bad} must start with /.` };
+  if (bad) return { settings, error: i18n.t("siteAccess.problems.badPath", { path: bad }) };
   return { settings };
 }
 
@@ -121,13 +122,13 @@ function inRange4(addr: string, range: string): boolean {
 
 export function accessMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === "access_rejected") return "Refused: " + err.message + ".";
+    if (err.code === "access_rejected") return i18n.t("siteAccess.errors.rejected", { reason: err.message });
     if (err.code === "access_conflict")
-      return "A custom nginx snippet of this site already sets access rules. Remove them from the snippet (nginx tab) first: " + err.message + ".";
-    if (err.code === "user_exists") return "The site already has a user with this name.";
-    if (err.code === "user_not_found") return "This user does not exist anymore.";
-    if (err.code === "not_found") return "The site does not exist anymore.";
+      return i18n.t("siteAccess.errors.conflict", { reason: err.message });
+    if (err.code === "user_exists") return i18n.t("siteAccess.errors.userExists");
+    if (err.code === "user_not_found") return i18n.t("siteAccess.errors.userNotFound");
+    if (err.code === "not_found") return i18n.t("siteAccess.errors.siteGone");
     return err.message;
   }
-  return "The setting could not be loaded or saved. Try again.";
+  return i18n.t("siteAccess.errors.generic");
 }

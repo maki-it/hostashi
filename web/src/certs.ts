@@ -5,6 +5,7 @@
 // CSR from the server.
 
 import { request } from "./api";
+import i18n from "./i18n";
 
 export type CertSource = "letsencrypt" | "custom";
 
@@ -53,14 +54,14 @@ const pemRe = (type: string) => new RegExp(`-----BEGIN ${type}-----[\\s\\S]+?---
 // uploadProblem checks a form before it is sent; the agent checks the
 // certificate itself. withCSR: an empty key uses the key of the CSR.
 export function uploadProblem(u: CertUpload, withCSR: boolean): string {
-  if (!pemRe("CERTIFICATE").test(u.certificate)) return "Paste the certificate in PEM form, starting with -----BEGIN CERTIFICATE-----.";
-  if (u.chain.trim() !== "" && !pemRe("CERTIFICATE").test(u.chain)) return "The chain must be PEM certificates, or leave it empty.";
-  if (u.certificate.length + u.chain.length + 1 > maxChainBytes) return "Certificate and chain are too large (at most 32 KiB together).";
-  if (/PRIVATE KEY/.test(u.certificate + u.chain)) return "A private key belongs in the key field, not with the certificates.";
-  if (u.key.trim() === "") return withCSR ? "" : "Paste the private key, or create a CSR first.";
-  if (/ENCRYPTED/.test(u.key)) return "The key is protected by a passphrase. Remove it first (openssl pkey -in key.pem -out plain.pem).";
-  if (!/-----BEGIN (RSA |EC )?PRIVATE KEY-----/.test(u.key)) return "Paste the private key in PEM form, starting with -----BEGIN PRIVATE KEY-----.";
-  if (u.key.length > maxKeyBytes) return "The key is too large (at most 16 KiB).";
+  if (!pemRe("CERTIFICATE").test(u.certificate)) return i18n.t("certificate.problems.certPEM");
+  if (u.chain.trim() !== "" && !pemRe("CERTIFICATE").test(u.chain)) return i18n.t("certificate.problems.chainPEM");
+  if (u.certificate.length + u.chain.length + 1 > maxChainBytes) return i18n.t("certificate.problems.chainSize");
+  if (/PRIVATE KEY/.test(u.certificate + u.chain)) return i18n.t("certificate.problems.keyInCert");
+  if (u.key.trim() === "") return withCSR ? "" : i18n.t("certificate.problems.noKey");
+  if (/ENCRYPTED/.test(u.key)) return i18n.t("certificate.problems.encrypted");
+  if (!/-----BEGIN (RSA |EC )?PRIVATE KEY-----/.test(u.key)) return i18n.t("certificate.problems.keyPEM");
+  if (u.key.length > maxKeyBytes) return i18n.t("certificate.problems.keySize");
   return "";
 }
 

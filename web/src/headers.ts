@@ -4,6 +4,7 @@
 // model of the card in the "Domains & HTTPS" tab.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type WebHeaders = {
   noSniff?: boolean;
@@ -83,7 +84,7 @@ export function fromForm(
     if (v === "")
       return {
         headers: h,
-        error: "Enter a Permissions-Policy or switch it off.",
+        error: i18n.t("siteHeaders.problems.permissions"),
       };
     h.permissionsPolicy = v;
   }
@@ -92,7 +93,7 @@ export function fromForm(
     if (v === "")
       return {
         headers: h,
-        error: "Enter a Content-Security-Policy or switch it off.",
+        error: i18n.t("siteHeaders.problems.csp"),
       };
     h.csp = v;
     if (f.csp === "report") h.cspReportOnly = true;
@@ -103,20 +104,17 @@ export function fromForm(
 export function headersMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === "header_rejected")
-      return (
-        "A value was refused: " +
-        err.message.replace(/^header rejected: /, "") +
-        "."
-      );
+      return i18n.t("siteHeaders.errors.rejected", {
+        reason: err.message.replace(/^header rejected: /, ""),
+      });
     if (err.code === "header_conflict")
-      return (
-        err.message
+      return i18n.t("siteHeaders.errors.conflict", {
+        reason: err.message
           .replace(/^header conflict: /, "")
-          .replace(/^./, (c) => c.toUpperCase()) +
-        ". Remove it from the snippet first."
-      );
-    if (err.code === "not_found") return "The site does not exist anymore.";
+          .replace(/^./, (c) => c.toUpperCase()),
+      });
+    if (err.code === "not_found") return i18n.t("siteHeaders.errors.siteGone");
     return err.message;
   }
-  return "The security headers could not be loaded or saved. Try again.";
+  return i18n.t("siteHeaders.errors.generic");
 }

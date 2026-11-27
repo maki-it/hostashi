@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fromForm,
   getHeaders,
@@ -12,6 +13,10 @@ import {
 } from "./headers";
 import type { Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
+
+// Header names and values read the same in every language.
+const noSniff = "nosniff";
+const permissionsPolicy = "Permissions-Policy";
 
 const mdn = "https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/";
 
@@ -26,6 +31,7 @@ function Doc({ header }: { header: string }) {
 // SecurityHeadersCard switches a site's security headers (ADR-0056).
 // Everyone who may change the site's HSTS may change these.
 export function SecurityHeadersCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<HeadersView | null>(null);
   const [form, setForm] = useState<HeadersForm | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -50,15 +56,15 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
 
   if (loadError) {
     return (
-      <Card title="Security headers">
+      <Card title={t("siteHeaders.title")}>
         <Notice tone="err" title={loadError} />
       </Card>
     );
   }
   if (!view || !form) {
     return (
-      <Card title="Security headers">
-        <p aria-busy="true">Loading…</p>
+      <Card title={t("siteHeaders.title")}>
+        <p aria-busy="true">{t("common.status.loading")}</p>
       </Card>
     );
   }
@@ -89,26 +95,22 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    void save(form!, "Saved. nginx sends the new headers now.");
+    void save(form!, t("siteHeaders.saved"));
   }
 
   return (
-    <Card title="Security headers">
+    <Card title={t("siteHeaders.title")}>
       <form className="ui-stack" onSubmit={submit} noValidate>
-        <p className="ui-hint">
-          Sent with every answer of the site, error pages included. A header
-          switched on here replaces the same header from the application.
-          Switched off, the application's own header passes through unchanged.
-        </p>
+        <p className="ui-hint">{t("siteHeaders.intro")}</p>
         <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
-          <legend>Basic</legend>
+          <legend>{t("siteHeaders.basic")}</legend>
           <div className="ui-form-grid">
             <Field
-              label="MIME type sniffing"
+              label={t("siteHeaders.sniff.label")}
               hint={
                 <>
-                  <Doc header="X-Content-Type-Options" />. Browsers trust the
-                  declared type of every file.
+                  <Doc header="X-Content-Type-Options" />.{" "}
+                  {t("siteHeaders.sniff.hint")}
                 </>
               }
             >
@@ -117,16 +119,16 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
                 value={form.noSniff ? "on" : ""}
                 onChange={(e) => set({ noSniff: e.target.value === "on" })}
               >
-                <option value="">Off</option>
-                <option value="on">nosniff</option>
+                <option value="">{t("siteHeaders.off")}</option>
+                <option value="on">{noSniff}</option>
               </select>
             </Field>
             <Field
-              label="Show in frames"
+              label={t("siteHeaders.frames.label")}
               hint={
                 <>
-                  <Doc header="X-Frame-Options" />. Protects against
-                  clickjacking.
+                  <Doc header="X-Frame-Options" />.{" "}
+                  {t("siteHeaders.frames.hint")}
                 </>
               }
             >
@@ -135,19 +137,19 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
                 value={form.frameOptions}
                 onChange={(e) => set({ frameOptions: e.target.value })}
               >
-                <option value="">Off</option>
+                <option value="">{t("siteHeaders.off")}</option>
                 <option value="SAMEORIGIN">
-                  SAMEORIGIN: only on this site
+                  {t("siteHeaders.frames.sameOrigin")}
                 </option>
-                <option value="DENY">DENY: never</option>
+                <option value="DENY">{t("siteHeaders.frames.deny")}</option>
               </select>
             </Field>
             <Field
-              label="Referrer"
+              label={t("siteHeaders.referrer.label")}
               hint={
                 <>
-                  <Doc header="Referrer-Policy" />. What other sites learn about
-                  the page a visitor came from.
+                  <Doc header="Referrer-Policy" />.{" "}
+                  {t("siteHeaders.referrer.hint")}
                 </>
               }
             >
@@ -156,7 +158,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
                 value={form.referrerPolicy}
                 onChange={(e) => set({ referrerPolicy: e.target.value })}
               >
-                <option value="">Off</option>
+                <option value="">{t("siteHeaders.off")}</option>
                 {view.referrerPolicies.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -167,13 +169,13 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
           </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
-          <legend>Permissions</legend>
+          <legend>{t("siteHeaders.permissions.legend")}</legend>
           <Field
-            label="Browser features"
+            label={t("siteHeaders.permissions.label")}
             hint={
               <>
-                <Doc header="Permissions-Policy" />. Which features the site and
-                embedded frames may use.
+                <Doc header="Permissions-Policy" />.{" "}
+                {t("siteHeaders.permissions.hint")}
               </>
             }
           >
@@ -186,11 +188,11 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
                 })
               }
             >
-              <option value="off">Off</option>
+              <option value="off">{t("siteHeaders.off")}</option>
               <option value="strict">
-                Strict: camera, microphone, location, payment and USB off
+                {t("siteHeaders.permissions.strict")}
               </option>
-              <option value="own">Own policy</option>
+              <option value="own">{t("siteHeaders.permissions.own")}</option>
             </select>
           </Field>
           {form.permissions === "strict" && (
@@ -198,8 +200,10 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
           )}
           {form.permissions === "own" && (
             <Field
-              label="Permissions-Policy"
-              hint={`Comma-separated, for example camera=(), geolocation=(self "https://maps.example.com"). At most ${view.maxValueBytes} bytes.`}
+              label={permissionsPolicy}
+              hint={t("siteHeaders.permissions.ownHint", {
+                max: view.maxValueBytes,
+              })}
             >
               <textarea
                 className="ui-input ui-textarea ui-mono"
@@ -212,13 +216,13 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
           )}
         </fieldset>
         <fieldset className="ui-fieldset ui-group ui-stack" disabled={busy}>
-          <legend>Content Security Policy</legend>
+          <legend>{t("siteHeaders.csp.legend")}</legend>
           <Field
-            label="Mode"
+            label={t("siteHeaders.csp.mode")}
             hint={
               <>
-                <Doc header="Content-Security-Policy" />. Report only shows
-                violations in the browser console without blocking anything.
+                <Doc header="Content-Security-Policy" />.{" "}
+                {t("siteHeaders.csp.modeHint")}
               </>
             }
           >
@@ -229,15 +233,15 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
                 set({ csp: e.target.value as HeadersForm["csp"] })
               }
             >
-              <option value="off">Off</option>
-              <option value="report">Report only (test first)</option>
-              <option value="enforce">Enforce</option>
+              <option value="off">{t("siteHeaders.off")}</option>
+              <option value="report">{t("siteHeaders.csp.report")}</option>
+              <option value="enforce">{t("siteHeaders.csp.enforce")}</option>
             </select>
           </Field>
           {form.csp !== "off" && (
             <Field
-              label="Policy"
-              hint={`Directives separated by ";", for example default-src 'self'; img-src 'self' data:. At most ${view.maxValueBytes} bytes.`}
+              label={t("siteHeaders.csp.policy")}
+              hint={t("siteHeaders.csp.policyHint", { max: view.maxValueBytes })}
             >
               <textarea
                 className="ui-input ui-textarea ui-mono"
@@ -251,7 +255,7 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
           {form.csp === "enforce" && (
             <Notice
               tone="warn"
-              title="A policy that is too strict breaks the site at once: blocked scripts, styles or fonts. Test it with report only first."
+              title={t("siteHeaders.csp.enforceWarning")}
             />
           )}
         </fieldset>
@@ -259,18 +263,18 @@ export function SecurityHeadersCard({ site }: { site: Site }) {
         {done && <Notice tone="ok" title={done} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            Save security headers
+            {t("siteHeaders.save")}
           </Button>
           <Button
             disabled={busy}
             onClick={() =>
               void save(
                 { ...toForm(view.defaults, strict), noIndex: form.noIndex },
-                "The recommended headers are on.",
+                t("siteHeaders.recommendedOn"),
               )
             }
           >
-            Use recommended
+            {t("siteHeaders.recommended")}
           </Button>
         </div>
       </form>
