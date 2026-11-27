@@ -27,6 +27,32 @@ describe("App start", () => {
     expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
   });
 
+  it("measures the sticky top bar for the parts that stick below it", async () => {
+    // The callback of the observer that watches the top bar; other parts
+    // of the page have observers of their own.
+    let measured: (() => void) | undefined;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private cb: () => void) {}
+        observe(el: Element) {
+          if (el.classList.contains("app-top")) measured = this.cb;
+        }
+        disconnect() {}
+      },
+    );
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } });
+    const { unmount } = render(<App />);
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    const top = document.querySelector<HTMLElement>(".app-top")!;
+    Object.defineProperty(top, "offsetHeight", { configurable: true, value: 81 });
+    measured?.();
+    expect(document.documentElement.style.getPropertyValue("--app-top-h")).toBe("81px");
+    unmount();
+    expect(document.documentElement.style.getPropertyValue("--app-top-h")).toBe("");
+    vi.unstubAllGlobals();
+  });
+
   it("shows neither the login brand nor text while the session check runs", async () => {
     mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session" } } });
     const { container } = render(<App />);
