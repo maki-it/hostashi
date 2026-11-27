@@ -1,4 +1,9 @@
-# Hostashi
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/hostashi-logo-dark.svg">
+    <img src="docs/brand/hostashi-logo-light.svg" alt="Hostashi" height="48">
+  </picture>
+</h1>
 
 A modern, **truly open source** hosting control panel for single Linux servers, as an alternative to [CloudPanel](https://www.cloudpanel.io/).
 
