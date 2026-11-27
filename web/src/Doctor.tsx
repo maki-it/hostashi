@@ -168,7 +168,7 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
           label="Checks"
           columns={columns}
           rows={shown}
-          rowKey={(c) => c.id + "/" + (c.site ?? "")}
+          rowKey={(c) => [c.id, c.site ?? "", c.summary].join("/")}
           sort={sort}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
           empty={problemsOnly && !q ? "No problems." : "No check matches the filter."}

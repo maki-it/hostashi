@@ -3,7 +3,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Doctor } from "./Doctor";
 import type { DoctorReport } from "./doctor";
 import { mockFetch } from "./test-utils";
@@ -47,6 +47,32 @@ describe("Doctor", () => {
     expect(rows[1]).toContain("Server");
     expect(rows.at(-1)).toContain("OK");
     expect(screen.getAllByRole("link", { name: "Site shop" })[0]).toHaveAttribute("href", "#/sites/shop");
+  });
+
+  it("keeps checks with the same ID apart when sorting", async () => {
+    const user = userEvent.setup();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockFetch({
+      "GET /api/v1/doctor": {
+        body: {
+          ...report,
+          checks: [
+            { id: "system.disk", status: "ok", summary: "/: 32.7 GiB free of 39.2 GiB (83 %)" },
+            { id: "system.disk", status: "warn", summary: "/srv/vol1: 3.1 GiB free of 39.1 GiB (8 %)" },
+          ],
+        },
+      },
+    });
+    render(<Harness />);
+
+    await screen.findByRole("table", { name: "Checks" });
+    expect(rowTexts()[0]).toContain("/srv/vol1");
+    await user.click(screen.getByRole("button", { name: /^Check$/i }));
+    const rows = rowTexts();
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => r.includes("/srv/vol1"))).toHaveLength(1);
+    expect(logged.mock.calls.flat().join(" ")).not.toContain("same key");
+    logged.mockRestore();
   });
 
   it("leaves the panel's settings to the System page", async () => {
