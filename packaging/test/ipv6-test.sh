@@ -269,16 +269,22 @@ port_open 8443 || fail "client still blocked after the unblock"
 x fail2ban-client set hostashi-panel bantime 3600 >/dev/null
 
 step "the firewall's panel allowlist takes an IPv6 prefix (ADR-0034)"
-[ "$(api PUT /api/v1/firewall "{\"state\":{\"panelAllow\":[\"2001:db8:dead::/48\"],\"sshAllow\":[],\"open\":[]}}")" = 200 ] ||
-  fail "set panel allowlist: $(x cat /tmp/api.out)"
-sleep 2
+# fw_set STATE: apply firewall rules and keep them (each change waits for
+# a confirmation, or the agent rolls it back).
+fw_set() {
+  [ "$(api PUT /api/v1/firewall "{\"state\":$1}")" = 200 ] || fail "set firewall $1: $(x cat /tmp/api.out)"
+  local id
+  id=$(x cat /tmp/api.out | python3 -c 'import json,sys; print((json.load(sys.stdin).get("pending") or {}).get("id", ""))')
+  [ -n "$id" ] || fail "firewall change without a pending id: $(x cat /tmp/api.out)"
+  [ "$(api POST /api/v1/firewall/confirm "{\"id\":\"$id\"}")" = 200 ] || fail "confirm firewall: $(x cat /tmp/api.out)"
+  sleep 2
+}
+fw_set '{"panelAllow":["2001:db8:dead::/48"],"sshAllow":[],"open":[]}'
 if port_open 8443; then fail "panel reachable from outside its IPv6 allowlist"; fi
 port_open 80 || fail "the web closed by the panel allowlist"
-[ "$(api PUT /api/v1/firewall "{\"state\":{\"panelAllow\":[\"$C64\"],\"sshAllow\":[],\"open\":[]}}")" = 200 ] ||
-  fail "set panel allowlist: $(x cat /tmp/api.out)"
-sleep 2
+fw_set "{\"panelAllow\":[\"$C64\"],\"sshAllow\":[],\"open\":[]}"
 port_open 8443 || fail "panel closed for an allowed /64"
-[ "$(api PUT /api/v1/firewall '{"state":{"panelAllow":[],"sshAllow":[],"open":[]}}')" = 200 ] || fail "clear firewall rules: $(x cat /tmp/api.out)"
+fw_set '{"panelAllow":[],"sshAllow":[],"open":[]}'
 
 step "an external MariaDB server by its IPv6 address (ADR-0041)"
 # The local MariaDB stands in for the external server, as in
