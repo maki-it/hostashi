@@ -71,10 +71,12 @@ commands:
             start, stop, restart or reload one where the service catalog
             allows it, through the panel's API (needs hostashi login,
             ADR-0052)
-  firewall bans [-json] | firewall unban ADDRESS
-            show the addresses fail2ban blocks, or unblock one in every
-            Hostashi jail, through the panel's API (needs hostashi login,
-            ADR-0078)
+  firewall bans [-jail JAIL] [-address TEXT] [-json] |
+  firewall unban ADDRESS
+            show the addresses fail2ban blocks, filtered by jail or by
+            address, part of one or range such as 203.0.113.0/24, or
+            unblock one in every Hostashi jail, through the panel's API
+            (needs hostashi login, ADR-0078)
   system info | system timezones | system timezone ZONE |
   system hostname NAME | system reboot HOSTNAME
             show or change the server's time zone and hostname, or reboot it

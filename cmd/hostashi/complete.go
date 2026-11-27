@@ -81,7 +81,7 @@ var completionTree = &compNode{sub: cmds(
 		args: []string{"start", "stop", "restart", "reload"}, argsFrom: 1,
 	},
 	&compNode{name: "firewall", help: "addresses fail2ban blocks", sub: cmds(
-		&compNode{name: "bans", help: "show the blocked addresses", flags: []string{"-json"}},
+		&compNode{name: "bans", help: "show the blocked addresses", flags: []string{"-jail", "-address", "-json"}},
 		leaf("unban", "unblock an address in every jail"),
 	)},
 	&compNode{name: "system", help: "time zone, hostname and reboot", sub: cmds(

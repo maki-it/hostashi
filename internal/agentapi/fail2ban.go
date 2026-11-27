@@ -4,7 +4,10 @@ package agentapi
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
+	"slices"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
 )
@@ -26,29 +29,91 @@ type Fail2banBan struct {
 	Until int64 `json:"until,omitempty"`
 }
 
-// Fail2banJail is the state of one jail.
+// Fail2banJail is the state of one jail: its counters. The addresses it
+// blocks come merged per address in Fail2banStatus.Blocked.
 type Fail2banJail struct {
 	Name string `json:"name"`
 	// Running is false when fail2ban does not know the jail, for example
 	// after a broken local change to its configuration.
-	Running         bool          `json:"running"`
-	CurrentlyFailed int           `json:"currentlyFailed"`
-	TotalFailed     int           `json:"totalFailed"`
-	CurrentlyBanned int           `json:"currentlyBanned"`
-	TotalBanned     int           `json:"totalBanned"`
-	Bans            []Fail2banBan `json:"bans"`
+	Running         bool `json:"running"`
+	CurrentlyFailed int  `json:"currentlyFailed"`
+	TotalFailed     int  `json:"totalFailed"`
+	CurrentlyBanned int  `json:"currentlyBanned"`
+	TotalBanned     int  `json:"totalBanned"`
 }
 
-// Fail2banStatus is the state of the Hostashi jails.
+// Fail2banBlocked is one blocked address with every jail that blocks it,
+// since its first ban and until its last ban ends.
+type Fail2banBlocked struct {
+	Address string   `json:"address"`
+	Jails   []string `json:"jails"`
+	Since   int64    `json:"since"`
+	// Until is 0 when one of the bans has no end.
+	Until int64 `json:"until,omitempty"`
+}
+
+// Fail2banStatus is the state of the Hostashi jails and one page of the
+// blocked addresses that match the request, newest first.
 type Fail2banStatus struct {
-	Jails []Fail2banJail `json:"jails"`
+	Jails   []Fail2banJail    `json:"jails"`
+	Blocked []Fail2banBlocked `json:"blocked"`
+	// Total counts every matching address, not only this page.
+	Total int `json:"total"`
+	// Truncated is true when fail2ban listed more addresses than the
+	// agent reads (f2bctl's output limit); the list then misses some.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
-// Fail2banStatusRequest has no parameters.
-type Fail2banStatusRequest struct{}
+// Page sizes of fail2ban.status. One page with the longest addresses
+// blocked in every jail stays far below agentrpc.MaxFrame (tested).
+const (
+	Fail2banPageDefault = 50
+	Fail2banPageMax     = 100
+	// Fail2banQueryMax is the longest address filter.
+	Fail2banQueryMax = 64
+	// fail2banOffsetMax keeps the offset in a sane range.
+	fail2banOffsetMax = 10_000_000
+)
 
-// Validate accepts every request.
-func (Fail2banStatusRequest) Validate() error { return nil }
+// Fail2banStatusRequest filters and pages the blocked addresses. The
+// filters work in the agent, so a server with thousands of blocked
+// addresses still answers with one small page (ADR-0078).
+type Fail2banStatusRequest struct {
+	// Jail keeps the addresses one jail blocks; empty is every jail.
+	Jail string `json:"jail,omitempty"`
+	// Address keeps the addresses that contain it, equal it, or, written
+	// as a range such as 203.0.113.0/24, lie in it.
+	Address string `json:"address,omitempty"`
+	Offset  int    `json:"offset,omitempty"`
+	// Limit is the page size; 0 is Fail2banPageDefault.
+	Limit int `json:"limit,omitempty"`
+}
+
+// ErrFail2banFilter is returned for a filter fail2ban.status does not take.
+var ErrFail2banFilter = errors.New("invalid filter")
+
+// Validate checks the filter and the page.
+func (r Fail2banStatusRequest) Validate() error {
+	if r.Jail != "" && !slices.Contains(Fail2banJails, r.Jail) {
+		return fmt.Errorf("%w: jail must be one of %s", ErrFail2banFilter, strings.Join(Fail2banJails, ", "))
+	}
+
+	if len(r.Address) > Fail2banQueryMax || strings.Trim(r.Address, "0123456789abcdefABCDEF.:/") != "" {
+		return fmt.Errorf("%w: address may only hold an IP address, a part of one or a range", ErrFail2banFilter)
+	}
+
+	if strings.Contains(r.Address, "/") {
+		if _, err := netip.ParsePrefix(r.Address); err != nil {
+			return fmt.Errorf("%w: %q is not a range such as 203.0.113.0/24", ErrFail2banFilter, r.Address)
+		}
+	}
+
+	if r.Offset < 0 || r.Offset > fail2banOffsetMax || r.Limit < 0 || r.Limit > Fail2banPageMax {
+		return fmt.Errorf("%w: page out of range (at most %d per page)", ErrFail2banFilter, Fail2banPageMax)
+	}
+
+	return nil
+}
 
 // Fail2banUnbanRequest lifts the ban of Address in every Hostashi jail
 // (ADR-0078: one action, so a recidive ban does not stay behind).

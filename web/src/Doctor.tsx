@@ -11,7 +11,10 @@ const tones: Record<DoctorStatus, Tone> = { ok: "ok", warn: "warn", fail: "err" 
 const noticeTones: Record<DoctorStatus, NoticeTone> = { ok: "ok", warn: "warn", fail: "err" };
 const rank: Record<DoctorStatus, number> = { fail: 0, warn: 1, ok: 2 };
 // Server checks whose setting lives on another page link there.
-const settingsPage: Partial<Record<string, Page>> = { "panel.tls": "system", "service.fail2ban.jails": "firewall" };
+const settingsPage: Partial<Record<string, { page: Page; label: string; query?: Record<string, string> }>> = {
+  "panel.tls": { page: "system", label: "System" },
+  "service.fail2ban.jails": { page: "firewall", label: "Firewall", query: { tab: "blocked" } },
+};
 
 type QueryProps = {
   /** The address query: q, show (all or problems), sort, dir. */
@@ -29,11 +32,11 @@ function overall(r: DoctorReport): string {
 }
 
 function ServerWhere({ id }: { id: string }) {
-  const page = settingsPage[id];
-  if (!page) return "Server";
+  const to = settingsPage[id];
+  if (!to) return "Server";
   return (
-    <a className="ui-nowrap" href={formatHash({ page })}>
-      System
+    <a className="ui-nowrap" href={formatHash({ page: to.page, query: new URLSearchParams(to.query) })}>
+      {to.label}
     </a>
   );
 }
