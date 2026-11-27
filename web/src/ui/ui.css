@@ -2049,8 +2049,10 @@ html:has(.ui-files) {
     line-height: 1.35;
     white-space: normal;
   }
-  /* Tables with several row buttons put them under the row, not beside the title. */
-  .ui-table-actions-below td[data-actions] {
+  /* Several row buttons go under the row, not beside the title: beside it
+     they leave the title no room and cover it. */
+  .ui-table-actions-below td[data-actions],
+  .ui-table td[data-actions]:has(.ui-row-actions > :nth-child(2)) {
     grid-row: auto;
     grid-column: 1 / -1;
     justify-content: flex-start;
