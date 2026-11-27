@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Audit } from "./Audit";
+import { setLanguage } from "./i18n";
 import { actionGroups, auditQuery, detailPairs, diffRows, exportUrl, localDay, type AuditEntry } from "./audit";
 
 const entry = (id: number, over: Partial<AuditEntry> = {}): AuditEntry => ({
@@ -108,6 +109,18 @@ describe("Audit", () => {
     await screen.findByText("The audit log is empty.");
     await screen.findByRole("option", { name: "site.* (all)" });
     expect(screen.getByRole("option", { name: "login.* (all)" })).toBeInTheDocument();
+  });
+});
+
+describe("Audit in German", () => {
+  it("names the columns and the action groups", async () => {
+    setLanguage("de");
+    stubAudit(() => ({ entries: [entry(1)], next: null }));
+    render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Audit-Log" });
+    expect(within(table).getByRole("columnheader", { name: /Aktion/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Sites" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "site.* (alle)" })).toBeInTheDocument();
   });
 });
 

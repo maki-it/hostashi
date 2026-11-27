@@ -302,7 +302,7 @@ function UsersCard({
   return (
     <Card title={t("siteAccess.users.title")}>
       <div className="ui-stack">
-        <Table label={t("siteAccess.users.title")} columns={columns} rows={view.users} rowKey={(u) => u.name} empty={t("siteAccess.users.none")} />
+        <Table label={t("siteAccess.users.title")} actionsBelow columns={columns} rows={view.users} rowKey={(u) => u.name} empty={t("siteAccess.users.none")} />
         <form className="ui-stack" onSubmit={add} noValidate>
           <fieldset className="ui-fieldset ui-stack" disabled={busy || view.users.length >= view.limits.users}>
             <legend>{t("siteAccess.users.addLegend")}</legend>
