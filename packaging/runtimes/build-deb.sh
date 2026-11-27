@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds the package hostashi-runtimes (ADR-0077 part 2): the runtimes data
-# file with the Node.js and CPython pins of main, nothing else. The binary
+# file with the Node.js, CPython and WP-CLI pins of main, nothing else. The binary
 # reads it at start (internal/runtimepins) and takes newer patch releases
 # of the lines it knows from it; postinst restarts agent and panel so they
 # do. The package holds no code.
@@ -40,12 +40,12 @@ Maintainer: Maki IT <kontakt@maki-it.de>
 Section: admin
 Priority: optional
 Homepage: https://github.com/maki-it/hostashi
-Description: Node.js and CPython pins for Hostashi
+Description: Node.js, CPython and WP-CLI pins for Hostashi
  Newer patch releases of the Node.js and CPython lines Hostashi installs,
- with their SHA-256 checksums. Hostashi takes a pin from this package only
- for a line it knows and only when it is newer than its own; the downloads
- still come from nodejs.org and python-build-standalone and must match the
- checksum.
+ and the newest WP-CLI release, with their checksums. Hostashi takes a pin
+ from this package only when it is newer than its own (for Node.js and
+ CPython only of a line it knows); the downloads still come from their
+ publishers or Hostashi's mirror and must match the checksum.
 CONTROL
 
 # Reproducible: fixed times and owners.

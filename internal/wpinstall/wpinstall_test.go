@@ -128,3 +128,60 @@ func TestPinnedRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInstallFallback(t *testing.T) {
+	body := []byte("<?php // phar")
+	sum := sha512.Sum512(body)
+	rel := agentapi.WPCLIRelease{Version: "9.9.9", SHA512: hex.EncodeToString(sum[:])}
+
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v9.9.9/wp-cli-9.9.9.phar" {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(good.Close)
+
+	// A mirror that is down, and one that serves a wrong file: both are
+	// passed over, and nothing of the wrong file is left in the phar.
+	down := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(down.Close)
+
+	wrong := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<?php system($_GET['x']); // a longer file than the real one"))
+	}))
+	t.Cleanup(wrong.Close)
+
+	root := t.TempDir()
+
+	var out bytes.Buffer
+
+	in := &Installer{Root: root, URL: down.URL, Fallback: []string{wrong.URL, good.URL}, Out: &out, Release: rel}
+	if err := in.Install(t.Context()); err != nil {
+		t.Fatalf("Install: %v\n%s", err, &out)
+	}
+
+	got, err := os.ReadFile(Path(root, rel))
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("phar: %q %v", got, err)
+	}
+
+	if n := strings.Count(out.String(), "trying the next source"); n != 2 {
+		t.Fatalf("log names %d fallbacks:\n%s", n, &out)
+	}
+
+	// Every source fails: the last error.
+	in = &Installer{Root: t.TempDir(), URL: down.URL, Fallback: []string{wrong.URL}, Release: rel}
+	if err := in.Install(t.Context()); !errors.Is(err, ErrChecksum) {
+		t.Fatalf("Install = %v, want ErrChecksum", err)
+	}
+}
+
+func TestSources(t *testing.T) {
+	if MirrorURL != "https://get.hostashi.com/wp-cli" || ReleaseURL != "https://github.com/wp-cli/wp-cli/releases/download" {
+		t.Fatalf("sources %q, %q", MirrorURL, ReleaseURL)
+	}
+}
