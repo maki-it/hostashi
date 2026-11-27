@@ -12,6 +12,7 @@ import (
 // Not parallel: it replaces lookupHost.
 func TestIPv4Only(t *testing.T) {
 	old := lookupHost
+
 	t.Cleanup(func() { lookupHost = old })
 
 	hosts := map[string][]netip.Addr{
