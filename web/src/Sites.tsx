@@ -3,6 +3,8 @@
 import { listProfiles, type Profile } from "./profiles";
 import { LockSimple, LockSimpleOpen, Plus } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import { getBackups, type BackupInfo } from "./backups";
 import { formatBytes, getSiteLimits, type Usage } from "./limits";
 import { relativeTime } from "./ui/Time";
@@ -163,19 +165,19 @@ function backupOf(info: BackupInfo, s: Site): { word: string; tone?: "err" | "wa
   const st = info.status;
   const item = st.items.find((i) => i.site === s.name && i.kind === "files");
   if (!info.ready || !item || !st.finished) return { word: "", at: 0 };
-  if (item.error) return { word: "Failed", tone: "err", at: 0 };
+  if (item.error) return { word: i18n.t("sites.list.backupFailed"), tone: "err", at: 0 };
   const at = new Date(st.finished).getTime();
   return { word: relativeTime(new Date(at)), at, ...(info.overdue ? { tone: "warn" as const } : {}) };
 }
 
 const stateFilters = [
-  { value: "", label: "All states" },
-  { value: "active", label: "Active" },
-  { value: "maintenance", label: "Maintenance" },
-  { value: "disabled", label: "Disabled" },
-  { value: "problem", label: "Certificate problems" },
-  { value: "attention", label: "Needs attention" },
-  { value: "staging", label: "Staging sites" },
+  { value: "", key: "all" },
+  { value: "active", key: "active" },
+  { value: "maintenance", key: "maintenance" },
+  { value: "disabled", key: "disabled" },
+  { value: "problem", key: "problem" },
+  { value: "attention", key: "attention" },
+  { value: "staging", key: "staging" },
 ] as const;
 
 function matches(s: Site, q: string, state: string, m: SiteMarks | undefined, disk: Disk | undefined, failing: number, backups: BackupInfo | null): boolean {
@@ -211,7 +213,7 @@ function statusRank(s: Site): number {
 function stateBadge(s: Site) {
   const st = siteStatus(s);
   if (st.key === "active" || st.key === "maintenance") return null;
-  return <Badge tone={st.tone}>{st.key === "disabled" ? "Disabled" : st.word}</Badge>;
+  return <Badge tone={st.tone}>{st.word}</Badge>;
 }
 
 type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>; crons: Record<string, number>; backups: BackupInfo | null };
@@ -219,10 +221,11 @@ type ListData = { marks: Record<string, SiteMarks>; disks: Record<string, Disk>;
 // siteColumns are the columns of the list. Disk and backup come in after
 // the list; the backup column is only there for administrators.
 function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[] {
+  const t = i18n.t;
   const cols: Column<Site>[] = [
     {
       key: "name",
-      header: "Site",
+      header: t("sites.list.columns.site"),
       sortValue: (s) => siteLabel(s).toLowerCase(),
       cell: (s) => {
         const m = marks[s.name];
@@ -233,12 +236,12 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
                 {siteLabel(s)}
               </a>
               {stateBadge(s)}
-              {m?.cloneOf && <Badge tone={m.staging ? "warn" : "off"}>{`${m.staging ? "Staging" : "Copy"} of ${m.cloneOf}`}</Badge>}
+              {m?.cloneOf && <Badge tone={m.staging ? "warn" : "off"}>{t(m.staging ? "sites.list.stagingOf" : "sites.list.copyOf", { source: m.cloneOf })}</Badge>}
             </span>
             <span>
               {s.title && (
                 <>
-                  <span className="ui-mono" title="System name">
+                  <span className="ui-mono" title={t("sites.list.systemName")}>
                     {s.name}
                   </span>
                   {" · "}
@@ -250,10 +253,10 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
         );
       },
     },
-    { key: "type", header: "Type", sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
+    { key: "type", header: t("sites.list.columns.type"), sortValue: (s) => siteTypeLabel(s), cell: (s) => siteTypeLabel(s) },
     {
       key: "disk",
-      header: "Disk",
+      header: t("sites.list.columns.disk"),
       sortValue: (s) => disks[s.name]?.usage.bytes ?? -1,
       cell: (s) => {
         const d = disks[s.name];
@@ -266,7 +269,7 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
                 <span style={{ width: `${Math.min(100, d.usage.bytesPercent)}%` }} />
               </span>
             )}
-            <span>{d.limit > 0 ? `${formatBytes(d.usage.bytes)} of ${formatBytes(d.limit)}` : formatBytes(d.usage.bytes)}</span>
+            <span>{d.limit > 0 ? t("sites.list.diskOf", { used: formatBytes(d.usage.bytes), limit: formatBytes(d.limit) }) : formatBytes(d.usage.bytes)}</span>
           </span>
         );
       },
@@ -275,7 +278,7 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
   if (backups) {
     cols.push({
       key: "backup",
-      header: "Last backup",
+      header: t("sites.list.columns.backup"),
       sortValue: (s) => backupOf(backups, s).at,
       cell: (s) => {
         const b = backupOf(backups, s);
@@ -286,7 +289,7 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
   }
   cols.push({
     key: "status",
-    header: "Status",
+    header: t("sites.list.columns.status"),
     sortValue: (s) => statusRank(s) - ((marks[s.name]?.openFindings ?? 0) > 0 ? 10 : 0) - ((crons[s.name] ?? 0) > 0 ? 5 : 0),
     cell: (s) => {
       const finds = marks[s.name]?.openFindings ?? 0;
@@ -296,22 +299,22 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
           {s.tls.active ? (
             <span className="ui-https">
               <LockSimple size={16} aria-hidden />
-              HTTPS
+              {t("sites.https.on")}
             </span>
           ) : (
             <span className="ui-https ui-https-off">
               <LockSimpleOpen size={16} aria-hidden />
-              HTTP only
+              {t("sites.list.httpOnly")}
             </span>
           )}
           {finds > 0 && (
             <a href={formatHash({ page: "sites", site: { name: s.name, tab: "malware" } })}>
-              <Badge tone="err">{finds === 1 ? "1 virus find" : `${finds} virus finds`}</Badge>
+              <Badge tone="err">{t("sites.alerts.virusFinds", { count: finds })}</Badge>
             </a>
           )}
           {failing > 0 && (
             <a href={formatHash({ page: "sites", site: { name: s.name, tab: "cron" } })}>
-              <Badge tone="warn">{failing === 1 ? "1 cron job fails" : `${failing} cron jobs fail`}</Badge>
+              <Badge tone="warn">{t("sites.alerts.cronFails", { count: failing })}</Badge>
             </a>
           )}
           {siteIssues(s).map((i) => (
@@ -330,7 +333,10 @@ function siteColumns({ marks, disks, crons, backups }: ListData): Column<Site>[]
 // filtered, with the choice kept in the address. "New site" opens the form
 // as its own view (?new=1). Each site's settings are on its own page.
 export function Sites({ query, onQuery, role = "user" }: QueryProps) {
+  const { t } = useTranslation();
   const { sites, marks, php, error, load } = useSites();
+  // The columns read their texts when they are built: build them again in another language.
+  const lang = i18n.language;
   const staff = role === "admin" || role === "manager";
   const disks = usePerSite(
     (sites ?? []).filter((s) => s.state === "active" && hasAccount(s)).map((s) => s.name),
@@ -338,7 +344,7 @@ export function Sites({ query, onQuery, role = "user" }: QueryProps) {
   );
   const crons = usePerSite(activeWith(sites, "cron"), loadCronFailing);
   const backups = useBackupStatus();
-  const columns = useMemo(() => siteColumns({ marks, disks, crons, backups }), [marks, disks, crons, backups]);
+  const columns = useMemo(() => siteColumns({ marks, disks, crons, backups }), [marks, disks, crons, backups, lang]);
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(query);
     if (value) next.set(key, value);
@@ -349,7 +355,7 @@ export function Sites({ query, onQuery, role = "user" }: QueryProps) {
   if (staff && query.get("new") === "1") {
     return (
       <>
-        <PageHead title="New site" description="A site answers for its domains: with PHP, static files, a Node.js app or a program of its own from its own Linux user and home, or as a redirect or reverse proxy." />
+        <PageHead title={t("sites.create.title")} description={t("sites.create.description")} />
         <CreateForm php={php} onChange={load} parked={query.get("domain") ?? ""} parkedTls={query.get("tls") !== "0"} />
       </>
     );
@@ -364,41 +370,41 @@ export function Sites({ query, onQuery, role = "user" }: QueryProps) {
   return (
     <>
       <PageHead
-        title="Sites"
-        description="Every site has its domains and certificate. PHP, static, Node.js and app sites also have their own Linux user; redirect and reverse proxy sites have none."
+        title={t("sites.list.title")}
+        description={t("sites.list.description")}
         actions={
           staff && (
             <a className="ui-btn ui-btn-primary" href={formatHash({ page: "sites", query: new URLSearchParams({ new: "1" }) })}>
               <Plus size={16} aria-hidden="true" />
-              New site
+              {t("sites.list.new")}
             </a>
           )
         }
       />
       {error && <Notice tone="err" title={error} />}
       {!sites ? (
-        !error && <p aria-busy="true">Loading…</p>
+        !error && <p aria-busy="true">{t("common.status.loading")}</p>
       ) : (
         <Card padded={false}>
           <div className="ui-filters">
             <input
               className="ui-input"
               type="search"
-              aria-label="Filter sites"
-              placeholder="Filter by name or domain"
+              aria-label={t("sites.list.filter")}
+              placeholder={t("sites.list.filterPlaceholder")}
               value={query.get("q") ?? ""}
               onChange={(e) => set("q", e.target.value)}
             />
-            <select className="ui-select" aria-label="State" value={state} onChange={(e) => set("state", e.target.value)}>
+            <select className="ui-select" aria-label={t("sites.list.state")} value={state} onChange={(e) => set("state", e.target.value)}>
               {stateFilters.map((f) => (
                 <option key={f.value} value={f.value}>
-                  {f.label}
+                  {t(`sites.list.filters.${f.key}`)}
                 </option>
               ))}
             </select>
           </div>
           <Table
-            label="Sites"
+            label={t("sites.list.title")}
             columns={columns}
             rows={shown}
             rowKey={(s) => s.name}
@@ -409,7 +415,7 @@ export function Sites({ query, onQuery, role = "user" }: QueryProps) {
               next.set("dir", s.dir);
               onQuery(next);
             }}
-            empty={sites.length === 0 ? "No sites yet." : "No site matches the filter."}
+            empty={sites.length === 0 ? t("sites.list.empty") : t("sites.list.noMatch")}
           />
         </Card>
       )}
@@ -441,19 +447,13 @@ export function SiteTypeChoice<T extends ChosenType>({
   /** Leaves out this type, for example the site's current one. */
   except?: ChosenType;
 }) {
-  const all: { value: ChosenType; label: string; hint: string }[] = [
-    { value: "php", label: "PHP", hint: "WordPress, Laravel, TYPO3 and other PHP software." },
-    { value: "static", label: "Static", hint: "HTML, CSS and JavaScript, for example the build of Hugo, Astro or a single-page app. No PHP." },
-    { value: "node", label: "Node.js", hint: "An app such as Next.js, Nuxt or Express that runs all the time as the site's user. Requests go to its port." },
-    { value: "python", label: "Python", hint: "A Django, Flask or FastAPI app that runs all the time as the site's user, from its own environment .venv. Requests go to its port." },
-    { value: "app", label: "App", hint: "A program of your own, for example a Go or Rust service, that runs all the time as the site's user. Requests go to its port." },
-    { value: "proxy", label: "Reverse proxy", hint: "Passes every request to another web server, for example an app in your network. No files, no Linux account." },
-    { value: "redirect", label: "Redirect", hint: "Sends every address to another one, for example an old domain to the new one. No files, no Linux account." },
-  ];
+  const { t } = useTranslation();
+  const order: ChosenType[] = ["php", "static", "node", "python", "app", "proxy", "redirect"];
+  const all = order.map((v) => ({ value: v, label: t(`sites.type.${v}`), hint: t(`sites.choice.${v}`) }));
   const choices = all.filter((c) => c.value !== except && (withRedirect || !(webOnly(c.value) || c.value === "node" || c.value === "python" || c.value === "app"))) as { value: T; label: string; hint: string }[];
   return (
     <fieldset className="ui-fieldset ui-stack-tight">
-      <legend>Type</legend>
+      <legend>{t("sites.choice.legend")}</legend>
       {choices.map((c) => (
         <label key={c.value} className="ui-check ui-check-hint">
           <input type="radio" name={name} value={c.value} checked={value === c.value} disabled={disabled} onChange={() => onChange(c.value)} />
@@ -470,14 +470,19 @@ export function SiteTypeChoice<T extends ChosenType>({
 // PHPOptions lists the installed versions, newest first, legacy ones marked.
 // A current version that is no longer installed stays selectable.
 export function PHPOptions({ php, current = "", withoutNone = false }: { php: PHPVersions | null; current?: string; withoutNone?: boolean }) {
+  const { t } = useTranslation();
   return (
     <>
-      {!withoutNone && <option value="">No PHP</option>}
+      {!withoutNone && <option value="">{t("sites.phpOptions.none")}</option>}
       {phpChoices(php, current).map((v) => (
         <option key={v} value={v}>
-          PHP {v}
-          {php?.legacy.includes(v) ? " (legacy)" : ""}
-          {php && !php.installed.includes(v) ? " (not installed)" : ""}
+          {[
+            t("sites.phpOptions.version", { version: v }),
+            php?.legacy.includes(v) && t("sites.phpOptions.legacy"),
+            php && !php.installed.includes(v) && t("sites.phpOptions.notInstalled"),
+          ]
+            .filter(Boolean)
+            .join(" ")}
         </option>
       ))}
     </>
@@ -493,6 +498,7 @@ type CreateProps = {
 };
 
 function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [title, setTitleText] = useState("");
   const [domains, setDomainsText] = useState(parked);
@@ -548,12 +554,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
 
   const profileChoice = (
     <Field
-      label="Application"
-      hint={
-        chosenProfile?.webDir
-          ? `Serves the ${chosenProfile.webDir} folder and brings the hardening rules for ${chosenProfile.title}; both can be changed later.`
-          : "Brings fitting hardening rules; they can be changed later under Security."
-      }
+      label={t("sites.create.application")}
+      hint={chosenProfile?.webDir ? t("sites.create.applicationHintDir", { dir: chosenProfile.webDir, profile: chosenProfile.title }) : t("sites.create.applicationHint")}
     >
       <select className="ui-select" value={profileValue} onChange={(e) => setProfile(e.target.value)}>
         {kindProfiles.map((p) => (
@@ -584,12 +586,12 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     setError("");
     try {
       if (tooOld) {
-        setError(`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`);
+        setError(t("sites.create.needsPhp", { profile: chosenProfile!.title, version: chosenProfile!.minPhp }));
         setBusy(false);
         return;
       }
       if (kind === "php" && !phpValue) {
-        setError("No PHP version is installed. Install one under PHP, or create a static site.");
+        setError(t("sites.create.noPhp"));
         setBusy(false);
         return;
       }
@@ -621,21 +623,17 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
   return (
     <Card>
       <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-        {parked && <Notice tone="info" title={`${parked} is parked. Its parking page ends when the site is live.`} />}
+        {parked && <Notice tone="info" title={t("sites.create.parked", { domain: parked })} />}
         <Field
-          label="Name"
-          hint={
-            webOnly(kind)
-              ? "The name of the site in the panel. 2 to 32 characters: lowercase letters, digits, _ and -."
-              : "Becomes the Linux user of the site. 2 to 32 characters: lowercase letters, digits, _ and -."
-          }
+          label={t("sites.create.name")}
+          hint={webOnly(kind) ? t("sites.create.nameHintWeb") : t("sites.create.nameHint")}
         >
           <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} required autoComplete="off" spellCheck={false} />
         </Field>
-        <Field label="Display name (optional)" hint="Shown in the panel instead of the name. Free text, up to 64 characters; it can be changed at any time.">
+        <Field label={t("sites.create.displayName")} hint={t("sites.create.displayNameHint")}>
           <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} autoComplete="off" />
         </Field>
-        <Field label="Domains" hint="One per line. The first one is the primary domain.">
+        <Field label={t("sites.create.domains")} hint={t("sites.create.domainsHint")}>
           <textarea
             className="ui-input ui-textarea"
             value={domains}
@@ -647,7 +645,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
           />
         </Field>
         {choosePool && !webOnly(kind) && (
-          <Field label="Storage pool" hint="Where the site's home lives. A site stays on its pool.">
+          <Field label={t("sites.create.pool")} hint={t("sites.create.poolHint")}>
             <select className="ui-select" value={pool} onChange={(e) => setPool(e.target.value)}>
               {pools.map((p) => (
                 <option key={p.name} value={p.name} disabled={!p.available}>
@@ -661,24 +659,24 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         <SiteTypeChoice value={kind} onChange={setKind} name="new-site-type" withRedirect />
         {kind === "php" && (
           <>
-            <Field label="PHP version">
+            <Field label={t("sites.create.phpVersion")}>
               <select className="ui-select" value={phpValue} onChange={(e) => setVersion(e.target.value)}>
                 <PHPOptions php={php} withoutNone />
               </select>
             </Field>
             {php?.legacy.includes(phpValue) && (
-              <p className="ui-hint ui-flush">PHP {phpValue} gets no or only security fixes upstream. Use it only for software that needs it.</p>
+              <p className="ui-hint ui-flush">{t("sites.create.legacy", { version: phpValue })}</p>
             )}
             <p className="ui-hint ui-flush">
-              Only installed versions are listed. <a href="#/php">Install more PHP versions</a>
+              <Trans i18nKey="sites.create.onlyInstalled" components={{ a: <a href="#/php" /> }} />
             </p>
             {kindProfiles.length > 1 && profileChoice}
-            {tooOld && <Notice tone="warn" title={`${chosenProfile!.title} needs PHP ${chosenProfile!.minPhp} or newer.`} />}
+            {tooOld && <Notice tone="warn" title={t("sites.create.needsPhp", { profile: chosenProfile!.title, version: chosenProfile!.minPhp })} />}
           </>
         )}
         {kind === "static" && kindProfiles.length > 1 && profileChoice}
         {kind === "static" && (
-          <p className="ui-hint ui-flush">The web root folder, a fallback for single-page apps and asset caching can be set on the site's Web tab.</p>
+          <p className="ui-hint ui-flush">{t("sites.create.staticHint")}</p>
         )}
         {kind === "node" && <NodeFields value={nodeValue} onChange={setNodeValue} status={nodeStatus} disabled={busy} admin />}
         {kind === "app" && <ProgramFields value={program} onChange={setProgramValue} disabled={busy} />}
@@ -687,21 +685,21 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">
           <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
-          HTTPS with a Let's Encrypt certificate
+          {t("sites.create.tls")}
         </label>
         {tls && (
           <label className="ui-check">
             <input type="checkbox" checked={hsts} onChange={(e) => setHsts(e.target.checked)} />
-            HSTS: browsers use only HTTPS for this site
+            {t("sites.create.hsts")}
           </label>
         )}
-        {tls && <p className="ui-hint ui-flush">The domains must point to this server, or the certificate cannot be issued.</p>}
+        {tls && <p className="ui-hint ui-flush">{t("sites.create.tlsHint")}</p>}
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Creating…" : "Create site"}
+            {busy ? t("sites.create.creating") : t("sites.create.submit")}
           </Button>
-          <a href={formatHash({ page: "sites" })}>Back to the sites</a>
+          <a href={formatHash({ page: "sites" })}>{t("sites.create.back")}</a>
         </div>
       </form>
     </Card>

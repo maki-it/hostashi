@@ -8,8 +8,9 @@ import auth from "./auth.json";
 import common from "./common.json";
 import errors from "./errors.json";
 import shell from "./shell.json";
+import sites from "./sites.json";
 import tokens from "./tokens.json";
 
-const de: Catalog = { account, auth, common, errors, shell, tokens };
+const de: Catalog = { account, auth, common, errors, shell, sites, tokens };
 
 export default de;

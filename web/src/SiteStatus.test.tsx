@@ -48,7 +48,7 @@ describe("StatusTiles", () => {
     const tiles = within(screen.getByRole("list", { name: "Status of blog" }));
 
     const https = tiles.getByRole("link", { name: /HTTPS/ });
-    expect(https).toHaveTextContent("Valid until 2027-02-14");
+    expect(https).toHaveTextContent("Valid until 14 Feb 2027");
     expect(https).toHaveAttribute("href", "#/sites/blog/https");
     expect(https).not.toHaveAttribute("data-tone");
 

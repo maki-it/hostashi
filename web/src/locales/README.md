@@ -73,12 +73,15 @@ The same English term is always translated the same way.
 | API token | API-Token | das Token |
 | app profile | App-Profil | |
 | audit log | Audit-Log | |
+| availability (site) | Erreichbarkeit | |
 | backup | Backup | das Backup; restore: wiederherstellen |
 | certificate | Zertifikat | |
 | colour scheme | Farbschema | |
 | cron job | Cron-Job | |
 | database | Datenbank | |
+| danger zone | Gefahrenzone | |
 | database server | Datenbankserver | |
+| display name | Anzeigename | a site's title; system name: Systemname |
 | domain | Domain | die Domain |
 | email | E-Mail | mail as a message: Mail |
 | file manager | Dateimanager | |
@@ -91,6 +94,7 @@ The same English term is always translated the same way.
 | one-time code | Einmalcode | |
 | overview | Übersicht | |
 | parked domain | geparkte Domain | |
+| primary domain | Hauptdomain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
 | recovery code | Wiederherstellungscode | |
@@ -102,6 +106,7 @@ The same English term is always translated the same way.
 | settings | Einstellungen | |
 | setup token | Setup-Token | |
 | site | Site | die Site; site user: Site-Benutzer |
+| site type | Site-Typ | static: statisch |
 | staging | Staging | staging copy: Staging-Kopie |
 | storage pool | Storage-Pool | |
 | two-factor | Zwei-Faktor | two-factor authentication: Zwei-Faktor-Anmeldung |

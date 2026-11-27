@@ -4,6 +4,7 @@
 // another one, and "refresh from source" for a staging copy.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import type { Site } from "./sites";
 
 export type CloneInput = {
@@ -74,13 +75,11 @@ export function cloneMessage(err: unknown): string | null {
   if (!(err instanceof ApiError)) return null;
   switch (err.code) {
     case "clone_running":
-      return "A copy of this site is running. Wait until it is done.";
     case "clone_unavailable":
-      return "Copying sites is not available on this panel.";
+    case "not_a_clone":
+      return i18n.t(`sites.clone.errors.${err.code}`);
     case "no_space":
       return err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
-    case "not_a_clone":
-      return "This site is no staging copy of an existing site.";
     default:
       return null;
   }
