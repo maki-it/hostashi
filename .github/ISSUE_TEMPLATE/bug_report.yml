@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Bug report
+description: Something in Hostashi does not work as described
+labels: ["Kind/Bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a security problem? Do not open an issue; report it privately as described in SECURITY.md.
+        Remove passwords, tokens, private keys and customer data from everything you paste below.
+  - type: input
+    id: version
+    attributes:
+      label: Hostashi version
+      description: Output of `hostashi version`, or the version shown in the panel's sidebar.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: distro
+    attributes:
+      label: Distribution
+      options:
+        - Debian 13
+        - Ubuntu 26.04
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - amd64
+        - arm64
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead? Include the exact error message.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Sites → example.com → Backups
+        2. Click …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and checks
+      description: |
+        Helpful: the output of `sudo hostashi doctor` and the matching lines of
+        `journalctl -u hostashi -u hostashi-agent --since "1 hour ago"`.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Hostashi runs on a fresh server it was installed on, not on a server with another panel.
+        - label: I removed secrets and personal data from this report.
+          required: true

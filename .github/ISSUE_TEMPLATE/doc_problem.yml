@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 name: Documentation problem
-description: Report an error, contradiction or gap in the planning documents
+description: Report an error, contradiction or gap in the documentation or the wiki
 labels: ["documentation"]
 body:
   - type: input
