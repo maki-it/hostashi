@@ -2711,9 +2711,15 @@ x test ! -e "/opt/hostashi/node/$NODE_MAJOR" || fail "Node.js $NODE_MAJOR left a
 x test ! -e "/opt/hostashi/node/.old-$NODE_MAJOR" || fail "removed tree of Node.js $NODE_MAJOR left"
 [ "$(api POST /api/v1/node/remove "{\"major\":\"$NODE_MAJOR\"}")" = 409 ] || fail "second removal of Node.js $NODE_MAJOR: $(x cat /tmp/api.out)"
 
-# The web database tool against external servers in containers. This
-# half runs without Pebble, so the tool's address and curl helper are set
-# up here again.
+# The web database tool against external servers in containers. The tool
+# shares the panel's certificate; this half runs without Pebble, so the
+# panel gets an own (self-signed) one, and the curl helper is set up again.
+tlsdir=$(mktemp -d)
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=other.example.com \
+  -addext subjectAltName=DNS:other.example.com -keyout "$tlsdir/key.pem" -out "$tlsdir/cert.pem" 2>/dev/null
+[ "$(api PUT /api/v1/panel/tls/certificate "{\"certificate\":$(jq -Rs . <"$tlsdir/cert.pem"),\"key\":$(jq -Rs . <"$tlsdir/key.pem"),\"allowUntrusted\":true}")" = 200 ] ||
+  fail "own panel certificate: $(x cat /tmp/api.out)"
+rm -rf "$tlsdir"
 p8444() { x curl -sSk --resolve other.example.com:8444:127.0.0.1 -c /tmp/tool.jar -b /tmp/tool.jar "$@"; }
 for _ in $(seq 1 30); do
   [ "$(api GET /api/v1/dbtool)" = 200 ] && x grep -q '"available":true' /tmp/api.out && break
