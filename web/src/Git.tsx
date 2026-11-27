@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   activePreset,
   applyPreset,
@@ -51,6 +53,7 @@ type Props = {
 // GitSettings is the Git tab of a site (ADR-0062): the repository, its
 // keys, the webhook, and the deploys with their logs and rollbacks.
 export function GitSettings({ site, canEdit }: Props) {
+  const { t } = useTranslation();
   const [git, setGitState] = useState<GitSetting | null>(null);
   const [deploys, setDeploys] = useState<Deploy[]>([]);
   const [error, setError] = useState("");
@@ -75,17 +78,17 @@ export function GitSettings({ site, canEdit }: Props) {
   const active = deploys.some((d) => d.state === "queued" || d.state === "running");
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => void load(), 3000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => void load(), 3000);
+    return () => clearInterval(timer);
   }, [active, load]);
 
-  if (!git) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">Loading the Git setting…</p>;
+  if (!git) return error ? <Notice tone="err" title={error} /> : <p aria-busy="true">{t("git.loading")}</p>;
 
   if (!git.configured || editing) {
     if (!canEdit) {
       return (
-        <Card title="Git deploy">
-          <p className="ui-flush">This site does not deploy from Git. An administrator or a manager of the site can set up a repository.</p>
+        <Card title={t("git.title")}>
+          <p className="ui-flush">{t("git.notSetUp")}</p>
         </Card>
       );
     }
@@ -114,6 +117,7 @@ export function GitSettings({ site, canEdit }: Props) {
 }
 
 function DeploysCard({ site, git, deploys, onChange }: { site: Site; git: GitSetting; deploys: Deploy[]; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<number | null>(null);
@@ -137,25 +141,24 @@ function DeploysCard({ site, git, deploys, onChange }: { site: Site; git: GitSet
 
   return (
     <Card
-      title="Deploys"
+      title={t("git.deploys.title")}
       actions={
         <Button variant="primary" disabled={busy || active || needsHostKey || site.disabled} onClick={() => void act(() => startDeploy(site.name))}>
-          {active ? "Deploying…" : "Deploy now"}
+          {active ? t("git.deploys.deploying") : t("git.deploys.deployNow")}
         </Button>
       }
     >
       <div className="ui-stack">
         <p className="ui-flush">
-          A deploy fetches the newest commit of <code>{git.branch}</code> into a new release, runs the build commands as the user {site.name} and only then
-          switches <code>{git.deployDir}</code> to it. A failed build never goes live.
+          <Trans i18nKey="git.deploys.intro" values={{ branch: git.branch, user: site.name, dir: git.deployDir }} components={{ code1: <code />, code2: <code /> }} />
         </p>
-        {needsHostKey && <Notice tone="warn" title="Confirm the server's host key below before the first deploy." />}
-        {site.disabled && <Notice tone="warn" title="The site is disabled: enable it to deploy." />}
+        {needsHostKey && <Notice tone="warn" title={t("git.deploys.needsHostKey")} />}
+        {site.disabled && <Notice tone="warn" title={t("git.deploys.disabled")} />}
         {error && <Notice tone="err" title={error} />}
         {deploys.length === 0 ? (
-          <p className="ui-hint ui-flush">No deploys yet.</p>
+          <p className="ui-hint ui-flush">{t("git.deploys.none")}</p>
         ) : (
-          <ul className="ui-plain-list ui-stack" aria-label={"Deploys of " + site.name}>
+          <ul className="ui-plain-list ui-stack" aria-label={t("git.deploys.list", { site: site.name })}>
             {deploys.map((d) => (
               <DeployRow
                 key={d.id}
@@ -180,11 +183,12 @@ function DeploysCard({ site, git, deploys, onChange }: { site: Site; git: GitSet
 // CommitLink opens the commit at the Git host, when its address gives a
 // web page; otherwise it is the short id alone.
 function CommitLink({ repo, sha }: { repo: string; sha: string }) {
+  const { t } = useTranslation();
   const href = commitURL(repo, sha);
   const code = <code title={sha}>{shortCommit(sha)}</code>;
   if (!href) return code;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={"Commit " + shortCommit(sha) + " at the Git host"}>
+    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={t("git.deploys.commit", { commit: shortCommit(sha) })}>
       {code}
     </a>
   );
@@ -201,6 +205,7 @@ function DeployRow(p: {
   onToggle: () => void;
   onRollback: () => void;
 }) {
+  const { t } = useTranslation();
   const d = p.deploy;
   const w = deployWord(d);
   const [log, setLog] = useState<DeployLog | null>(null);
@@ -219,10 +224,10 @@ function DeployRow(p: {
     };
     void read();
     // The log grows while the run is active.
-    const t = d.state === "running" || d.state === "queued" ? setInterval(() => void read(), 3000) : undefined;
+    const timer = d.state === "running" || d.state === "queued" ? setInterval(() => void read(), 3000) : undefined;
     return () => {
       stop = true;
-      if (t) clearInterval(t);
+      if (timer) clearInterval(timer);
     };
   }, [p.open, p.site.name, d.id, d.kind, d.state]);
 
@@ -230,12 +235,12 @@ function DeployRow(p: {
     <li className="ui-subsection ui-stack-tight">
       <div className="ui-row">
         <strong>#{d.id}</strong>
-        <Badge tone={p.live ? "ok" : w.tone === "ok" ? "off" : w.tone}>{p.live ? "Live" : w.tone === "ok" ? (d.kind === "rollback" ? "Rollback" : "Kept") : w.word}</Badge>
+        <Badge tone={p.live ? "ok" : w.tone === "ok" ? "off" : w.tone}>{p.live ? t("git.words.live") : w.tone === "ok" ? (d.kind === "rollback" ? t("git.words.rollback") : t("git.words.kept")) : w.word}</Badge>
         {d.commit && <CommitLink repo={p.repo} sha={d.commit} />}
         {d.message && <span>{d.message}</span>}
       </div>
       <p className="ui-hint ui-flush">
-        {d.kind === "rollback" ? "Rollback to release " + d.release : "Release " + d.release}
+        {d.kind === "rollback" ? t("git.deploys.rollbackTo", { release: d.release }) : t("git.deploys.release", { release: d.release })}
         {d.author && <> · {d.author}</>} · {sourceLabel(d.source)} · <RelTime iso={d.createdAt} />
         {d.startedAt && d.finishedAt && <> · {duration(d.startedAt, d.finishedAt)}</>}
       </p>
@@ -243,12 +248,12 @@ function DeployRow(p: {
       <div className="ui-row">
         {d.kind === "deploy" && (
           <Button disabled={p.busy} onClick={p.onToggle} aria-expanded={p.open}>
-            {p.open ? "Hide log" : "Show log"}
+            {p.open ? t("git.deploys.hideLog") : t("git.deploys.showLog")}
           </Button>
         )}
         {p.canRollBack && (
           <Button disabled={p.busy} onClick={p.onRollback}>
-            Roll back to this release
+            {t("git.deploys.rollBack")}
           </Button>
         )}
       </div>
@@ -256,12 +261,12 @@ function DeployRow(p: {
         (logError ? (
           <Notice tone="err" title={logError} />
         ) : !log ? (
-          <p aria-busy="true">Loading the log…</p>
+          <p aria-busy="true">{t("git.deploys.loadingLog")}</p>
         ) : (
           <>
-            {log.truncated && <p className="ui-hint ui-flush">The log is long; this is its end.</p>}
-            <pre className="ui-code" aria-label={"Log of deploy " + String(d.id)}>
-              {log.log || "The log is empty."}
+            {log.truncated && <p className="ui-hint ui-flush">{t("git.deploys.truncated")}</p>}
+            <pre className="ui-code" aria-label={t("git.deploys.logLabel", { id: d.id })}>
+              {log.log || t("git.deploys.emptyLog")}
             </pre>
           </>
         ))}
@@ -271,43 +276,44 @@ function DeployRow(p: {
 
 function duration(from: string, to: string): string {
   const s = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000));
-  if (s < 60) return `${s} s`;
-  return s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`;
+  if (s < 60) return i18n.t("git.deploys.seconds", { s });
+  return s % 60 === 0 ? i18n.t("git.deploys.minutes", { m: s / 60 }) : i18n.t("git.deploys.minutesSeconds", { m: Math.floor(s / 60), s: s % 60 });
 }
 
 function RepositoryCard({ site, git, canEdit, onEdit, onChange }: { site: Site; git: GitSetting; canEdit: boolean; onEdit: () => void; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const auth = { none: "Public (https)", token: "Access token (https)", ssh: "Deploy key (SSH)" }[git.auth];
+  const auth = t(`git.repo.auth.${git.auth}`);
 
   return (
-    <Card title="Repository" actions={canEdit ? <Button onClick={onEdit}>Change</Button> : undefined}>
+    <Card title={t("git.repo.title")} actions={canEdit ? <Button onClick={onEdit}>{t("git.repo.change")}</Button> : undefined}>
       <div className="ui-stack">
-        <dl className="ui-facts" aria-label="Repository">
-          <dt>Address</dt>
+        <dl className="ui-facts" aria-label={t("git.repo.title")}>
+          <dt>{t("git.repo.address")}</dt>
           <dd className="ui-mono">{git.url}</dd>
-          <dt>Branch</dt>
+          <dt>{t("git.repo.branch")}</dt>
           <dd className="ui-mono">{git.branch}</dd>
-          <dt>Access</dt>
+          <dt>{t("git.repo.access")}</dt>
           <dd>{auth}</dd>
-          <dt>Deploy directory</dt>
+          <dt>{t("git.repo.deployDir")}</dt>
           <dd className="ui-mono">{git.deployDir}</dd>
-          <dt>Shared paths</dt>
-          <dd className="ui-mono">{git.shared.length ? git.shared.join(", ") : "None"}</dd>
-          <dt>Releases kept</dt>
+          <dt>{t("git.repo.shared")}</dt>
+          <dd className="ui-mono">{git.shared.length ? git.shared.join(", ") : t("git.repo.none")}</dd>
+          <dt>{t("git.repo.keep")}</dt>
           <dd>{git.keep}</dd>
-          <dt>Build time limit</dt>
-          <dd>{git.buildTimeoutMinutes} min</dd>
+          <dt>{t("git.repo.timeout")}</dt>
+          <dd>{t("git.repo.timeoutValue", { count: git.buildTimeoutMinutes })}</dd>
         </dl>
         <div className="ui-stack-tight">
-          <strong>Build commands</strong>
-          {git.commands.length ? <pre className="ui-code">{git.commands.join("\n")}</pre> : <p className="ui-hint ui-flush">None: the files are deployed as they are in the repository.</p>}
+          <strong>{t("git.repo.commands")}</strong>
+          {git.commands.length ? <pre className="ui-code">{git.commands.join("\n")}</pre> : <p className="ui-hint ui-flush">{t("git.repo.noCommands")}</p>}
         </div>
         {canEdit &&
           (confirming ? (
-            <div className="ui-row" role="alertdialog" aria-label="Remove the Git setting">
-              <span>Remove the repository, its key and webhook? The live files stay.</span>
+            <div className="ui-row" role="alertdialog" aria-label={t("git.repo.removeLabel")}>
+              <span>{t("git.repo.removeText")}</span>
               <Button
                 variant="danger"
                 disabled={busy}
@@ -321,16 +327,16 @@ function RepositoryCard({ site, git, canEdit, onEdit, onChange }: { site: Site; 
                     });
                 }}
               >
-                Remove Git setting
+                {t("git.repo.remove")}
               </Button>
               <Button disabled={busy} onClick={() => setConfirming(false)}>
-                Cancel
+                {t("git.repo.cancel")}
               </Button>
             </div>
           ) : (
             <div className="ui-row">
               <Button variant="danger" onClick={() => setConfirming(true)}>
-                Remove Git setting
+                {t("git.repo.remove")}
               </Button>
             </div>
           ))}
@@ -340,7 +346,12 @@ function RepositoryCard({ site, git, canEdit, onEdit, onChange }: { site: Site; 
   );
 }
 
-function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; initial: GitSetting; onCancel?: (() => void) | undefined; onSaved: () => Promise<void> }) {
+/** presetName is a preset's label in the panel's language. */
+const presetName = (label: string) => (label === "Static site (npm build)" ? i18n.t("git.form.presetStatic") : label);
+
+function RepositoryForm(
+{ site, initial, onCancel, onSaved }: { site: Site; initial: GitSetting; onCancel?: (() => void) | undefined; onSaved: () => Promise<void> }) {
+  const { t } = useTranslation();
   const start = inputOf(initial);
   const [url, setUrl] = useState(start.url);
   const [auth, setAuth] = useState<GitAuth>(start.auth);
@@ -395,61 +406,60 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
   }
 
   return (
-    <Card title={initial.configured ? "Change the repository" : "Deploy from Git"}>
-      <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label="Git repository">
+    <Card title={initial.configured ? t("git.form.titleChange") : t("git.form.titleNew")}>
+      <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate aria-label={t("git.form.label")}>
         {!initial.configured && (
           <p className="ui-flush">
-            Hostashi fetches a branch of a repository into a new release below <code>.deploy/releases</code>, runs your build commands as the user{" "}
-            {site.name} and then switches the deploy directory to it in one step. The files now in the deploy directory are kept as the first release.
+            <Trans i18nKey="git.form.intro" values={{ user: site.name }} components={{ code: <code /> }} />
           </p>
         )}
-        <Field label="Repository address" hint="https://github.com/acme/site.git, or git@github.com:acme/site.git for a private repository with a deploy key.">
+        <Field label={t("git.form.url")} hint={t("git.form.urlHint")}>
           <input className="ui-input ui-mono" value={url} onChange={(e) => setUrl(e.target.value)} autoComplete="off" spellCheck={false} />
         </Field>
         <fieldset className="ui-fieldset ui-stack-tight">
-          <legend>Access</legend>
+          <legend>{t("git.form.access")}</legend>
           <label className="ui-check">
             <input type="radio" name="git-auth" checked={auth === "none"} disabled={isSSHURL(url)} onChange={() => setAuth("none")} />
-            Public repository (https)
+            {t("git.form.authNone")}
           </label>
           <label className="ui-check">
             <input type="radio" name="git-auth" checked={auth === "token"} disabled={isSSHURL(url)} onChange={() => setAuth("token")} />
-            Private, with an access token (https)
+            {t("git.form.authToken")}
           </label>
           <label className="ui-check">
             <input type="radio" name="git-auth" checked={auth === "ssh"} disabled={!isSSHURL(url) && url.trim() !== ""} onChange={() => setAuth("ssh")} />
-            Private, with a deploy key (SSH): Hostashi makes the key, you add it to the repository as read only
+            {t("git.form.authSsh")}
           </label>
         </fieldset>
         {auth === "token" && (
           <div className="ui-narrow ui-stack">
             <Field
-              label="Access token"
-              hint={initial.hasToken && initial.auth === "token" ? "Leave empty to keep the stored token." : "A token that can only read this repository. It is stored encrypted and never shown again."}
+              label={t("git.form.token")}
+              hint={initial.hasToken && initial.auth === "token" ? t("git.form.tokenKeep") : t("git.form.tokenHint")}
             >
               <input className="ui-input ui-mono" type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" spellCheck={false} />
             </Field>
-            <Field label="User name for the token" hint="Only if the Git host needs one, such as oauth2 for GitLab.">
+            <Field label={t("git.form.tokenUser")} hint={t("git.form.tokenUserHint")}>
               <input className="ui-input ui-mono" value={tokenUser} onChange={(e) => setTokenUser(e.target.value)} autoComplete="off" spellCheck={false} />
             </Field>
           </div>
         )}
         <div className="ui-narrow ui-stack">
-          <Field label="Branch">
+          <Field label={t("git.form.branch")}>
             <input className="ui-input ui-mono" value={branch} onChange={(e) => setBranch(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
-          <Field label="Deploy directory" hint="The folder below the home that serves the live release, usually htdocs.">
+          <Field label={t("git.form.deployDir")} hint={t("git.form.deployDirHint")}>
             <input className="ui-input ui-mono" value={deployDir} onChange={(e) => setDeployDir(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
         </div>
-        <Field label="Build commands" hint="One command per line, run in the new release as the site user, in this order. A command that fails stops the deploy.">
+        <Field label={t("git.form.commands")} hint={t("git.form.commandsHint")}>
           <textarea className="ui-input ui-textarea ui-mono" rows={4} value={commands} onChange={(e) => {
               setCommands(e.target.value);
               setUndo(null);
             }} spellCheck={false} />
         </Field>
-        <div className="ui-row" role="group" aria-label="Presets">
-          <span className="ui-hint">Presets:</span>
+        <div className="ui-row" role="group" aria-label={t("git.form.presets")}>
+          <span className="ui-hint">{t("git.form.presetsLabel")}</span>
           {presets.map((p) => (
             <Button
               key={p.label}
@@ -461,12 +471,19 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
                 setShared(next.shared);
               }}
             >
-              {p.label}
+              {presetName(p.label)}
             </Button>
           ))}
         </div>
         {undo && (
-          <Notice tone="info" title={`${undo.preset} replaced your own ${undo.edited.join(" and ")}.`}>
+          <Notice
+            tone="info"
+            title={
+              undo.edited.length > 1
+                ? t("git.form.replacedBoth", { preset: presetName(undo.preset) })
+                : t("git.form.replaced", { preset: presetName(undo.preset), what: undo.edited[0] === "build commands" ? t("git.form.editedCommands") : t("git.form.editedShared") })
+            }
+          >
             <Button
               small
               onClick={() => {
@@ -475,13 +492,13 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
                 setUndo(null);
               }}
             >
-              Undo
+              {t("git.form.undo")}
             </Button>
           </Notice>
         )}
         <Field
-          label="Shared paths"
-          hint="One per line, relative to the release, such as .env or wp-content/uploads. They stay across deploys; files the site writes elsewhere are replaced by the next deploy."
+          label={t("git.form.shared")}
+          hint={t("git.form.sharedHint")}
         >
           <textarea className="ui-input ui-textarea ui-mono" rows={3} value={shared} onChange={(e) => {
               setShared(e.target.value);
@@ -489,21 +506,21 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
             }} spellCheck={false} />
         </Field>
         <div className="ui-narrow ui-stack">
-          <Field label="Releases to keep" hint={`For rollbacks; ${minKeep} to ${maxKeep}.`}>
+          <Field label={t("git.form.keep")} hint={t("git.form.keepHint", { min: minKeep, max: maxKeep })}>
             <input className="ui-input" type="number" min={minKeep} max={maxKeep} value={keep} onChange={(e) => setKeep(e.target.value)} />
           </Field>
-          <Field label="Build time limit in minutes" hint={`1 to ${maxBuildMinutes}.`}>
+          <Field label={t("git.form.timeout")} hint={t("git.form.timeoutHint", { max: maxBuildMinutes })}>
             <input className="ui-input" type="number" min={1} max={maxBuildMinutes} value={timeout} onChange={(e) => setTimeoutMin(e.target.value)} />
           </Field>
         </div>
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Saving…" : "Save repository"}
+            {busy ? t("git.form.saving") : t("git.form.save")}
           </Button>
           {onCancel && (
             <Button disabled={busy} onClick={onCancel}>
-              Cancel
+              {t("git.form.cancel")}
             </Button>
           )}
         </div>
@@ -513,6 +530,7 @@ function RepositoryForm({ site, initial, onCancel, onSaved }: { site: Site; init
 }
 
 function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [scanned, setScanned] = useState<HostKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -536,30 +554,30 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
   async function copy() {
     try {
       await navigator.clipboard.writeText(git.publicKey);
-      setCopied("Copied.");
+      setCopied(t("git.keys.copied"));
     } catch {
-      setCopied("Copying is not possible here. Select the key and copy it by hand.");
+      setCopied(t("git.keys.copyFailed"));
     }
   }
 
   return (
-    <Card title="Deploy key and host key">
+    <Card title={t("git.keys.title")}>
       <div className="ui-stack">
-        <Field label="Deploy key" hint="Add it to the repository as a read-only deploy key (GitHub, Gitea and Forgejo: Settings, Deploy keys; GitLab: Settings, Repository, Deploy keys).">
+        <Field label={t("git.keys.deployKey")} hint={t("git.keys.deployKeyHint")}>
           <input readOnly value={git.publicKey} onFocus={(e) => e.currentTarget.select()} className="ui-input ui-mono" spellCheck={false} />
         </Field>
         <div className="ui-row">
-          <Button onClick={() => void copy()}>Copy deploy key</Button>
+          <Button onClick={() => void copy()}>{t("git.keys.copy")}</Button>
           {!replacing && (
             <Button disabled={busy} onClick={() => setReplacing(true)}>
-              Replace deploy key
+              {t("git.keys.replace")}
             </Button>
           )}
           {copied && <span className="ui-hint">{copied}</span>}
         </div>
         {replacing && (
-          <div className="ui-row" role="alertdialog" aria-label="Replace the deploy key">
-            <span>The current key stops working at once. Add the new key to the repository before the next deploy.</span>
+          <div className="ui-row" role="alertdialog" aria-label={t("git.keys.replaceLabel")}>
+            <span>{t("git.keys.replaceText")}</span>
             <Button
               variant="danger"
               disabled={busy}
@@ -571,40 +589,34 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
                 })
               }
             >
-              Replace key
+              {t("git.keys.replaceSubmit")}
             </Button>
             <Button disabled={busy} onClick={() => setReplacing(false)}>
-              Cancel
+              {t("git.keys.cancel")}
             </Button>
           </div>
         )}
         <div className="ui-stack-tight">
-          <strong>Host key of {host || "the server"}</strong>
+          <strong>{t("git.keys.hostKeyOf", { host: host || t("git.keys.theServer") })}</strong>
           {git.hostKey ? (
             <p className="ui-flush">
-              Confirmed: <code>{git.hostKeyFingerprint}</code>. Deploys connect only to a server with this key.
+              <Trans i18nKey="git.keys.confirmed" values={{ fingerprint: git.hostKeyFingerprint }} components={{ code: <code /> }} />
             </p>
           ) : (
-            <p className="ui-flush">Not confirmed yet. Read the key the server presents and compare its fingerprint with the one the Git host publishes.</p>
+            <p className="ui-flush">{t("git.keys.notConfirmed")}</p>
           )}
         </div>
         {scanned && (
-          <section className="ui-card ui-card-body ui-stack ui-attention" aria-label="Scanned host key">
-            <p className="ui-flush">The server presents this key:</p>
+          <section className="ui-card ui-card-body ui-stack ui-attention" aria-label={t("git.keys.scanned")}>
+            <p className="ui-flush">{t("git.keys.presents")}</p>
             <p className="ui-flush">
               <code className="ui-confirm-phrase">{scanned.fingerprint}</code>
             </p>
             <p className="ui-flush">
               {published ? (
-                <>
-                  Compare it with the fingerprints{" "}
-                  <a href={published.href} target="_blank" rel="noreferrer">
-                    {published.label} publishes
-                  </a>
-                  . Trust it only if it matches exactly.
-                </>
+                <Trans i18nKey="git.keys.comparePublished" values={{ host: published.label }} components={{ a: <a href={published.href} target="_blank" rel="noreferrer" /> }} />
               ) : (
-                <>Compare it with the fingerprint your Git server's administrator gives you. Trust it only if it matches exactly.</>
+                t("git.keys.compareOwn")
               )}
             </p>
             <div className="ui-row">
@@ -619,10 +631,10 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
                   })
                 }
               >
-                It matches: trust this key
+                {t("git.keys.trust")}
               </Button>
               <Button disabled={busy} onClick={() => setScanned(null)}>
-                Cancel
+                {t("git.keys.cancel")}
               </Button>
             </div>
           </section>
@@ -630,7 +642,7 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
         {!scanned && (
           <div className="ui-row">
             <Button disabled={busy} onClick={() => void act(async () => setScanned(await scanHostKey(site.name)))}>
-              {busy ? "Reading…" : git.hostKey ? "Read the host key again" : "Read the host key"}
+              {busy ? t("git.keys.reading") : git.hostKey ? t("git.keys.readAgain") : t("git.keys.read")}
             </Button>
           </div>
         )}
@@ -641,6 +653,7 @@ function KeysCard({ site, git, onChange }: { site: Site; git: GitSetting; onChan
 }
 
 function WebhookCard({ site, git, onChange }: { site: Site; git: GitSetting; onChange: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [shown, setShown] = useState<Webhook | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -660,59 +673,58 @@ function WebhookCard({ site, git, onChange }: { site: Site; git: GitSetting; onC
     }
   }
 
-  async function copy(what: string, text: string) {
+  async function copy(done: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(what + " copied.");
+      setCopied(done);
     } catch {
-      setCopied("Copying is not possible here. Select the text and copy it by hand.");
+      setCopied(t("git.webhook.copyFailed"));
     }
   }
 
   return (
-    <Card title="Webhook">
+    <Card title={t("git.webhook.title")}>
       <div className="ui-stack">
         <p className="ui-flush">
-          With the webhook on, a push to <code>{git.branch}</code> deploys the site. GitHub, Gitea, Forgejo and GitLab sign their calls with the secret; a
-          script can send it as <code>Authorization: Bearer</code>.
+          <Trans i18nKey="git.webhook.intro" values={{ branch: git.branch }} components={{ code1: <code />, code2: <code /> }} />
         </p>
         {shown ? (
-          <section className="ui-card ui-card-body ui-stack ui-attention" aria-label="Webhook secret">
-            <strong>Enter these in the Git host now</strong>
-            <p className="ui-flush">The secret is shown only once. Content type: application/json; event: push.</p>
-            <Field label="Payload URL">
+          <section className="ui-card ui-card-body ui-stack ui-attention" aria-label={t("git.webhook.secretLabel")}>
+            <strong>{t("git.webhook.enterNow")}</strong>
+            <p className="ui-flush">{t("git.webhook.once")}</p>
+            <Field label={t("git.webhook.url")}>
               <input readOnly value={address(shown.path)} onFocus={(e) => e.currentTarget.select()} className="ui-input ui-mono" spellCheck={false} />
             </Field>
-            <Field label="Secret">
+            <Field label={t("git.webhook.secret")}>
               <input readOnly value={shown.secret} onFocus={(e) => e.currentTarget.select()} className="ui-input ui-mono" spellCheck={false} />
             </Field>
             <div className="ui-row">
-              <Button onClick={() => void copy("Address", address(shown.path))}>Copy address</Button>
-              <Button onClick={() => void copy("Secret", shown.secret)}>Copy secret</Button>
+              <Button onClick={() => void copy(t("git.webhook.addressCopied"), address(shown.path))}>{t("git.webhook.copyAddress")}</Button>
+              <Button onClick={() => void copy(t("git.webhook.secretCopied"), shown.secret)}>{t("git.webhook.copySecret")}</Button>
               <Button variant="primary" onClick={() => setShown(null)}>
-                I have saved it
+                {t("git.webhook.saved")}
               </Button>
               {copied && <span className="ui-hint">{copied}</span>}
             </div>
           </section>
         ) : git.webhook ? (
           <>
-            <Field label="Payload URL">
+            <Field label={t("git.webhook.url")}>
               <input readOnly value={address(git.webhookPath)} onFocus={(e) => e.currentTarget.select()} className="ui-input ui-mono" spellCheck={false} />
             </Field>
             <div className="ui-row">
               <Button disabled={busy} onClick={() => void act(async () => setShown(await setWebhook(site.name)))}>
-                New secret
+                {t("git.webhook.newSecret")}
               </Button>
               <Button variant="danger" disabled={busy} onClick={() => void act(() => deleteWebhook(site.name))}>
-                Turn webhook off
+                {t("git.webhook.off")}
               </Button>
             </div>
           </>
         ) : (
           <div className="ui-row">
             <Button disabled={busy} onClick={() => void act(async () => setShown(await setWebhook(site.name)))}>
-              Turn webhook on
+              {t("git.webhook.on")}
             </Button>
           </div>
         )}

@@ -1,0 +1,77 @@
+{
+  "title": "SSH und SFTP",
+  "intro": "Melde dich als Benutzer {{user}} mit einem Key an, nie mit einem Passwort. Ein Key gilt nur für SFTP, außer du erlaubst eine Shell; eine Shell kann jeden Befehl als Site-Benutzer ausführen. Anmeldungen sehen den Server so wie der PHP-Code der Site.",
+  "disabled": "Die Site ist deaktiviert: niemand kann sich anmelden, bis sie aktiviert ist. Die Keys bleiben erhalten.",
+  "loading": "SSH-Keys werden geladen…",
+  "none": "Noch keine Keys: niemand kann sich anmelden.",
+  "list": "SSH-Keys von {{site}}",
+  "max": "Eine Site hat höchstens {{max}} Keys.",
+  "addedShell": "Key mit Shell-Zugriff hinzugefügt.",
+  "addedSftp": "Key für SFTP hinzugefügt.",
+  "add": "SSH-Key hinzufügen",
+  "login": {
+    "label": "Anmeldung bei {{site}}",
+    "with": "Anmelden mit",
+    "or": "oder",
+    "copySftp": "SFTP-Befehl kopieren",
+    "copySsh": "SSH-Befehl kopieren",
+    "fingerprints": "Prüf bei der ersten Anmeldung, dass der Server einen dieser Fingerprints zeigt:",
+    "fingerprintsLabel": "Fingerprints der Host-Keys",
+    "failed": "Die Fingerprints der Host-Keys des Servers ließen sich gerade nicht lesen."
+  },
+  "key": {
+    "saved": "Key gespeichert.",
+    "changeLabel": "Key {{label}} ändern",
+    "label": "Bezeichnung",
+    "save": "Key speichern",
+    "cancel": "Abbrechen",
+    "shell": "Shell",
+    "sftpOnly": "Nur SFTP",
+    "details": "Details von Key {{label}}",
+    "fingerprint": "Fingerprint",
+    "type": "Typ",
+    "added": "Hinzugefügt",
+    "deleteLabel": "Key {{label}} löschen",
+    "deleteText": "Diesen Key löschen? Gerade offene Sitzungen laufen weiter.",
+    "deleted": "Key gelöscht.",
+    "delete": "Key löschen",
+    "change": "Ändern",
+    "deleteShort": "Löschen"
+  },
+  "access": {
+    "legend": "Zugriff",
+    "shell": "Shell und SFTP",
+    "sftp": "Nur SFTP",
+    "sftpText": "{{name}}: Dateien hoch- und herunterladen, keine Befehle",
+    "shellText": "{{name}}: zusätzlich ein Terminal, für wp-cli, composer oder git"
+  },
+  "new": {
+    "label": "Neuer SSH-Key",
+    "public": "Öffentlicher Key",
+    "publicHint": "Der Inhalt einer .pub-Datei, zum Beispiel ~/.ssh/id_ed25519.pub. Ed25519, ECDSA oder RSA mit mindestens 3072 Bit.",
+    "keyLabel": "Bezeichnung",
+    "keyLabelHint": "Steht in der Liste, damit du weißt, wessen Key es ist.",
+    "adding": "Wird hinzugefügt…",
+    "submit": "Key hinzufügen",
+    "cancel": "Abbrechen"
+  },
+  "check": {
+    "labelEmpty": "Gib eine Bezeichnung ein, zum Beispiel den Namen des Computers.",
+    "labelLong": "Die Bezeichnung ist länger als {{max}} Zeichen.",
+    "labelSpace": "Die Bezeichnung darf nicht mit einem Leerzeichen beginnen oder enden.",
+    "labelChars": "Die Bezeichnung darf nur Buchstaben, Ziffern, Leerzeichen und . _ - @ + enthalten.",
+    "keyEmpty": "Füg einen öffentlichen Key ein, den Inhalt einer Datei wie id_ed25519.pub.",
+    "keyPrivate": "Das ist ein privater Key. Füg ihn nirgends ein; nimm stattdessen die .pub-Datei.",
+    "keyLines": "Füg einen Key in einer Zeile ein.",
+    "keyType": "Das sieht nicht nach einem unterstützten öffentlichen Key aus. Nutz einen Ed25519-, ECDSA- oder RSA-Key (3072 Bit oder mehr)."
+  },
+  "errors": {
+    "ssh_unavailable": "SSH-Zugriff ist auf diesem Panel nicht verfügbar.",
+    "too_many_ssh_keys": "Eine Site hat höchstens {{max}} Keys. Lösch zuerst einen.",
+    "ssh_key_exists": "Die Site hat diesen Key schon.",
+    "refused": "Der Key wurde abgelehnt: {{reason}}",
+    "site_busy": "Die Site ist gerade nicht aktiv. Lade die Seite gleich neu.",
+    "forbidden": "Nur Admins können SSH-Keys verwalten.",
+    "keyGone": "Diesen Key gibt es nicht mehr. Lade die Seite neu."
+  }
+}

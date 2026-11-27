@@ -6,6 +6,7 @@
 // an optional webhook.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { siteMessage, siteType, type Site } from "./sites";
 
 export type GitAuth = "none" | "token" | "ssh";
@@ -121,21 +122,22 @@ export const maxKeep = 20;
 export const maxBuildMinutes = 60;
 
 export function inputProblem(g: GitInput, hasToken: boolean): string {
+  const t = i18n.t;
   const url = g.url.trim();
-  if (url === "") return "Enter the address of the repository.";
-  if (/^(file|git):\/\//i.test(url) || url.startsWith("/") || url.startsWith(".")) return "Use an https:// or SSH address; local paths and git:// are not supported.";
-  if (g.auth === "ssh" && !isSSHURL(url)) return "A deploy key needs an SSH address, like git@github.com:acme/site.git.";
-  if (g.auth !== "ssh" && !/^https:\/\//i.test(url)) return "Without a deploy key the address must start with https://.";
-  if (g.auth === "token" && g.token === "" && !hasToken) return "Enter the access token.";
-  if (g.branch.trim() === "") return "Enter the branch to deploy.";
+  if (url === "") return t("git.check.url");
+  if (/^(file|git):\/\//i.test(url) || url.startsWith("/") || url.startsWith(".")) return t("git.check.local");
+  if (g.auth === "ssh" && !isSSHURL(url)) return t("git.check.sshNeeded");
+  if (g.auth !== "ssh" && !/^https:\/\//i.test(url)) return t("git.check.httpsNeeded");
+  if (g.auth === "token" && g.token === "" && !hasToken) return t("git.check.token");
+  if (g.branch.trim() === "") return t("git.check.branch");
   if (g.deployDir.trim() === "" || g.deployDir.split("/").some((p) => p === ".." || p === ".") || g.deployDir.startsWith("/"))
-    return "The deploy directory is a folder below the home, like htdocs.";
-  if (g.shared.length > maxShared) return `At most ${maxShared} shared paths.`;
-  if (g.shared.some((p) => p.startsWith("/") || p.split("/").includes(".."))) return "Shared paths are relative to the release, like .env.";
-  if (g.commands.length > maxCommands) return `At most ${maxCommands} build commands.`;
-  if (!Number.isInteger(g.keep) || g.keep < minKeep || g.keep > maxKeep) return `Keep ${minKeep} to ${maxKeep} releases.`;
+    return t("git.check.deployDir");
+  if (g.shared.length > maxShared) return t("git.check.sharedMax", { max: maxShared });
+  if (g.shared.some((p) => p.startsWith("/") || p.split("/").includes(".."))) return t("git.check.sharedRelative");
+  if (g.commands.length > maxCommands) return t("git.check.commandsMax", { max: maxCommands });
+  if (!Number.isInteger(g.keep) || g.keep < minKeep || g.keep > maxKeep) return t("git.check.keep", { min: minKeep, max: maxKeep });
   if (!Number.isInteger(g.buildTimeoutMinutes) || g.buildTimeoutMinutes < 1 || g.buildTimeoutMinutes > maxBuildMinutes)
-    return `The build time limit is 1 to ${maxBuildMinutes} minutes.`;
+    return t("git.check.timeout", { max: maxBuildMinutes });
   return "";
 }
 
@@ -237,44 +239,25 @@ export function commitURL(repo: string, sha: string): string {
 export function deployWord(d: Deploy): { word: string; tone: "ok" | "warn" | "err" | "off" } {
   switch (d.state) {
     case "succeeded":
-      return { word: d.kind === "rollback" ? "Rolled back" : "Live", tone: "ok" };
+      return { word: i18n.t(d.kind === "rollback" ? "git.words.rolledBack" : "git.words.live"), tone: "ok" };
     case "failed":
-      return { word: "Failed", tone: "err" };
+      return { word: i18n.t("git.words.failed"), tone: "err" };
     case "running":
-      return { word: "Running", tone: "warn" };
+      return { word: i18n.t("git.words.running"), tone: "warn" };
     default:
-      return { word: "Queued", tone: "off" };
+      return { word: i18n.t("git.words.queued"), tone: "off" };
   }
 }
 
-export const sourceLabel = (s: Deploy["source"]) => ({ panel: "Panel", api: "API", webhook: "Webhook" })[s] ?? s;
+const sources = new Set(["panel", "api", "webhook"]);
+export const sourceLabel = (s: Deploy["source"]) => (sources.has(s) ? i18n.t(`git.sources.${s as "panel"}`) : s);
+
 
 export function gitMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    switch (err.code) {
-      case "git_unavailable":
-        return "Git deploy is not available on this panel.";
-      case "deploy_unavailable":
-        return "Git deploys are not available on this panel: the agent does not answer.";
-      case "git_not_configured":
-        return "Set up the repository first.";
-      case "deploy_running":
-        return "A deploy of this site is running. Wait until it ends.";
-      case "host_key_unconfirmed":
-        return "Confirm the server's host key first.";
-      case "not_ssh":
-        return "The site does not deploy over SSH.";
-      case "ipv4_only":
-        return "The repository's server has only IPv4 addresses and this server has no IPv4 route. An IPv6-only server needs NAT64 to reach it, see the Git deploy page in the wiki.";
-      case "unreachable":
-        return "The repository's server did not answer over SSH. Check the address and port.";
-      case "invalid_host_key":
-        return "This is not a host key Hostashi can pin: Ed25519, ECDSA or RSA with at least 3072 bits.";
-      case "not_deployable":
-        return "Only a successful deploy can be rolled back to.";
-      case "deploy_not_found":
-        return "This deploy is no longer in the history.";
-    }
+    const key = `git.errors.${err.code}`;
+    if (i18n.exists(key)) return (i18n.t as (k: string) => string)(key);
   }
   return siteMessage(err);
+
 }

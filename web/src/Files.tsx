@@ -29,6 +29,8 @@ import {
   ShieldCheck,
 } from "@phosphor-icons/react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import {
   chmod,
   cleanPath,
@@ -90,7 +92,11 @@ export function symbolicMode(mode: string): string {
   }).join("");
 }
 
+/** where names a folder in a sentence: the home folder or its path. */
+const where = (p: string) => (p === "" ? i18n.t("files.home") : p);
+
 export function FileManager({ site, path, onPath }: Props) {
+  const { t } = useTranslation();
   const [listing, setListing] = useState<Listing | null>(null);
   const [listed, setListed] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -164,7 +170,7 @@ export function FileManager({ site, path, onPath }: Props) {
     try {
       await startScan(site.name, paths);
       setSelected(new Set());
-      setScanNote({ tone: "ok", text: paths.length === 1 ? `Virus scan of ${paths[0]} started.` : `Virus scan of ${String(paths.length)} items started.` });
+      setScanNote({ tone: "ok", text: paths.length === 1 ? t("files.scan.one", { path: paths[0] }) : t("files.scan.many", { count: paths.length }) });
     } catch (err) {
       setScanNote({ tone: "err", text: scanMessage(err) });
     } finally {
@@ -212,7 +218,7 @@ export function FileManager({ site, path, onPath }: Props) {
     await load();
     if (failed === 0) {
       setUploads([]);
-      setDone(items.length === 1 ? `${items[0]!.rel} uploaded.` : `${String(items.length)} files uploaded.`);
+      setDone(items.length === 1 ? t("files.upload.one", { name: items[0]!.rel }) : t("files.upload.many", { count: items.length }));
     }
   }
 
@@ -230,8 +236,8 @@ export function FileManager({ site, path, onPath }: Props) {
 
   const download = (e: FileEntry): MenuItem | null => {
     const p = joinPath(path, e.name);
-    if (e.type === "file") return { label: "Download", icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true };
-    if (e.type === "dir") return { label: "Download as ZIP", icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true };
+    if (e.type === "file") return { label: t("files.actions.download"), icon: <DownloadSimple size={16} aria-hidden="true" />, href: downloadUrl(site.name, p), download: true };
+    if (e.type === "dir") return { label: t("files.actions.downloadZip"), icon: <DownloadSimple size={16} aria-hidden="true" />, href: zipUrl(site.name, [p]), download: true };
     return null;
   };
 
@@ -241,14 +247,14 @@ export function FileManager({ site, path, onPath }: Props) {
     const items: MenuItem[] = [];
     const dl = download(e);
     if (phone && dl) items.push(dl);
-    if (editable(e)) items.push({ label: "Edit", icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
-    if (isZip(e)) items.push({ label: "Extract…", icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e, row: e.name }) });
-    items.push({ label: "Rename", icon: <PencilSimpleLine size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "rename", entry: e }) });
-    items.push({ label: "Move…", icon: <ArrowSquareOut size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "move", names: [e.name], row: e.name }) });
-    items.push({ label: "Copy…", icon: <Copy size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "copy", names: [e.name], row: e.name }) });
-    items.push({ label: "Change mode…", icon: <LockKey size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "chmod", names: [e.name], row: e.name }) });
-    if (scanOn) items.push({ label: "Scan for viruses", icon: <ShieldCheck size={16} aria-hidden="true" />, onSelect: () => void scanSelection([joinPath(path, e.name)]) });
-    items.push({ label: "Delete…", icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name], row: e.name }) });
+    if (editable(e)) items.push({ label: t("files.actions.edit"), icon: <NotePencil size={16} aria-hidden="true" />, onSelect: () => setEditing(e) });
+    if (isZip(e)) items.push({ label: t("files.actions.extract"), icon: <FileArchive size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "extract", entry: e, row: e.name }) });
+    items.push({ label: t("files.actions.rename"), icon: <PencilSimpleLine size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "rename", entry: e }) });
+    items.push({ label: t("files.actions.move"), icon: <ArrowSquareOut size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "move", names: [e.name], row: e.name }) });
+    items.push({ label: t("files.actions.copy"), icon: <Copy size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "copy", names: [e.name], row: e.name }) });
+    items.push({ label: t("files.actions.chmod"), icon: <LockKey size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "chmod", names: [e.name], row: e.name }) });
+    if (scanOn) items.push({ label: t("files.actions.scan"), icon: <ShieldCheck size={16} aria-hidden="true" />, onSelect: () => void scanSelection([joinPath(path, e.name)]) });
+    items.push({ label: t("files.actions.delete"), icon: <Trash size={16} aria-hidden="true" />, danger: true, onSelect: () => setDialog({ kind: "delete", names: [e.name], row: e.name }) });
     return items;
   };
 
@@ -263,14 +269,14 @@ export function FileManager({ site, path, onPath }: Props) {
   const columns: Column<FileEntry>[] = [
     {
       key: "select",
-      header: "Select",
+      header: t("files.columns.select"),
       srHeader: true,
       headerCell: (
         <label className="ui-check-cell">
           <input
             type="checkbox"
             className="ui-check"
-            aria-label="Select all"
+            aria-label={t("files.selectAll")}
             checked={allSelected}
             disabled={shown.length === 0}
             onChange={selectAll}
@@ -280,13 +286,13 @@ export function FileManager({ site, path, onPath }: Props) {
       cell: (e) => (
         // The whole cell is the click target, not only the small box.
         <label className="ui-check-cell">
-          <input type="checkbox" className="ui-check" aria-label={"Select " + e.name} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
+          <input type="checkbox" className="ui-check" aria-label={t("files.selectOne", { name: e.name })} checked={selected.has(e.name)} onChange={() => toggle(e.name)} />
         </label>
       ),
     },
     {
       key: "name",
-      header: "Name",
+      header: t("files.columns.name"),
       main: true,
       sortValue: (e) => (e.type === "dir" ? "0" : "1") + e.name,
       cell: (e) =>
@@ -306,14 +312,14 @@ export function FileManager({ site, path, onPath }: Props) {
     },
     {
       key: "size",
-      header: "Size",
+      header: t("files.columns.size"),
       sortValue: (e) => (e.type === "dir" ? -1 : e.size),
-      cell: (e) => (e.type === "file" ? formatSize(e.size) : <span className="ui-hint" aria-label="no size">—</span>),
+      cell: (e) => (e.type === "file" ? formatSize(e.size) : <span className="ui-hint" aria-label={t("files.noSize")}>—</span>),
     },
-    { key: "modified", header: "Modified", sortValue: (e) => e.modified, cell: (e) => <RelTime iso={e.modified} /> },
+    { key: "modified", header: t("files.columns.modified"), sortValue: (e) => e.modified, cell: (e) => <RelTime iso={e.modified} /> },
     {
       key: "mode",
-      header: "Mode",
+      header: t("files.columns.mode"),
       sortValue: (e) => e.mode,
       cell: (e) => (
         <abbr className="ui-mono ui-files-mode" title={symbolicMode(e.mode)}>
@@ -323,27 +329,27 @@ export function FileManager({ site, path, onPath }: Props) {
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("files.columns.actions"),
       srHeader: true,
       cell: (e) => (
         <>
           <span className="ui-phone-hide">
             <RowActions>
               {e.type === "file" && (
-                <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={"Download " + e.name} data-tip="Download">
+                <a className="ui-icon-btn" href={downloadUrl(site.name, joinPath(path, e.name))} download aria-label={t("files.actions.downloadName", { name: e.name })} data-tip={t("files.actions.download")}>
                   <DownloadSimple size={18} aria-hidden="true" />
                 </a>
               )}
               {e.type === "dir" && (
-                <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={"Download " + e.name + " as ZIP"} data-tip="Download as ZIP">
+                <a className="ui-icon-btn" href={zipUrl(site.name, [joinPath(path, e.name)])} download aria-label={t("files.actions.downloadNameZip", { name: e.name })} data-tip={t("files.actions.downloadZip")}>
                   <DownloadSimple size={18} aria-hidden="true" />
                 </a>
               )}
-              <Menu label={"More actions for " + e.name} buttonLabel={"More actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} weight="bold" aria-hidden="true" />} items={entryItems(e, false)} />
+              <Menu label={t("files.actions.more", { name: e.name })} buttonLabel={t("files.actions.more", { name: e.name })} buttonClass="ui-icon-btn" button={<DotsThree size={20} weight="bold" aria-hidden="true" />} items={entryItems(e, false)} />
             </RowActions>
           </span>
           <span className="ui-phone-only">
-            <Menu label={"Actions for " + e.name} buttonLabel={"Actions for " + e.name} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e, true)} />
+            <Menu label={t("files.actions.phone", { name: e.name })} buttonLabel={t("files.actions.phone", { name: e.name })} buttonClass="ui-icon-btn" button={<DotsThree size={20} aria-hidden="true" />} items={entryItems(e, true)} />
           </span>
         </>
       ),
@@ -363,90 +369,90 @@ export function FileManager({ site, path, onPath }: Props) {
       <div className="ui-files-head">
         <Breadcrumb site={site.name} path={path} onPath={onPath} />
         <div className="ui-filters">
-          <input className="ui-input" type="search" aria-label="Filter files" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input className="ui-input" type="search" aria-label={t("files.filterLabel")} placeholder={t("files.filterPlaceholder")} value={filter} onChange={(e) => setFilter(e.target.value)} />
           {/* On a phone the table head is hidden, so the box sits here. */}
           <label className="ui-row ui-phone-only">
             <input type="checkbox" className="ui-check" checked={allSelected} disabled={shown.length === 0} onChange={selectAll} />
-            Select all
+            {t("files.selectAll")}
           </label>
         </div>
-        <div className="ui-row ui-nowrap" role="toolbar" aria-label="Files">
-          <IconButton label="Reload" tipBelow icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
+        <div className="ui-row ui-nowrap" role="toolbar" aria-label={t("files.toolbar")}>
+          <IconButton label={t("files.reload")} tipBelow icon={<ArrowClockwise size={18} aria-hidden="true" />} onClick={() => void load()} />
           <Menu
-            label="Upload"
-            buttonLabel="Upload"
+            label={t("files.upload.menu")}
+            buttonLabel={t("files.upload.menu")}
             buttonClass="ui-btn ui-btn-sm"
             button={
               <>
                 <UploadSimple size={16} aria-hidden="true" />
-                <span className="ui-phone-hide">Upload</span>
+                <span className="ui-phone-hide">{t("files.upload.menu")}</span>
                 <CaretDown size={12} aria-hidden="true" />
               </>
             }
             items={[
-              { label: "Files…", icon: <FileIcon size={16} aria-hidden="true" />, onSelect: () => fileInput.current?.click() },
-              { label: "A folder…", icon: <Folder size={16} aria-hidden="true" />, onSelect: () => folderInput.current?.click() },
+              { label: t("files.upload.files"), icon: <FileIcon size={16} aria-hidden="true" />, onSelect: () => fileInput.current?.click() },
+              { label: t("files.upload.folder"), icon: <Folder size={16} aria-hidden="true" />, onSelect: () => folderInput.current?.click() },
             ]}
           />
           <Menu
-            label="New"
-            buttonLabel="New"
+            label={t("files.new.menu")}
+            buttonLabel={t("files.new.menu")}
             buttonClass="ui-btn ui-btn-sm"
             button={
               <>
                 <Plus size={16} aria-hidden="true" />
-                <span className="ui-phone-hide">New</span>
+                <span className="ui-phone-hide">{t("files.new.menu")}</span>
                 <CaretDown size={12} aria-hidden="true" />
               </>
             }
             items={[
-              { label: "File", icon: <FilePlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "touch" }) },
-              { label: "Folder", icon: <FolderPlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "mkdir" }) },
+              { label: t("files.new.file"), icon: <FilePlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "touch" }) },
+              { label: t("files.new.folder"), icon: <FolderPlus size={16} aria-hidden="true" />, onSelect: () => setDialog({ kind: "mkdir" }) },
             ]}
           />
         </div>
-        <input ref={fileInput} type="file" multiple hidden aria-label="Files to upload" onChange={(e) => { onPick(e.target.files); e.target.value = ""; }} />
+        <input ref={fileInput} type="file" multiple hidden aria-label={t("files.upload.filesInput")} onChange={(e) => { onPick(e.target.files); e.target.value = ""; }} />
         <input
           ref={folderInput}
           type="file"
           hidden
-          aria-label="Folder to upload"
+          aria-label={t("files.upload.folderInput")}
           {...{ webkitdirectory: "" }}
           onChange={(e) => { onPick(e.target.files); e.target.value = ""; }}
         />
       </div>
         {sel.length > 0 && (
-          <div className="ui-files-selection" role="region" aria-label="Selection">
-            <strong>{sel.length === 1 ? "1 selected" : `${String(sel.length)} selected`}</strong>
+          <div className="ui-files-selection" role="region" aria-label={t("files.selection.label")}>
+            <strong>{t("files.selection.count", { count: sel.length })}</strong>
             {zipHref.length <= maxZipUrl ? (
               <a className="ui-btn" href={zipHref} download>
                 <DownloadSimple size={16} aria-hidden="true" />
-                Download as ZIP
+                {t("files.actions.downloadZip")}
               </a>
             ) : (
-              <span className="ui-hint">Too many entries for one ZIP; download the folder instead.</span>
+              <span className="ui-hint">{t("files.selection.tooManyZip")}</span>
             )}
             <Button icon={<ArrowSquareOut size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "move", names: sel })}>
-              Move
+              {t("files.selection.move")}
             </Button>
             <Button icon={<Copy size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "copy", names: sel })}>
-              Copy
+              {t("files.selection.copy")}
             </Button>
             <Button icon={<LockKey size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "chmod", names: sel })}>
-              Change mode
+              {t("files.selection.chmod")}
             </Button>
             {scanOn &&
               (sel.length <= maxScanPaths ? (
                 <Button icon={<ShieldCheck size={16} aria-hidden="true" />} disabled={scanning} onClick={() => void scanSelection(selPaths)}>
-                  {scanning ? "Starting scan…" : "Scan for viruses"}
+                  {scanning ? t("files.selection.scanning") : t("files.actions.scan")}
                 </Button>
               ) : (
-                <span className="ui-hint">Too many entries for one virus scan; scan the folder instead.</span>
+                <span className="ui-hint">{t("files.selection.tooManyScan")}</span>
               ))}
             <Button variant="danger" icon={<Trash size={16} aria-hidden="true" />} onClick={() => setDialog({ kind: "delete", names: sel })}>
-              Delete
+              {t("files.selection.delete")}
             </Button>
-            <Button onClick={() => setSelected(new Set())}>Clear selection</Button>
+            <Button onClick={() => setSelected(new Set())}>{t("files.selection.clear")}</Button>
           </div>
         )}
       </div>
@@ -458,17 +464,13 @@ export function FileManager({ site, path, onPath }: Props) {
         {scanNote && (
           <Notice tone={scanNote.tone} title={scanNote.text}>
             {scanNote.tone === "ok" && (
-              <>
-                The results appear on the <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })}>Virus scan</a> tab.
-              </>
+              <Trans i18nKey="files.scan.results" components={{ a: <a href={formatHash({ page: "sites", site: { name: site.name, tab: "malware" } })} /> }} />
             )}
           </Notice>
         )}
         {uploads.length > 0 && <Uploads rows={uploads} onClose={() => setUploads([])} />}
-        {listing?.truncated && <Notice tone="warn" title="This folder has more entries than the panel shows. Use SFTP to see all of them." />}
-        {listing !== null && listing.unnamed > 0 && (
-          <Notice tone="warn" title={`${String(listing.unnamed)} entries have names that are not valid UTF-8 and are not shown. Rename them over SFTP.`} />
-        )}
+        {listing?.truncated && <Notice tone="warn" title={t("files.truncated")} />}
+        {listing !== null && listing.unnamed > 0 && <Notice tone="warn" title={t("files.unnamed", { count: listing.unnamed })} />}
         {cardDialog && <DialogCard site={site.name} path={path} dialog={cardDialog} onCancel={() => setDialog(null)} onDone={dialogDone} />}
       </div>
       )}
@@ -487,18 +489,18 @@ export function FileManager({ site, path, onPath }: Props) {
       >
         {listing === null && !loadError ? (
           <p className="ui-card-body" aria-busy="true">
-            Loading…
+            {t("files.loading")}
           </p>
         ) : (
           <Table
-            label={"Files in " + (path === "" ? "the home folder" : path)}
+            label={t("files.tableLabel", { where: where(path) })}
             columns={columns}
             rows={shown}
             rowKey={(e) => e.name}
             sort={sort}
             onSort={setSort}
             compact
-            empty={filter === "" ? "This folder is empty. Drop files here to upload them." : "No entry matches the filter."}
+            empty={filter === "" ? t("files.empty") : t("files.noMatch")}
             after={(e) =>
               rowDialog?.row === e.name ? (
                 <DialogCard site={site.name} path={path} dialog={rowDialog} inline onCancel={() => setDialog(null)} onDone={dialogDone} />
@@ -509,18 +511,18 @@ export function FileManager({ site, path, onPath }: Props) {
         {dragging && (
           <div className="ui-files-dropnote" aria-hidden="true">
             <UploadSimple size={28} aria-hidden="true" />
-            Drop to upload into {path === "" ? "the home folder" : path}
+            {t("files.upload.drop", { where: where(path) })}
           </div>
         )}
         {listing !== null && entries.length > 0 && (
           <p className="ui-files-hint ui-hint ui-phone-hide">
             <UploadSimple size={16} aria-hidden="true" />
-            Drag files or folders from your computer here to upload them.
+            {t("files.upload.dragHint")}
           </p>
         )}
       </div>
       {editing && (
-        <Suspense fallback={<p aria-busy="true">Loading the editor…</p>}>
+        <Suspense fallback={<p aria-busy="true">{t("files.loadingEditor")}</p>}>
           <EditorDialog
             site={site.name}
             path={joinPath(path, editing.name)}
@@ -529,7 +531,7 @@ export function FileManager({ site, path, onPath }: Props) {
               setEditing(null);
               void load();
             }}
-            onSaved={() => setDone(`${editing.name} saved.`)}
+            onSaved={() => setDone(t("files.saved", { name: editing.name }))}
           />
         </Suspense>
       )}
@@ -608,6 +610,7 @@ function useStickyBar(root: RefObject<HTMLDivElement | null>, sentinel: RefObjec
 /** The name of an entry: a folder opens, a text file opens in the editor,
  *  a file too large for it downloads. */
 function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: () => void; onEdit: () => void; href: string }) {
+  const { t } = useTranslation();
   if (entry.type === "dir") {
     return (
       <button type="button" className="ui-files-name ui-link-btn" onClick={onOpen}>
@@ -618,7 +621,7 @@ function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: 
   }
   if (entry.type === "symlink") {
     return (
-      <span className="ui-files-name" title="Symlinks are shown, not followed">
+      <span className="ui-files-name" title={t("files.symlink")}>
         <LinkSimple size={18} aria-hidden="true" />
         <span>
           {entry.name}
@@ -629,7 +632,7 @@ function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: 
   }
   if (editable(entry)) {
     return (
-      <button type="button" className="ui-files-name ui-files-file" onClick={onEdit} aria-label={"Edit " + entry.name}>
+      <button type="button" className="ui-files-name ui-files-file" onClick={onEdit} aria-label={t("files.actions.editName", { name: entry.name })}>
         <FileIcon size={18} aria-hidden="true" />
         <span>{entry.name}</span>
       </button>
@@ -637,7 +640,7 @@ function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: 
   }
   if (entry.type === "file") {
     return (
-      <a className="ui-files-name ui-files-file" href={href} download aria-label={"Download " + entry.name}>
+      <a className="ui-files-name ui-files-file" href={href} download aria-label={t("files.actions.downloadName", { name: entry.name })}>
         <FileIcon size={18} aria-hidden="true" />
         <span>{entry.name}</span>
       </a>
@@ -653,6 +656,7 @@ function EntryName({ entry, onOpen, onEdit, href }: { entry: FileEntry; onOpen: 
 
 /** Renames an entry in its own row: the name becomes a field. */
 function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; path: string; entry: FileEntry; onCancel: () => void; onDone: (msg: string) => void }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(entry.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -676,7 +680,7 @@ function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; pat
     setError("");
     try {
       await rename(site, joinPath(path, entry.name), joinPath(path, value));
-      onDone(`Renamed to ${value}.`);
+      onDone(t("files.done.renamed", { name: value }));
     } catch (err) {
       setError(filesMessage(err));
       setBusy(false);
@@ -684,13 +688,13 @@ function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; pat
   }
 
   return (
-    <form className="ui-files-rename" aria-label={"Rename " + entry.name} onSubmit={(e) => void submit(e)}>
+    <form className="ui-files-rename" aria-label={t("files.rename.label", { name: entry.name })} onSubmit={(e) => void submit(e)}>
       <div className="ui-row ui-nowrap">
         {entry.type === "dir" ? <Folder size={18} aria-hidden="true" /> : <FileIcon size={18} aria-hidden="true" />}
         <input
           ref={input}
           className="ui-input"
-          aria-label="New name"
+          aria-label={t("files.rename.newName")}
           aria-invalid={error ? true : undefined}
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -702,10 +706,10 @@ function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; pat
           }}
         />
         <Button type="submit" variant="primary" small disabled={busy}>
-          Rename
+          {t("files.rename.submit")}
         </Button>
         <Button small disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("files.rename.cancel")}
         </Button>
       </div>
       {error && <p className="ui-error ui-flush">{error}</p>}
@@ -714,9 +718,10 @@ function RenameForm({ site, path, entry, onCancel, onDone }: { site: string; pat
 }
 
 function Breadcrumb({ site, path, onPath }: { site: string; path: string; onPath: (p: string) => void }) {
+  const { t } = useTranslation();
   const parts = path === "" ? [] : path.split("/");
   return (
-    <nav aria-label="Folder" className="ui-files-crumbs">
+    <nav aria-label={t("files.folderNav")} className="ui-files-crumbs">
       <button type="button" className="ui-link-btn" onClick={() => onPath("")} aria-current={parts.length === 0 ? "page" : undefined}>
         <House size={16} aria-hidden="true" />
         {site}
@@ -738,22 +743,23 @@ function Breadcrumb({ site, path, onPath }: { site: string; path: string; onPath
 }
 
 function Uploads({ rows, onClose }: { rows: UploadRow[]; onClose: () => void }) {
+  const { t } = useTranslation();
   const running = rows.some((r) => r.sent < r.size && !r.error);
   return (
-    <section className="ui-stack-tight" aria-label="Uploads">
+    <section className="ui-stack-tight" aria-label={t("files.upload.list")}>
       {rows.map((r) => (
         <div key={r.name} className="ui-row">
           <span className="ui-mono">{r.name}</span>
           {r.error ? (
             <span className="ui-error">{r.error}</span>
           ) : (
-            <progress max={Math.max(r.size, 1)} value={r.size === 0 ? 1 : r.sent} aria-label={"Upload of " + r.name} />
+            <progress max={Math.max(r.size, 1)} value={r.size === 0 ? 1 : r.sent} aria-label={t("files.upload.progress", { name: r.name })} />
           )}
         </div>
       ))}
       {!running && (
         <div>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t("files.upload.close")}</Button>
         </div>
       )}
     </section>
@@ -766,6 +772,7 @@ type DialogProps = { site: string; path: string; dialog: Dialog; inline?: boolea
 const listedNames = 8;
 
 function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: DialogProps) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(initialValue(dialog, path));
   const [overwrite, setOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -774,7 +781,7 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
 
   const problem = check(dialog, value);
   const n = "names" in dialog ? dialog.names.length : 1;
-  const what = "names" in dialog ? (n === 1 ? dialog.names[0]! : `${String(n)} entries`) : "";
+  const what = "names" in dialog ? (n === 1 ? dialog.names[0]! : t("files.dialog.entries", { count: n })) : "";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -785,7 +792,7 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
     setBusy(true);
     setError("");
     try {
-      onDone(await run(site, path, dialog, value, overwrite, (d, t) => setProgress(`${String(d)} of ${String(t)} entries`)));
+      onDone(await run(site, path, dialog, value, overwrite, (done, total) => setProgress(t("files.dialog.progress", { done, total }))));
     } catch (err) {
       setError(filesMessage(err));
       setBusy(false);
@@ -793,14 +800,14 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
   }
 
   const title: Record<Dialog["kind"], string> = {
-    mkdir: "New folder",
-    touch: "New file",
-    rename: "Rename " + ("entry" in dialog ? dialog.entry.name : ""),
-    extract: "Extract " + ("entry" in dialog ? dialog.entry.name : ""),
-    move: "Move " + what,
-    copy: "Copy " + what,
-    chmod: "Change the mode of " + what,
-    delete: n === 1 ? "Delete " + what + "?" : `Delete these ${String(n)} entries?`,
+    mkdir: t("files.dialog.title.mkdir"),
+    touch: t("files.dialog.title.touch"),
+    rename: t("files.dialog.title.rename", { name: "entry" in dialog ? dialog.entry.name : "" }),
+    extract: t("files.dialog.title.extract", { name: "entry" in dialog ? dialog.entry.name : "" }),
+    move: t("files.dialog.title.move", { what }),
+    copy: t("files.dialog.title.copy", { what }),
+    chmod: t("files.dialog.title.chmod", { what }),
+    delete: n === 1 ? t("files.dialog.title.deleteOne", { what }) : t("files.dialog.title.deleteMany", { count: n }),
   };
 
   let body: ReactNode;
@@ -809,9 +816,9 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
     case "mkdir":
     case "touch":
     case "rename":
-      action = dialog.kind === "rename" ? "Rename" : "Create";
+      action = dialog.kind === "rename" ? t("files.dialog.action.rename") : t("files.dialog.action.create");
       body = (
-        <Field label="Name" {...(error ? { error } : {})}>
+        <Field label={t("files.dialog.name")} {...(error ? { error } : {})}>
           <input className="ui-input" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
         </Field>
       );
@@ -819,16 +826,16 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
     case "move":
     case "copy":
     case "extract":
-      action = dialog.kind === "move" ? "Move" : dialog.kind === "copy" ? "Copy" : "Extract";
+      action = dialog.kind === "move" ? t("files.dialog.action.move") : dialog.kind === "copy" ? t("files.dialog.action.copy") : t("files.dialog.action.extract");
       body = (
         <>
-          <Field label="Into the folder" hint="A path in the site's home, for example htdocs/old. Empty is the home itself." {...(error ? { error } : {})}>
+          <Field label={t("files.dialog.into")} hint={t("files.dialog.intoHint")} {...(error ? { error } : {})}>
             <input className="ui-input ui-mono" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
           </Field>
           {dialog.kind === "extract" && (
             <label className="ui-row">
               <input type="checkbox" className="ui-check" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
-              Replace files that exist already
+              {t("files.dialog.overwrite")}
             </label>
           )}
           {progress && <p className="ui-hint" role="status">{progress}</p>}
@@ -836,15 +843,15 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
       );
       break;
     case "chmod":
-      action = "Change mode";
+      action = t("files.dialog.action.chmod");
       body = (
-        <Field label="Mode" hint="Octal, for example 644 for files and 755 for folders. Applies to the entries themselves, not to their content." {...(error ? { error } : {})}>
+        <Field label={t("files.dialog.mode")} hint={t("files.dialog.modeHint")} {...(error ? { error } : {})}>
           <input className="ui-input ui-mono ui-narrow" value={value} onChange={(e) => setValue(e.target.value)} inputMode="numeric" autoFocus />
         </Field>
       );
       break;
     case "delete":
-      action = n === 1 ? "Delete" : `Delete ${String(n)} entries`;
+      action = n === 1 ? t("files.dialog.action.deleteOne") : t("files.dialog.action.deleteMany", { count: n });
       body = (
         <>
           {n > 1 && (
@@ -854,10 +861,10 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
                   {name}
                 </li>
               ))}
-              {n > listedNames && <li className="ui-hint">and {String(n - listedNames)} more</li>}
+              {n > listedNames && <li className="ui-hint">{t("files.dialog.more", { count: n - listedNames })}</li>}
             </ul>
           )}
-          <p className="ui-flush">Folders are deleted with their content. There is no recycle bin; backups are the way back.</p>
+          <p className="ui-flush">{t("files.dialog.deleteText")}</p>
           {error && <Notice tone="err" title={error} />}
         </>
       );
@@ -887,7 +894,7 @@ function DialogCard({ site, path, dialog, inline = false, onCancel, onDone }: Di
           {action}
         </Button>
         <Button disabled={busy} onClick={onCancel}>
-          Cancel
+          {t("files.dialog.cancel")}
         </Button>
       </div>
     </form>
@@ -918,7 +925,7 @@ function check(d: Dialog, value: string): string {
     case "move":
     case "copy":
     case "extract":
-      return cleanPath(value) === null ? "Enter a path without “..”, “.” or empty parts." : "";
+      return cleanPath(value) === null ? i18n.t("files.dialog.badPath") : "";
     case "chmod":
       return modeProblem(value);
     case "delete":
@@ -935,40 +942,41 @@ async function run(
   onProgress: (done: number, total: number) => void,
 ): Promise<string> {
   const paths = "names" in d ? d.names.map((n) => joinPath(path, n)) : [];
-  const where = (p: string) => (p === "" ? "the home folder" : p);
+  const t = i18n.t;
   switch (d.kind) {
     case "mkdir":
       await mkdir(site, joinPath(path, value));
-      return `Folder ${value} created.`;
+      return t("files.done.mkdir", { name: value });
     case "touch":
       await touch(site, joinPath(path, value));
-      return `File ${value} created.`;
+      return t("files.done.touch", { name: value });
     case "rename":
       await rename(site, joinPath(path, d.entry.name), joinPath(path, value));
-      return `Renamed to ${value}.`;
+      return t("files.done.renamed", { name: value });
     case "move": {
       const to = cleanPath(value) ?? "";
       await move(site, paths, to);
-      return `Moved to ${where(to)}.`;
+      return t("files.done.moved", { where: where(to) });
     }
     case "copy": {
       const to = cleanPath(value) ?? "";
       const r = await copy(site, paths, to);
-      return `Copied to ${where(to)}.` + (r.skipped > 0 ? ` ${String(r.skipped)} special files were left out.` : "");
+      return r.skipped > 0 ? t("files.done.copiedSkipped", { where: where(to), count: r.skipped }) : t("files.done.copied", { where: where(to) });
     }
     case "chmod":
       await chmod(site, paths, value.length === 3 ? "0" + value : value);
-      return `Mode set to ${value}.`;
+      return t("files.done.chmod", { mode: value });
     case "delete":
       await remove(site, paths);
-      return paths.length === 1 ? `${d.names[0]!} deleted.` : `${String(paths.length)} entries deleted.`;
+      return paths.length === 1 ? t("files.done.deletedOne", { name: d.names[0]! }) : t("files.done.deletedMany", { count: paths.length });
     case "extract": {
       const to = cleanPath(value) ?? "";
       const r = await extract(site, joinPath(path, d.entry.name), to, overwrite, onProgress);
-      const parts = [`${String(r.files)} files extracted into ${where(to)}`];
-      if (r.kept > 0) parts.push(`${String(r.kept)} existing files kept`);
-      if (r.skipped > 0) parts.push(`${String(r.skipped)} symlinks or special entries skipped`);
+      const parts = [t("files.done.extracted", { count: r.files, where: where(to) })];
+      if (r.kept > 0) parts.push(t("files.done.kept", { count: r.kept }));
+      if (r.skipped > 0) parts.push(t("files.done.skipped", { count: r.skipped }));
       return parts.join(", ") + ".";
+
     }
   }
 }

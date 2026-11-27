@@ -7,10 +7,18 @@ import auth from "./auth.json";
 import backups from "./backups.json";
 import common from "./common.json";
 import errors from "./errors.json";
+import files from "./files.json";
+import git from "./git.json";
+import hardening from "./hardening.json";
+import logs from "./logs.json";
+import malware from "./malware.json";
+import permissions from "./permissions.json";
 import shell from "./shell.json";
+import ssh from "./ssh.json";
 import tokens from "./tokens.json";
+import usage from "./usage.json";
 
-const en = { account, auth, backups, common, errors, shell, tokens };
+const en = { account, auth, backups, common, errors, files, git, hardening, logs, malware, permissions, shell, ssh, tokens, usage };
 
 export type Catalog = typeof en;
 

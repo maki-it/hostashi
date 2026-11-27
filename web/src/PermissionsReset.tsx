@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatCount } from "./format";
+import i18n from "./i18n";
 import { resetMessage, resetPermissions, type PermissionsReset } from "./permissions";
 import { siteMessage, type Site } from "./sites";
 import { Button, Card, Field, Notice } from "./ui";
 
-const count = (n: number, one: string, many: string) => n.toLocaleString("en") + " " + (n === 1 ? one : many);
+// entries counts entries with the language's separators: "1,234 entries" or "1.234 Einträge".
+const entries = (n: number) => i18n.t("permissions.entries", { count: n, n: formatCount(n) });
 
 // PermissionsResetCard gives every file of the site back to its Linux user
 // and resets the modes (ADR-0067), after the site's name is typed.
 export function PermissionsResetCard({ site }: { site: Site }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -39,43 +44,36 @@ export function PermissionsResetCard({ site }: { site: Site }) {
   }
 
   return (
-    <Card title="Reset file permissions">
+    <Card title={t("permissions.title")}>
       <div className="ui-stack">
         <p className="ui-hint ui-flush">
-          Gives every file and folder of the site back to its user <span className="ui-mono">{site.name}</span> and sets the usual modes: folders{" "}
-          <span className="ui-mono">755</span>, files <span className="ui-mono">644</span>, executable files <span className="ui-mono">755</span>. Use it
-          after copying files in as root or when the web server answers 403 for files that exist.
+          <Trans i18nKey="permissions.intro" values={{ user: site.name }} components={{ code1: <span className="ui-mono" />, code2: <span className="ui-mono" />, code3: <span className="ui-mono" />, code4: <span className="ui-mono" /> }} />
         </p>
         <p className="ui-hint ui-flush">
-          Files that were private, such as a <span className="ui-mono">wp-config.php</span> with <span className="ui-mono">600</span>, become readable for
-          the web server. <span className="ui-mono">.ssh</span> stays private. Links are not followed, and files on other file systems stay as they are.
+          <Trans i18nKey="permissions.private" components={{ code1: <span className="ui-mono" />, code2: <span className="ui-mono" />, code3: <span className="ui-mono" /> }} />
         </p>
         {!open ? (
           <div className="ui-row">
             <Button onClick={() => setOpen(true)} disabled={busy}>
-              Reset file permissions
+              {t("permissions.open")}
             </Button>
           </div>
         ) : (
           <form className="ui-stack" onSubmit={(e) => void run(e)}>
             <div className="ui-narrow">
               <Field
-                label={
-                  <>
-                    Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-                  </>
-                }
-                hint="Owners and modes of all files of this site change. Running programs keep running."
+                label={<Trans i18nKey="permissions.confirm" values={{ name: site.name }} components={{ phrase: <code className="ui-confirm-phrase" /> }} />}
+                hint={t("permissions.confirmHint")}
               >
                 <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="ui-row">
               <Button type="submit" variant="danger" disabled={busy || typed !== site.name}>
-                {busy ? "Resetting…" : `Reset file permissions of ${site.name}`}
+                {busy ? t("permissions.resetting") : t("permissions.submit", { name: site.name })}
               </Button>
               <Button disabled={busy} onClick={cancel}>
-                Cancel
+                {t("permissions.cancel")}
               </Button>
             </div>
           </form>
@@ -86,21 +84,23 @@ export function PermissionsResetCard({ site }: { site: Site }) {
             tone={result.skipped > 0 ? "warn" : "ok"}
             title={
               result.changed === 0
-                ? `Nothing to change: all ${count(result.checked, "entry", "entries")} were already right.`
-                : `Changed ${count(result.changed, "entry", "entries")} of ${count(result.checked, "entry", "entries")}.`
+                ? t("permissions.nothing", { checked: entries(result.checked) })
+                : t("permissions.changed", { changed: entries(result.changed), checked: entries(result.checked) })
             }
           >
-            {result.skipped > 0 ? (result.skipped === 1 ? "1 entry was left as it is:" : `${count(result.skipped, "entry", "entries")} were left as they are:`) : undefined}
+            {result.skipped > 0 ? t("permissions.skipped", { count: result.skipped, n: formatCount(result.skipped) }) : undefined}
           </Notice>
         )}
         {result && result.skippedPaths.length > 0 && (
-          <ul className="ui-flush" aria-label="Skipped entries">
+          <ul className="ui-flush" aria-label={t("permissions.skippedList")}>
             {result.skippedPaths.map((s) => (
               <li key={s.path}>
                 <span className="ui-mono">{s.path}</span>: {s.reason}
               </li>
             ))}
-            {result.skipped > result.skippedPaths.length && <li>and {(result.skipped - result.skippedPaths.length).toLocaleString("en")} more</li>}
+            {result.skipped > result.skippedPaths.length && <li>{t("permissions.more", { n: formatCount(result.skipped - result.skippedPaths.length) })
+}</li>}
+
           </ul>
         )}
       </div>

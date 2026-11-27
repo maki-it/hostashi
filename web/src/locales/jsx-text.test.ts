@@ -17,8 +17,10 @@ const src = resolve(import.meta.dirname, "..");
 // aria-describedby hold ids, not text.
 const textAttr = /^(aria-label|aria-description|aria-roledescription|aria-valuetext|alt|placeholder|title|label|hint|description|legend|tip|data-tip|summary|empty|confirm\w*|\w+Label|\w+Title|\w+Text|\w+Hint|\w+Message)$/;
 
-// Text that reads the same in every language: the product name and keys.
-const sameEverywhere = new Set(["Hostashi", "Esc"]);
+// Text that reads the same in every language: the product name, keys,
+// software and technical names.
+const sameEverywhere = new Set(["Hostashi", "Esc", "ClamAV", "CPU", "UTF-8", "CRLF", "LF"]);
+
 
 // One token with a path, domain, flag or code character in it, such as
 // "bin/server", "example.com" or "--config", is an example, not prose.

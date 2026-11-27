@@ -138,6 +138,8 @@ export type EditorOptions = {
   name: string;
   wrap: boolean;
   label: string;
+  /** CodeMirror's own words (the search bar) in the panel's language. */
+  phrases?: Record<string, string>;
   onChange: (doc: string) => void;
   onCursor: (line: number, col: number) => void;
 };
@@ -184,6 +186,8 @@ export function createEditor(o: EditorOptions): EditorHandle {
     }),
   ];
   if (nonce !== "") extensions.push(EditorView.cspNonce.of(nonce));
+  if (o.phrases) extensions.push(EditorState.phrases.of(o.phrases));
+
 
   const view = new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) });
   return {
