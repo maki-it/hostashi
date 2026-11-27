@@ -243,6 +243,10 @@ if (is_string($ticket)) {
     // A ticket replaces whatever session this browser had.
     $_SESSION = [];
     session_regenerate_id(true);
+    // Adminer's CSRF token, made as Adminer makes it. Without one, Adminer
+    // reports any failed connection after the ticket (a wrong CA, a server
+    // that is down) as "Session expired" instead of the server's error.
+    $_SESSION['token'] = bin2hex(random_bytes(16));
     $_SESSION['hostashi'] = [
         'database' => $t['database'], 'user' => $t['user'], 'expires' => $t['expires'],
         'server' => $t['server'], 'tls' => $t['tls'], 'ca' => $t['ca'], 'driver' => $t['driver'],
