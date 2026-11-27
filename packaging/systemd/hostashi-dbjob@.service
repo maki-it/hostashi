@@ -26,10 +26,10 @@ Wants=network-online.target
 # No core dumps: they would hold the job's password and data (ADR-0033).
 LimitCORE=0
 Type=oneshot
-ExecStart=/usr/local/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent run %i
+ExecStart=/usr/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent run %i
 # Marks a job failed that ended without writing its outcome, and removes a
 # password that is still in its record.
-ExecStopPost=/usr/local/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent finish %i
+ExecStopPost=/usr/bin/hostashi dbjob -state-dir /var/lib/hostashi-agent finish %i
 TimeoutStartSec=6h
 ReadWritePaths=-/var/lib/hostashi-agent/dbjobs
 UMask=0077

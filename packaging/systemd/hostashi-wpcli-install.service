@@ -17,7 +17,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/hostashi wpcli-install
+ExecStart=/usr/bin/hostashi wpcli-install
 TimeoutStartSec=10min
 # No core dumps (ADR-0033).
 LimitCORE=0

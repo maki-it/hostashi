@@ -21,7 +21,7 @@ LimitCORE=0
 Type=simple
 User=%i
 Environment=HOSTASHI_FILES_HOME=
-ExecStart=/usr/local/bin/hostashi files-helper "-home=${HOSTASHI_FILES_HOME}"
+ExecStart=/usr/bin/hostashi files-helper "-home=${HOSTASHI_FILES_HOME}"
 # New files readable for the web server, as with SFTP.
 UMask=0022
 
