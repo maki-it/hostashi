@@ -4,6 +4,7 @@
 // API calls and the form model of the card in the "Domains & HTTPS" tab.
 
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 
 export type WebRealIP = {
   cloudflare?: boolean;
@@ -79,7 +80,7 @@ export function fromRealIPForm(f: RealIPForm): {
   if (!f.cloudflare && ranges.length === 0)
     return {
       realIp: {},
-      error: "Choose Cloudflare or enter the addresses of your proxy.",
+      error: i18n.t("realIp.problems.noProxy"),
     };
   const r: WebRealIP = {};
   if (f.cloudflare) r.cloudflare = true;
@@ -91,11 +92,11 @@ export function fromRealIPForm(f: RealIPForm): {
 export function realIPMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === "real_ip_rejected")
-      return "Refused: " + err.message.replace(/^real IP rejected: /, "") + ".";
+      return i18n.t("realIp.errors.rejected", { reason: err.message.replace(/^real IP rejected: /, "") });
     if (err.code === "forbidden")
-      return "Only admins add own proxy addresses. You can switch Cloudflare and the header, or remove addresses.";
-    if (err.code === "not_found") return "The site does not exist anymore.";
+      return i18n.t("realIp.errors.forbidden");
+    if (err.code === "not_found") return i18n.t("realIp.errors.siteGone");
     return err.message;
   }
-  return "The setting could not be loaded or saved. Try again.";
+  return i18n.t("realIp.errors.generic");
 }

@@ -1,0 +1,84 @@
+{
+  "title": "Certificate",
+  "panelTitle": "Panel certificate ({{domain}})",
+  "renew": "Renew now",
+  "none": "No certificate yet.",
+  "renewPending": "A renewal is on its way.",
+  "source": {
+    "legend": "Source",
+    "letsencrypt": "Let's Encrypt, renewed automatically",
+    "custom": "Own certificate, you renew it yourself"
+  },
+  "done": {
+    "letsencrypt": "Let's Encrypt is the source again. The own certificate serves until the new one is there.",
+    "renew": "Renewal requested. The new certificate is there in a minute or two.",
+    "installed": "Certificate installed and served over HTTPS.",
+    "csr": "CSR created. Have it signed, then upload the certificate here without a key.",
+    "deleted": "Certificate deleted."
+  },
+  "delete": {
+    "submit": "Delete certificate",
+    "short": "Delete",
+    "blocked": "Delete certificate ({{hint}})",
+    "offFirst": "turn HTTPS off first",
+    "confirmLabel": "Confirm delete",
+    "question": "Delete the certificate and its key?",
+    "text": "HTTPS is off, so nothing serves this certificate any more. A pending CSR is deleted too."
+  },
+  "facts": {
+    "label": "Live certificate",
+    "from": "From",
+    "own": "Own certificate",
+    "untrusted": "Not publicly trusted",
+    "issuer": "Issuer",
+    "unknown": "unknown",
+    "names": "Names",
+    "validUntil": "Valid until",
+    "expired": "expired",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "renewedBefore": "Renewed 30 days before.",
+    "notRenewed": "Not renewed automatically.",
+    "copyFingerprint": "Copy the SHA-256 fingerprint"
+  },
+  "upload": {
+    "title": "Upload certificate",
+    "short": "Upload",
+    "certificate": "Certificate",
+    "certificateHint": "PEM, starting with -----BEGIN CERTIFICATE-----.",
+    "certificateFile": "Certificate file",
+    "chain": "Chain (optional)",
+    "chainHint": "The intermediate certificates of your CA, if they are not in the certificate field.",
+    "chainFile": "Chain file",
+    "key": "Private key",
+    "keyWithCSR": "Private key (leave empty for the key of the CSR)",
+    "keyHint": "PEM without passphrase. RSA with at least 2048 bits, or ECDSA P-256 or P-384.",
+    "keyFile": "Key file",
+    "keyNotice": "The key passes through your browser and the panel.",
+    "keyNoticeText": "It is stored on the server only, readable by root. With “Create CSR” the key never leaves the server.",
+    "allowUntrusted": "Not publicly trusted (internal CA or self-signed): install anyway",
+    "submit": "Install certificate"
+  },
+  "csr": {
+    "create": "Create CSR",
+    "createKey": "Create key and CSR",
+    "createNew": "Create a new CSR",
+    "intro": "The server creates a key that never leaves it, and a certificate signing request (CSR) for its domains. Have the CSR signed by your CA, then upload the certificate here without a key.",
+    "label": "Certificate signing request",
+    "hint": "Waiting for its certificate. Creating a new one replaces the key.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "download": "Download",
+    "uploadCert": "Upload its certificate"
+  },
+  "problems": {
+    "certPEM": "Paste the certificate in PEM form, starting with -----BEGIN CERTIFICATE-----.",
+    "chainPEM": "The chain must be PEM certificates, or leave it empty.",
+    "chainSize": "Certificate and chain are too large (at most 32 KiB together).",
+    "keyInCert": "A private key belongs in the key field, not with the certificates.",
+    "noKey": "Paste the private key, or create a CSR first.",
+    "encrypted": "The key is protected by a passphrase. Remove it first (openssl pkey -in key.pem -out plain.pem).",
+    "keyPEM": "Paste the private key in PEM form, starting with -----BEGIN PRIVATE KEY-----.",
+    "keySize": "The key is too large (at most 16 KiB)."
+  }
+}
