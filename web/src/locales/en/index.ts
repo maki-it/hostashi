@@ -10,15 +10,19 @@ import errors from "./errors.json";
 import files from "./files.json";
 import git from "./git.json";
 import hardening from "./hardening.json";
+import limits from "./limits.json";
 import logs from "./logs.json";
 import malware from "./malware.json";
+import pages from "./pages.json";
+import parked from "./parked.json";
 import permissions from "./permissions.json";
+import profiles from "./profiles.json";
 import shell from "./shell.json";
 import ssh from "./ssh.json";
 import tokens from "./tokens.json";
 import usage from "./usage.json";
 
-const en = { account, auth, backups, common, errors, files, git, hardening, logs, malware, permissions, shell, ssh, tokens, usage };
+const en = { account, auth, backups, common, errors, files, git, hardening, limits, logs, malware, pages, parked, permissions, profiles, shell, ssh, tokens, usage };
 
 export type Catalog = typeof en;
 

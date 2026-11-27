@@ -1,0 +1,86 @@
+{
+  "title": "Geparkte Domains",
+  "description": "Eine Domain ohne Site, die auf jedem Pfad eine Parkseite zeigt. Sie fällt weg, sobald eine Site die Domain übernimmt.",
+  "allLink": "Alle geparkten Domains",
+  "notParked": "{{domain}} ist nicht geparkt.",
+  "parkedSince": "Geparkt <time/>.",
+  "new": {
+    "button": "Domain parken",
+    "title": "Domain parken",
+    "description": "Eine Domain ohne Site zeigt auf jedem Pfad eine Parkseite."
+  },
+  "https": {
+    "off": "Aus",
+    "on": "An",
+    "failed": "Wartet: der letzte Versuch ist fehlgeschlagen",
+    "waiting": "Wartet auf das Zertifikat",
+    "expires": "Zertifikat läuft <time/> ab"
+  },
+  "tls": {
+    "failed": "Der letzte Zertifikatsversuch ist fehlgeschlagen: {{error}}",
+    "failedText": "Hostashi versucht es innerhalb einer Stunde erneut. Prüfe, ob die Domain auf diesen Server zeigt.",
+    "waiting": "Wartet auf das Zertifikat. Bis dahin wird die Domain über HTTP ausgeliefert."
+  },
+  "edit": {
+    "card": "Seite und HTTPS",
+    "certOffHint": "schalte zuerst oben HTTPS aus",
+    "makeSite": "Site anlegen",
+    "makeSiteText": "Legt eine Site für {{domain}} an. Die Parkseite endet, sobald die Site live ist.",
+    "unpark": "Parken beenden",
+    "unparkText": "Der Webserver antwortet nicht mehr für {{domain}}, und das Zertifikat wird entfernt."
+  },
+  "unpark": {
+    "title": "Parken von {{domain}} beenden?",
+    "text": "Der Webserver antwortet nicht mehr für die Domain, und ihr Zertifikat wird entfernt.",
+    "confirm": "Parken von {{domain}} beenden",
+    "done": "{{domain}} ist nicht mehr geparkt."
+  },
+  "columns": {
+    "domain": "Domain",
+    "page": "Seite",
+    "https": "HTTPS",
+    "created": "Geparkt",
+    "actions": "Aktionen"
+  },
+  "actions": {
+    "change": "Ändern",
+    "changeLabel": "{{domain}} ändern",
+    "makeSite": "Site anlegen",
+    "makeSiteLabel": "Site für {{domain}} anlegen",
+    "unpark": "Parken beenden",
+    "unparkLabel": "Parken von {{domain}} beenden"
+  },
+  "filter": {
+    "label": "Geparkte Domains filtern",
+    "placeholder": "Nach Domain filtern",
+    "page": "Seite",
+    "allPages": "Alle Seiten"
+  },
+  "table": {
+    "label": "Geparkte Domains",
+    "none": "Keine Domain ist geparkt.",
+    "noMatch": "Keine geparkte Domain passt zum Filter."
+  },
+  "form": {
+    "label": "Domain parken",
+    "domain": "Domain",
+    "domainHint": "Eine Domain ohne Site, etwa example.com. Ihr DNS muss auf diesen Server zeigen.",
+    "enterDomain": "Gib eine Domain ein.",
+    "page": "Seite",
+    "pageHint": "Parkseiten verwaltest du unter Wartungsseiten.",
+    "https": "HTTPS mit einem Zertifikat von Let's Encrypt",
+    "parking": "Wird geparkt…",
+    "submit": "Domain parken",
+    "parkedHttp": "{{domain}} ist geparkt. Bis das Zertifikat da ist, wird die Domain über HTTP ausgeliefert.",
+    "parked": "{{domain}} ist geparkt.",
+    "saved": "{{domain}} gespeichert."
+  },
+  "errors": {
+    "domain_taken": "Eine Site nutzt diese Domain bereits.",
+    "domain_reserved": "Diese Domain ist die Adresse des Panels selbst. Wähle eine andere Domain.",
+    "tls_unavailable": "Zertifikate sind auf diesem Panel nicht verfügbar. Parke die Domain ohne HTTPS.",
+    "parked_not_found": "Diese Domain ist nicht mehr geparkt. Lade die Seite neu.",
+    "page_not_found": "Diese Seite gibt es nicht mehr. Lade die Seite neu.",
+    "forbidden": "Nur Admins können Domains parken."
+  }
+}

@@ -5,7 +5,9 @@
 // fonts). A site in maintenance shows its page with 503 to every address
 // that is not allowed.
 
-import { ApiError, request } from "./api";
+import { request } from "./api";
+import { formatNumber } from "./format";
+import i18n, { areaErrorText } from "./i18n";
 import type { Site, SiteMaintenance } from "./sites";
 
 export type PageKind = "maintenance" | "parking";
@@ -58,7 +60,7 @@ export async function openPreview(id: string, open: typeof window.open = window.
   if (tab) tab.opener = null;
   try {
     const { url } = await previewLink(id);
-    if (!tab) return "The browser blocked the new tab. Allow pop-ups for the panel and try again.";
+    if (!tab) return i18n.t("pages.problems.popupBlocked");
     tab.location.href = url;
     return "";
   } catch (err) {
@@ -78,17 +80,17 @@ export async function clientIp(): Promise<string> {
 }
 
 export function fileProblem(file: File | null): string {
-  if (!file) return "Choose an .html or .zip file.";
-  if (!/\.(html?|zip)$/i.test(file.name)) return "Upload an .html file or a .zip file.";
-  if (file.size > maxPageBytes) return "The file is larger than 2 MiB.";
-  if (file.size === 0) return "The file is empty.";
+  if (!file) return i18n.t("pages.problems.chooseFile");
+  if (!/\.(html?|zip)$/i.test(file.name)) return i18n.t("pages.problems.fileType");
+  if (file.size > maxPageBytes) return i18n.t("pages.problems.tooLarge");
+  if (file.size === 0) return i18n.t("pages.problems.empty");
   return "";
 }
 
 export function pageNameProblem(name: string): string {
   const n = name.trim();
-  if (n === "") return "Enter a name.";
-  if ([...n].length > 64) return "Use at most 64 characters.";
+  if (n === "") return i18n.t("pages.problems.enterName");
+  if ([...n].length > 64) return i18n.t("pages.problems.nameTooLong");
   return "";
 }
 
@@ -109,39 +111,13 @@ export function allowIpsProblem(list: string[]): string {
   return "";
 }
 
-export const kindLabel = (k: PageKind) => (k === "maintenance" ? "Maintenance" : "Parking");
+export const kindLabel = (k: PageKind) => (k === "maintenance" ? i18n.t("pages.kinds.maintenance") : i18n.t("pages.kinds.parking"));
 
 export function formatSize(n: number): string {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KiB";
-  return (n / 1024 / 1024).toFixed(2) + " MiB";
+  if (n < 1024) return formatNumber(n) + " B";
+  if (n < 1024 * 1024) return formatNumber(n / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " KiB";
+  return formatNumber(n / 1024 / 1024, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " MiB";
 }
 
-export function pageMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "page_in_use":
-        return "A site or parked domain uses this page. Choose another page there first.";
-      case "page_builtin":
-        return "Built-in pages cannot be changed or deleted.";
-      case "page_not_found":
-        return "This page does not exist any more. Reload the page.";
-      case "too_large":
-        return "The file is larger than 2 MiB.";
-      case "forbidden":
-        return "Only administrators can manage pages.";
-      case "not_found":
-        return "This site does not exist any more. Reload the page.";
-      case "site_busy":
-        return "The site is being created or deleted. Reload the page in a moment.";
-      case "agent_timeout":
-        return "The server did not answer in time. Reload the page to see whether the change was made.";
-      case "agent_unavailable":
-        return "The change could not be completed. Try again.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
-}
+/** pageMessage explains an error of the maintenance pages in the current language. */
+export const pageMessage = (err: unknown): string => areaErrorText("pages.errors", err);

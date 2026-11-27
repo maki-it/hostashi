@@ -1,0 +1,86 @@
+{
+  "title": "Parked domains",
+  "description": "A domain without a site that shows a parking page on every path. It is dropped when a site takes the domain.",
+  "allLink": "All parked domains",
+  "notParked": "{{domain}} is not parked.",
+  "parkedSince": "Parked <time/>.",
+  "new": {
+    "button": "Park a domain",
+    "title": "Park a domain",
+    "description": "A domain without a site shows a parking page on every path."
+  },
+  "https": {
+    "off": "Off",
+    "on": "On",
+    "failed": "Waiting: the last attempt failed",
+    "waiting": "Waiting for the certificate",
+    "expires": "Certificate expires <time/>"
+  },
+  "tls": {
+    "failed": "The last certificate attempt failed: {{error}}",
+    "failedText": "Hostashi tries again within an hour. Check that the domain points to this server.",
+    "waiting": "Waiting for the certificate. The domain is served over HTTP until it is there."
+  },
+  "edit": {
+    "card": "Page and HTTPS",
+    "certOffHint": "turn HTTPS off above first",
+    "makeSite": "Make a site",
+    "makeSiteText": "Creates a site for {{domain}}. The parking page ends when the site is live.",
+    "unpark": "Unpark",
+    "unparkText": "The web server stops answering for {{domain}} and its certificate is removed."
+  },
+  "unpark": {
+    "title": "Unpark {{domain}}?",
+    "text": "The web server stops answering for it and its certificate is removed.",
+    "confirm": "Unpark {{domain}}",
+    "done": "{{domain}} is no longer parked."
+  },
+  "columns": {
+    "domain": "Domain",
+    "page": "Page",
+    "https": "HTTPS",
+    "created": "Parked",
+    "actions": "Actions"
+  },
+  "actions": {
+    "change": "Change",
+    "changeLabel": "Change {{domain}}",
+    "makeSite": "Make site",
+    "makeSiteLabel": "Make a site of {{domain}}",
+    "unpark": "Unpark",
+    "unparkLabel": "Unpark {{domain}}"
+  },
+  "filter": {
+    "label": "Filter parked domains",
+    "placeholder": "Filter by domain",
+    "page": "Page",
+    "allPages": "All pages"
+  },
+  "table": {
+    "label": "Parked domains",
+    "none": "No domain is parked.",
+    "noMatch": "No parked domain matches the filter."
+  },
+  "form": {
+    "label": "Park a domain",
+    "domain": "Domain",
+    "domainHint": "A domain without a site, like example.com. Its DNS must point to this server.",
+    "enterDomain": "Enter a domain.",
+    "page": "Page",
+    "pageHint": "Parking pages are managed under Maintenance pages.",
+    "https": "HTTPS with a Let's Encrypt certificate",
+    "parking": "Parking…",
+    "submit": "Park domain",
+    "parkedHttp": "{{domain}} is parked. It is served over HTTP until its certificate is there.",
+    "parked": "{{domain}} is parked.",
+    "saved": "{{domain}} saved."
+  },
+  "errors": {
+    "domain_taken": "A site already uses this domain.",
+    "domain_reserved": "This domain is the panel's own address. Choose another domain.",
+    "tls_unavailable": "Certificates are not available on this panel. Park the domain without HTTPS.",
+    "parked_not_found": "This domain is not parked any more. Reload the page.",
+    "page_not_found": "This page does not exist any more. Reload the page.",
+    "forbidden": "Only administrators can park domains."
+  }
+}

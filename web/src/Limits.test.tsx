@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { LimitSettings, Presets } from "./Limits";
 import { fieldsOf, formatBytes, GiB, limitsOf, MiB, type Limits, type Preset, type SiteLimits } from "./limits";
 import type { Site } from "./sites";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const site: Site = {
@@ -296,5 +297,30 @@ describe("Presets", () => {
     await userEvent.click((await rowOf("medium")).getByRole("button", { name: "Make medium the default" }));
     expect(await screen.findByText("New sites now get the preset medium.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({ name: "medium", default: true });
+  });
+});
+
+describe("in German", () => {
+  it("shows the presets and a site's limits with German words and numbers", async () => {
+    setLanguage("de");
+    mockFetch({
+      "GET /api/v1/limit-presets": { body: { presets: [presets[0], { ...presets[1]!, limits: { ...small, cpuQuotaPercent: 150 } }], cpus: 4 } },
+      ["GET " + base]: { body: { ...onSmall, limits: { ...small, cpuQuotaPercent: 150 } } },
+    });
+    const { unmount } = render(<Harness />);
+    const table = await screen.findByRole("table", { name: "Limit-Vorlagen" });
+    const def = within(within(table).getByText("small", { selector: "strong" }).closest("tr")!);
+    expect(def.getByText("Standard")).toBeInTheDocument();
+    expect(def.getByRole("cell", { name: "1,5" })).toBeInTheDocument();
+    expect(screen.getByText("Dieser Server hat 4 CPU-Kerne.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Neue Vorlage" })).toBeInTheDocument();
+    unmount();
+
+    render(<LimitSettings site={site} />);
+    expect(await screen.findByText("Vorlage: small")).toBeInTheDocument();
+    const facts = within(screen.getByLabelText("Limits von blog"));
+    expect(facts.getByText("Priorität: Normal, höchstens 1,5 CPU-Kerne")).toBeInTheDocument();
+    expect(screen.getByText("Füllt sich")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Limits speichern" })).toBeInTheDocument();
   });
 });
