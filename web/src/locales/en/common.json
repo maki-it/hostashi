@@ -1,0 +1,19 @@
+{
+  "actions": {
+    "back": "Back",
+    "tryAgain": "Try again"
+  },
+  "roles": {
+    "admin": "admin",
+    "manager": "manager",
+    "user": "user"
+  },
+  "time": {
+    "justNow": "just now"
+  },
+  "errors": {
+    "generic": "Something went wrong. Try again.",
+    "unknown": "Something went wrong ({{code}}). Try again.",
+    "unreachable": "The server is not reachable."
+  }
+}

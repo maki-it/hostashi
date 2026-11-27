@@ -37,6 +37,8 @@ path = [
   "web/package-lock.json",
   "web/tsconfig.json",
   "web/public/**",
+  "web/src/locales/*/*.json",
+  "web/src/locales/pending.json",
   "internal/statuspage/builtin/*.html",
   "internal/firewall/testdata/*.nft",
   "packaging/keyring/*.asc",

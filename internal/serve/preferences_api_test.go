@@ -13,12 +13,12 @@ func TestColorSchemePerUser(t *testing.T) {
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c})
-	if !strings.Contains(rec.Body.String(), `"colorScheme":"system","theme":"default"`) {
+	if !strings.Contains(rec.Body.String(), `"colorScheme":"system","theme":"default","language":"auto"`) {
 		t.Fatalf("default: %s", rec.Body)
 	}
 
 	rec = e.do(t, reqOpts{method: "PATCH", path: "/api/v1/me", cookie: c, body: `{"colorScheme":"dark"}`})
-	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"colorScheme":"dark","theme":"default"}` {
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"colorScheme":"dark","theme":"default","language":"auto"}` {
 		t.Fatalf("patch: %d %s", rec.Code, rec.Body)
 	}
 
@@ -27,7 +27,18 @@ func TestColorSchemePerUser(t *testing.T) {
 		t.Fatalf("stored: %s", rec.Body)
 	}
 
-	for _, body := range []string{`{"colorScheme":"blue"}`, `{"theme":"konsole"}`} {
+	// The language changes on its own and keeps the color scheme (ADR-0071).
+	rec = e.do(t, reqOpts{method: "PATCH", path: "/api/v1/me", cookie: c, body: `{"language":"de"}`})
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"colorScheme":"dark","theme":"default","language":"de"}` {
+		t.Fatalf("language: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/auth/me", cookie: c})
+	if !strings.Contains(rec.Body.String(), `"language":"de"`) {
+		t.Fatalf("stored language: %s", rec.Body)
+	}
+
+	for _, body := range []string{`{"colorScheme":"blue"}`, `{"theme":"konsole"}`, `{"language":"fr"}`, `{"language":"DE"}`} {
 		rec = e.do(t, reqOpts{method: "PATCH", path: "/api/v1/me", cookie: c, body: body})
 		if rec.Code != http.StatusUnprocessableEntity || errCode(t, rec) != "invalid_argument" {
 			t.Fatalf("%s: %d %s", body, rec.Code, rec.Body)

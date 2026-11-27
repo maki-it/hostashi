@@ -4155,6 +4155,9 @@
           "colorScheme": {
             "type": "string"
           },
+          "language": {
+            "type": "string"
+          },
           "role": {
             "type": "string"
           },
@@ -4185,6 +4188,7 @@
         },
         "required": [
           "colorScheme",
+          "language",
           "role",
           "secondFactor",
           "secondFactorRequired",
@@ -5746,12 +5750,16 @@
           "colorScheme": {
             "type": "string"
           },
+          "language": {
+            "type": "string"
+          },
           "theme": {
             "type": "string"
           }
         },
         "required": [
           "colorScheme",
+          "language",
           "theme"
         ],
         "type": "object"
@@ -5760,6 +5768,9 @@
         "additionalProperties": false,
         "properties": {
           "colorScheme": {
+            "type": "string"
+          },
+          "language": {
             "type": "string"
           },
           "theme": {
@@ -13329,7 +13340,7 @@
             "session": []
           }
         ],
-        "summary": "Change how the panel looks for the caller",
+        "summary": "Change how the panel looks for the caller and its language",
         "tags": [
           "auth"
         ],

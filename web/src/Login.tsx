@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Fingerprint } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { ApiError } from "./api";
 import { login, loginWithPasskey, message, type User } from "./auth";
 import { Button, Card, Field, Notice } from "./ui";
@@ -12,6 +13,7 @@ type Props = { notice?: string; onLogin: (user: User) => void };
 // Login asks in two steps (ADR-0037): username and password first, then the
 // one-time code only when the account has an authenticator app.
 export function Login({ notice, onLogin }: Props) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -30,7 +32,7 @@ export function Login({ notice, onLogin }: Props) {
       if (err instanceof ApiError && err.code === "totp_required") {
         setNeedCode(true);
       } else if (needCode && err instanceof ApiError && err.code === "invalid_credentials") {
-        setError("Wrong code. Use the current code from your app or a recovery code.");
+        setError(t("auth.login.wrongCode"));
         setCode("");
       } else {
         setError(message(err));
@@ -60,13 +62,13 @@ export function Login({ notice, onLogin }: Props) {
   }
 
   return (
-    <Card title="Log in">
+    <Card title={t("auth.login.title")}>
       <div className="ui-stack">
         {notice && <Notice tone="ok" title={notice} />}
         <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
           {!needCode ? (
             <>
-              <Field label="Username">
+              <Field label={t("auth.login.username")}>
                 <input
                   className="ui-input"
                   name="username"
@@ -78,7 +80,7 @@ export function Login({ notice, onLogin }: Props) {
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </Field>
-              <Field label="Password">
+              <Field label={t("auth.login.password")}>
                 <input
                   className="ui-input"
                   name="password"
@@ -93,9 +95,9 @@ export function Login({ notice, onLogin }: Props) {
           ) : (
             <>
               <p className="ui-flush">
-                Signing in as <strong>{username}</strong>.
+                <Trans i18nKey="auth.login.signingInAs" values={{ username }} components={{ b: <strong /> }} />
               </p>
-              <Field label="One-time code" hint="The 6-digit code from your authenticator app, or a recovery code.">
+              <Field label={t("auth.login.code")} hint={t("auth.login.codeHint")}>
                 <input
                   className="ui-input ui-mono"
                   name="totp"
@@ -113,26 +115,26 @@ export function Login({ notice, onLogin }: Props) {
           {error && <Notice tone="err" title={error} />}
           <div className="ui-auth-actions">
             <Button type="submit" variant="primary" disabled={busy || (needCode ? code.trim() === "" : username === "" || password === "")}>
-              {needCode ? "Verify" : "Log in"}
+              {needCode ? t("auth.login.verify") : t("auth.login.submit")}
             </Button>
             {needCode && (
               <Button icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={back}>
-                Back
+                {t("common.actions.back")}
               </Button>
             )}
           </div>
         </form>
         {!needCode && passkeysSupported() && (
           <>
-            <p className="ui-auth-or">or</p>
+            <p className="ui-auth-or">{t("auth.login.or")}</p>
             <div className="ui-auth-actions">
               <Button icon={<Fingerprint size={16} aria-hidden="true" />} disabled={busy} onClick={() => void passkey()}>
-                Log in with a passkey
+                {t("auth.login.passkey")}
               </Button>
             </div>
           </>
         )}
-        {!needCode && <p className="ui-hint ui-flush">Forgot your password? Ask an administrator of this panel.</p>}
+        {!needCode && <p className="ui-hint ui-flush">{t("auth.login.forgot")}</p>}
       </div>
     </Card>
   );

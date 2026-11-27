@@ -108,12 +108,19 @@ type totpDisableRequest struct {
 type preferencesRequest struct {
 	ColorScheme string `json:"colorScheme"`
 	Theme       string `json:"theme"`
+	Language    string `json:"language"`
 }
 
-// preferencesJSON is how the panel looks for the account (ADR-0037).
+// preferencesJSON is how the panel looks for the account (ADR-0037) and
+// its language (ADR-0071): "auto", "en" or "de".
 type preferencesJSON struct {
 	ColorScheme string `json:"colorScheme"`
 	Theme       string `json:"theme"`
+	Language    string `json:"language"`
+}
+
+func toPreferencesJSON(p store.Preferences) preferencesJSON {
+	return preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme, Language: p.Language}
 }
 
 // me returns the second factor state of the account with its name and
@@ -143,7 +150,7 @@ func (a authn) me(w http.ResponseWriter, r *http.Request, u store.User) (meJSON,
 	return meJSON{
 		userJSON:     userJSON{Username: u.Username, Role: u.Role},
 		SecondFactor: has, SecondFactorRequired: req, TOTP: u.TOTPEnabled,
-		preferencesJSON: preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme},
+		preferencesJSON: toPreferencesJSON(p),
 	}, true
 }
 
@@ -576,9 +583,10 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 	})
 
 	// PATCH /api/v1/me changes how the panel looks for the logged-in
-	// account (ADR-0037). Only a browser session can change it.
+	// account (ADR-0037) and its language (ADR-0071). Only a browser
+	// session can change it.
 	mux.Op("PATCH /api/v1/me", openapi.Operation{
-		ID: "updatePreferences", Tag: "auth", Summary: "Change how the panel looks for the caller", In: preferencesRequest{}, Out: preferencesJSON{},
+		ID: "updatePreferences", Tag: "auth", Summary: "Change how the panel looks for the caller and its language", In: preferencesRequest{}, Out: preferencesJSON{},
 	}, func(w http.ResponseWriter, r *http.Request) {
 		u, ok := a.session(w, r)
 		if !ok || !a.secondFactorOK(w, r, u) {
@@ -590,7 +598,7 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 			return
 		}
 
-		p, err := svc.SetPreferences(r.Context(), u.ID, in.ColorScheme, in.Theme)
+		p, err := svc.SetPreferences(r.Context(), u.ID, in.ColorScheme, in.Theme, in.Language)
 		if errors.Is(err, auth.ErrInvalidPreference) {
 			writeError(w, http.StatusUnprocessableEntity, "invalid_argument", err.Error())
 
@@ -603,7 +611,7 @@ func registerAuth(mux *routeMux, svc *auth.Service, m *mailer, log *slog.Logger)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, preferencesJSON{ColorScheme: p.ColorScheme, Theme: p.Theme})
+		writeJSON(w, http.StatusOK, toPreferencesJSON(p))
 	})
 
 	registerTokens(mux, a)

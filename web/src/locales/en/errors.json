@@ -1,0 +1,9 @@
+{
+  "busy": "The server is busy. Try again in a minute.",
+  "invalid_credentials": "Wrong username or password.",
+  "passkey_failed": "The passkey was not accepted.",
+  "passkey_required": "This account logs in with a passkey.",
+  "passkeys_unavailable": "Passkeys are not set up on this server. Log in with your password.",
+  "rate_limited": "Too many attempts. Wait a few minutes and try again.",
+  "setup_not_allowed": "The setup token is wrong or has expired."
+}

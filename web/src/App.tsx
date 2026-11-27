@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Account } from "./Account";
 import { ConfirmEmail } from "./ConfirmEmail";
 import { currentUser, needsSecondFactor, setupRequired, type User } from "./auth";
@@ -36,6 +37,7 @@ import { SitePage } from "./SitePage";
 import { Users } from "./Users";
 import { Button, Notice } from "./ui";
 import { applyScheme, type ColorScheme } from "./scheme";
+import { setLanguage, type Language } from "./i18n";
 
 type View =
   | { kind: "loading" }
@@ -68,6 +70,7 @@ const linkSetupToken = (): string => {
 };
 
 export function App() {
+  const { t } = useTranslation();
   const [view, setView] = useState<View>({ kind: "loading" });
   const [setupToken] = useState(linkSetupToken);
   const [route, setRoute] = useState(() => parseHash(setupToken ? "" : window.location.hash));
@@ -117,6 +120,15 @@ export function App() {
   const scheme: ColorScheme = view.kind === "home" ? (view.user.colorScheme ?? "system") : "system";
   useEffect(() => applyScheme(scheme), [scheme]);
   const onScheme = (s: ColorScheme) => setView((v) => (v.kind === "home" ? { ...v, user: { ...v.user, colorScheme: s } } : v));
+
+  // The account's language applies once logged in; the login and setup
+  // pages, and the panel after logout, follow the browser (ADR-0071). A
+  // layout effect, so the first frame after login is already in it.
+  const language: Language = view.kind === "home" ? (view.user.language ?? "auto") : "auto";
+  useLayoutEffect(() => {
+    setLanguage(language);
+  }, [language]);
+  const onLanguage = (l: Language) => setView((v) => (v.kind === "home" ? { ...v, user: { ...v.user, language: l } } : v));
 
   // locked: the account must set up a second factor first, and the server
   // refuses every other page until then.
@@ -171,7 +183,7 @@ export function App() {
         {show("mail") && <Mail />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
         {show("audit") && <Audit query={route.query} onQuery={replaceQuery} />}
-        {show("account") && <Account user={user} onScheme={onScheme} />}
+        {show("account") && <Account user={user} onScheme={onScheme} onLanguage={onLanguage} />}
         {show("device") && <Device code={route.query.get("code") ?? ""} />}
       </Shell>
     );
@@ -183,7 +195,7 @@ export function App() {
   // noticeably long (CSS delay in base.css).
   if (view.kind === "loading") {
     return (
-      <main className="ui-root ui-boot" aria-busy="true" aria-label="Loading">
+      <main className="ui-root ui-boot" aria-busy="true" aria-label={t("auth.boot.loading")}>
         <span className="ui-boot-spinner" aria-hidden="true" />
       </main>
     );
@@ -199,14 +211,14 @@ export function App() {
         </span>
       </header>
       {view.kind === "error" && (
-        <Notice tone="err" title="The server is not reachable.">
-          <Button onClick={() => void boot()}>Try again</Button>
+        <Notice tone="err" title={t("common.errors.unreachable")}>
+          <Button onClick={() => void boot()}>{t("common.actions.tryAgain")}</Button>
         </Notice>
       )}
       {view.kind === "setup" && (
         <Setup
           initialToken={setupToken}
-          onDone={() => setView({ kind: "login", notice: "Administrator account created. Log in now." })}
+          onDone={() => setView({ kind: "login", notice: t("auth.setup.done") })}
         />
       )}
       {view.kind === "confirm-email" && <ConfirmEmail token={view.token} onDone={() => void boot()} />}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { message, setup } from "./auth";
 import { Button, Card, Field, Notice } from "./ui";
 
@@ -10,6 +11,7 @@ type Props = { initialToken?: string; onDone: () => void };
 // "setup-token" next to the database and is printed by the installer, also
 // as a link that fills it in (initialToken).
 export function Setup({ initialToken = "", onDone }: Props) {
+  const { t } = useTranslation();
   const [token, setToken] = useState(initialToken);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +22,7 @@ export function Setup({ initialToken = "", onDone }: Props) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (password !== repeat) {
-      setError("The passwords do not match.");
+      setError(t("auth.setup.mismatch"));
       return;
     }
     setBusy(true);
@@ -36,15 +38,15 @@ export function Setup({ initialToken = "", onDone }: Props) {
   }
 
   return (
-    <Card title="First-time setup">
+    <Card title={t("auth.setup.title")}>
       <div className="ui-stack">
         <p className="ui-flush">
           {initialToken
-            ? "Create the administrator account. The setup token from the installer's link is filled in."
-            : "Create the administrator account. You need the setup token from the server."}
+            ? t("auth.setup.introLink")
+            : t("auth.setup.intro")}
         </p>
         <form className="ui-stack" onSubmit={(e) => void submit(e)} noValidate>
-          <Field label="Setup token">
+          <Field label={t("auth.setup.token")}>
             <input
               className="ui-input"
               name="token"
@@ -56,7 +58,7 @@ export function Setup({ initialToken = "", onDone }: Props) {
               onChange={(e) => setToken(e.target.value)}
             />
           </Field>
-          <Field label="Username">
+          <Field label={t("auth.setup.username")}>
             <input
               className="ui-input"
               name="username"
@@ -68,7 +70,7 @@ export function Setup({ initialToken = "", onDone }: Props) {
               onChange={(e) => setUsername(e.target.value)}
             />
           </Field>
-          <Field label="Password">
+          <Field label={t("auth.setup.password")}>
             <input
               className="ui-input"
               name="password"
@@ -79,7 +81,7 @@ export function Setup({ initialToken = "", onDone }: Props) {
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
-          <Field label="Repeat password">
+          <Field label={t("auth.setup.repeat")}>
             <input
               className="ui-input"
               name="repeat"
@@ -93,7 +95,7 @@ export function Setup({ initialToken = "", onDone }: Props) {
           {error && <Notice tone="err" title={error} />}
           <div className="ui-auth-actions">
             <Button variant="primary" type="submit" disabled={busy || !token.trim() || !username || !password || !repeat}>
-              Create account
+              {t("auth.setup.submit")}
             </Button>
           </div>
         </form>

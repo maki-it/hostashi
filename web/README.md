@@ -35,6 +35,14 @@ The build writes `third-party-licenses.txt` with the license texts of every
 bundled npm package. Fonts under OFL-1.1 are allowed only for packages under
 `@fontsource/` (`scripts/check-licenses.mjs`).
 
+## Languages (ADR-0071)
+
+The panel speaks English and German through i18next. Texts live in
+`src/locales/<lang>/<area>.json`, numbers, dates and sizes go through
+`src/format.ts`. Every new text needs a key in both languages; `npm test`
+checks it. The rules and the German glossary are in
+[`src/locales/README.md`](src/locales/README.md).
+
 ## Rules
 
 - Everything is served from the panel itself. No CDN, no inline scripts:

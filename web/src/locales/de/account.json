@@ -1,0 +1,22 @@
+{
+  "title": "Dein Konto",
+  "loggedInAs": "Angemeldet als {{username}} ({{role}}).",
+  "appearance": "Darstellung",
+  "scheme": {
+    "legend": "Farbschema",
+    "system": "Wie das System",
+    "systemHint": "Hell oder dunkel, wie dein Gerät eingestellt ist.",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "failed": "Das Farbschema konnte nicht gespeichert werden. Es gilt bis zum Neuladen."
+  },
+  "language": {
+    "legend": "Sprache",
+    "auto": "Wie der Browser",
+    "autoHint": "Deutsch oder Englisch, wie dein Browser eingestellt ist. Mails kommen auf Englisch.",
+    "en": "English",
+    "de": "Deutsch",
+    "failed": "Die Sprache konnte nicht gespeichert werden. Sie gilt bis zum Neuladen."
+  },
+  "saved": "Gespeichert. So sieht das Panel in jedem Browser aus, mit dem du dich anmeldest."
+}

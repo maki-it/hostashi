@@ -2,6 +2,7 @@
 
 import { CaretDown, CaretUp, CaretUpDown } from "@phosphor-icons/react";
 import { Fragment, type ReactNode } from "react";
+import { compare } from "../format";
 
 export type SortDir = "asc" | "desc";
 export type Sort = { key: string; dir: SortDir };
@@ -41,7 +42,6 @@ type TableProps<T> = {
   after?: (row: T) => ReactNode;
 };
 
-const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 /** Sorts rows by a column without changing the input. Stable. */
 export function sortRows<T>(rows: readonly T[], columns: readonly Column<T>[], sort: Sort | undefined): T[] {
@@ -52,7 +52,7 @@ export function sortRows<T>(rows: readonly T[], columns: readonly Column<T>[], s
   return rows
     .map((row, i) => ({ row, i, v: value(row) }))
     .sort((a, b) => {
-      const c = typeof a.v === "number" && typeof b.v === "number" ? a.v - b.v : collator.compare(String(a.v), String(b.v));
+      const c = typeof a.v === "number" && typeof b.v === "number" ? a.v - b.v : compare(String(a.v), String(b.v));
       return c !== 0 ? c * sign : a.i - b.i;
     })
     .map((x) => x.row);

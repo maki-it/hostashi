@@ -21,11 +21,27 @@ import {
   Stack,
   UsersThree,
 } from "@phosphor-icons/react";
+import i18n from "./i18n";
+import type { Catalog } from "./locales/en";
 import type { Page } from "./routes";
 
-/** also: more pages the entry stands for, such as the tabs of Runtimes. */
-export type NavItem = { page: Page; label: string; icon: Icon; roles: readonly string[]; also?: readonly Page[] };
-export type NavGroup = { label: string | null; items: readonly NavItem[] };
+type NavPage = Page & keyof Catalog["shell"]["nav"]["pages"];
+type GroupID = keyof Catalog["shell"]["nav"]["groups"];
+
+/**
+ * An entry of the sidebar; its label is shell.nav.pages.<page> in the
+ * catalog (ADR-0071). also: more pages the entry stands for, such as the
+ * tabs of Runtimes.
+ */
+export type NavItem = { page: NavPage; icon: Icon; roles: readonly string[]; also?: readonly Page[] };
+/** A group of the sidebar; id null is the top without a heading. */
+export type NavGroup = { id: GroupID | null; items: readonly NavItem[] };
+
+/** pageLabel is the sidebar label of an entry in the current language. */
+export const pageLabel = (i: { page: NavPage }): string => i18n.t(`shell.nav.pages.${i.page}`);
+
+/** groupLabel is the heading of a group in the current language, "" for the top. */
+export const groupLabel = (id: GroupID | null): string => (id ? i18n.t(`shell.nav.groups.${id}`) : "");
 
 const all = ["admin", "manager", "user"] as const;
 const staff = ["admin", "manager"] as const;
@@ -34,44 +50,44 @@ const admin = ["admin"] as const;
 // The sidebar (ADR-0037) and the roles that see each page (ADR-0035). The
 // server decides what a role may do; this only hides what it cannot use.
 export const navGroups: readonly NavGroup[] = [
-  { label: null, items: [{ page: "home", label: "Overview", icon: SquaresFour, roles: all }] },
+  { id: null, items: [{ page: "home", icon: SquaresFour, roles: all }] },
   {
-    label: "Hosting",
+    id: "hosting",
     items: [
-      { page: "sites", label: "Sites", icon: Globe, roles: all },
-      { page: "databases", label: "Databases", icon: Database, roles: all },
-      { page: "parked", label: "Parked domains", icon: Signpost, roles: staff },
-      { page: "pages", label: "Maintenance pages", icon: Browser, roles: staff },
-      { page: "limits", label: "Limit presets", icon: Gauge, roles: staff },
-      { page: "profiles", label: "App profiles", icon: Stack, roles: admin },
+      { page: "sites", icon: Globe, roles: all },
+      { page: "databases", icon: Database, roles: all },
+      { page: "parked", icon: Signpost, roles: staff },
+      { page: "pages", icon: Browser, roles: staff },
+      { page: "limits", icon: Gauge, roles: staff },
+      { page: "profiles", icon: Stack, roles: admin },
     ],
   },
   {
-    label: "Server",
+    id: "server",
     items: [
-      { page: "health", label: "Health", icon: Heartbeat, roles: admin },
-      { page: "services", label: "Services", icon: Pulse, roles: admin },
-      { page: "system", label: "System", icon: GearSix, roles: admin },
-      { page: "pools", label: "Storage pools", icon: HardDrives, roles: admin },
-      { page: "php", label: "Runtimes", icon: Code, roles: admin, also: ["node", "python"] },
-      { page: "backups", label: "Backups", icon: ClockCounterClockwise, roles: admin },
-      { page: "firewall", label: "Firewall", icon: ShieldCheck, roles: admin },
+      { page: "health", icon: Heartbeat, roles: admin },
+      { page: "services", icon: Pulse, roles: admin },
+      { page: "system", icon: GearSix, roles: admin },
+      { page: "pools", icon: HardDrives, roles: admin },
+      { page: "php", icon: Code, roles: admin, also: ["node", "python"] },
+      { page: "backups", icon: ClockCounterClockwise, roles: admin },
+      { page: "firewall", icon: ShieldCheck, roles: admin },
     ],
   },
   {
-    label: "Administration",
+    id: "administration",
     items: [
-      { page: "users", label: "Users", icon: UsersThree, roles: admin },
-      { page: "mail", label: "Email", icon: EnvelopeSimple, roles: admin },
-      { page: "import", label: "CloudPanel import", icon: ArrowSquareIn, roles: admin },
-      { page: "audit", label: "Audit log", icon: ListMagnifyingGlass, roles: admin },
+      { page: "users", icon: UsersThree, roles: admin },
+      { page: "mail", icon: EnvelopeSimple, roles: admin },
+      { page: "import", icon: ArrowSquareIn, roles: admin },
+      { page: "audit", icon: ListMagnifyingGlass, roles: admin },
     ],
   },
 ];
 
-const items = navGroups.flatMap((g) => g.items.map((item) => ({ ...item, group: g.label })));
+const items = navGroups.flatMap((g) => g.items.map((item) => ({ ...item, group: g.id })));
 
-/** navItem returns the entry of a page and the label of its group. */
+/** navItem returns the entry of a page and the id of its group. */
 export function navItem(page: Page) {
   return items.find((i) => i.page === page || i.also?.includes(page));
 }
@@ -84,6 +100,6 @@ export function canSee(role: string, page: Page): boolean {
 /** navFor returns the groups with the items a role sees; empty groups are left out. */
 export function navFor(role: string): NavGroup[] {
   return navGroups
-    .map((g) => ({ label: g.label, items: g.items.filter((i) => i.roles.includes(role)) }))
+    .map((g) => ({ id: g.id, items: g.items.filter((i) => i.roles.includes(role)) }))
     .filter((g) => g.items.length > 0);
 }

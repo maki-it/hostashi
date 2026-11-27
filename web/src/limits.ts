@@ -4,6 +4,7 @@
 // default for new sites, and the limits of each site with its disk use.
 // 0 means unlimited in every limit except the PHP workers.
 
+import { formatBytes, formatCount } from "./format";
 import { ApiError, request } from "./api";
 import { siteMessage } from "./sites";
 
@@ -100,16 +101,10 @@ export const KiB = 1024;
 export const MiB = 1024 * KiB;
 export const GiB = 1024 * MiB;
 
-export function formatBytes(n: number): string {
-  if (n >= GiB) return trim(n / GiB) + " GiB";
-  if (n >= MiB) return trim(n / MiB) + " MiB";
-  if (n >= KiB) return trim(n / KiB) + " KiB";
-  return String(n) + " B";
-}
+// Sizes and counts in the panel's language (ADR-0071).
+export { formatBytes, formatCount };
 
 const trim = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
-
-export const formatCount = (n: number) => n.toLocaleString("en-US");
 
 export const priorityLabel: Record<CPUPriority, string> = { low: "Low", normal: "Normal", high: "High" };
 

@@ -574,6 +574,49 @@ describe("Shell", () => {
     window.location.hash = "";
   });
 
+  it("switches the panel to German on the account page", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/account";
+    const calls = mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", colorScheme: "light", theme: "default", language: "auto" } },
+      "PATCH /api/v1/me": (b) => ({ body: { colorScheme: "light", theme: "default", ...(b as object) } }),
+    });
+    render(<App />);
+    const group = within(await screen.findByRole("group", { name: "Language" }));
+    expect(group.getByRole("radio", { name: /Follow the browser/ })).toBeChecked();
+    await user.click(group.getByRole("radio", { name: "Deutsch" }));
+    expect(await screen.findByRole("heading", { name: "Dein Konto", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Datenbanken" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abmelden" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("de");
+    expect(await screen.findByText(/^Gespeichert\./)).toBeInTheDocument();
+    expect(calls).toContainEqual({ method: "PATCH", path: "/api/v1/me", body: { language: "de" } });
+    window.location.hash = "";
+  });
+
+  it("says in the new language when the language cannot be saved", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/account";
+    mockFetch({
+      ...noSetup,
+      "GET /api/v1/auth/me": { body: { ...admin, auth: "session", language: "en" } },
+      "PATCH /api/v1/me": err(500, "internal"),
+    });
+    render(<App />);
+    await user.click(within(await screen.findByRole("group", { name: "Language" })).getByRole("radio", { name: "Deutsch" }));
+    expect(await screen.findByText("Die Sprache konnte nicht gespeichert werden. Sie gilt bis zum Neuladen.")).toBeInTheDocument();
+    window.location.hash = "";
+  });
+
+  it("starts in the account's language", async () => {
+    mockFetch({ ...noSetup, "GET /api/v1/auth/me": { body: { ...admin, auth: "session", language: "de" } }, "GET /api/v1/sites": { body: { sites: [] } } });
+    render(<App />);
+    expect(await screen.findByRole("navigation", { name: "Hauptmenü" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verwaltung" })).toBeInTheDocument();
+    expect(document.title).toMatch(/^Übersicht · /);
+  });
+
   it("opens and closes the menu for narrow windows", async () => {
     const user = userEvent.setup();
     mockFetch(session);
@@ -582,6 +625,28 @@ describe("Shell", () => {
     expect(open).toHaveAttribute("aria-expanded", "false");
     await user.click(open);
     expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("Login language", () => {
+  it("follows the browser before an account is known", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["de-AT", "en"]);
+    mockFetch({ ...noSetup, ...loggedOut });
+    render(<App />);
+    expect(await screen.findByLabelText("Benutzername")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anmelden" })).toBeDisabled();
+    expect(document.documentElement.lang).toBe("de");
+  });
+
+  it("shows a known API error in German", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["de-DE"]);
+    mockFetch({ ...noSetup, ...loggedOut, "POST /api/v1/auth/login": err(401, "invalid_credentials") });
+    render(<App />);
+    await user.type(await screen.findByLabelText("Benutzername"), "kim");
+    await user.type(screen.getByLabelText("Passwort"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Anmelden" }));
+    expect(await screen.findByText("Benutzername oder Passwort ist falsch.")).toBeInTheDocument();
   });
 });
 

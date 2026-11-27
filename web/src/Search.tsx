@@ -2,26 +2,33 @@
 
 import { FileText, Globe, MagnifyingGlass, UserCircle, type Icon } from "@phosphor-icons/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { navFor } from "./nav";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
+import { groupLabel, navFor, pageLabel } from "./nav";
 import { formatHash } from "./routes";
 import { runtimes } from "./Runtimes";
 import { groupsForSite } from "./SiteNav";
 import { listSites, type Site } from "./sites";
 
-export type SearchItem = { group: "Sites" | "Site sections" | "Pages"; label: string; detail: string; href: string; icon: Icon; words: string };
+/** group: shell.search.groups.<group> names it. */
+export type SearchItem = { group: "sites" | "sections" | "pages"; label: string; detail: string; href: string; icon: Icon; words: string };
 
 // Each group shows this many hits, so a short query does not list every tab
 // of every site.
 const perGroup = 6;
 
-/** searchItems builds what the search can find for a role and its sites. */
+/**
+ * searchItems builds what the search can find for a role and its sites, in
+ * the current language. The English names of the pages stay findable in
+ * every language.
+ */
 export function searchItems(role: string, sites: readonly Site[]): SearchItem[] {
   const out: SearchItem[] = [];
   for (const s of sites) {
     const name = s.title || s.name;
     const domain = s.domains[0] ?? "";
     out.push({
-      group: "Sites",
+      group: "sites",
       label: name,
       detail: domain,
       href: formatHash({ page: "sites", site: { name: s.name } }),
@@ -33,7 +40,7 @@ export function searchItems(role: string, sites: readonly Site[]): SearchItem[] 
       for (const t of g.tabs) {
         if (t.id === "overview") continue;
         out.push({
-          group: "Site sections",
+          group: "sections",
           label: `${name} › ${t.label}`,
           detail: g.label,
           href: formatHash({ page: "sites", site: { name: s.name, tab: t.id } }),
@@ -43,19 +50,30 @@ export function searchItems(role: string, sites: readonly Site[]): SearchItem[] 
       }
     }
   }
+  const english = i18n.getFixedT("en");
   for (const g of navFor(role)) {
+    const group = groupLabel(g.id);
     for (const i of g.items) {
+      const label = pageLabel(i);
+      const words = `${english(`shell.nav.pages.${i.page}`)} ${group}`;
       if (i.also) {
         // Runtimes: one hit per language, so "python" finds its versions.
         for (const r of runtimes) {
-          out.push({ group: "Pages", label: `${i.label} › ${r.label}`, detail: g.label ?? "", href: formatHash({ page: r.page }), icon: i.icon, words: `${i.label} ${r.label} versions ${g.label ?? ""}` });
+          out.push({ group: "pages", label: `${label} › ${r.label}`, detail: group, href: formatHash({ page: r.page }), icon: i.icon, words: `${words} ${r.label} versions ${i18n.t("shell.search.runtimeWords")}` });
         }
         continue;
       }
-      out.push({ group: "Pages", label: i.label, detail: g.label ?? "", href: formatHash({ page: i.page }), icon: i.icon, words: `${i.label} ${g.label ?? ""}` });
+      out.push({ group: "pages", label, detail: group, href: formatHash({ page: i.page }), icon: i.icon, words });
     }
   }
-  out.push({ group: "Pages", label: "Your account", detail: "Password, two-factor, colours", href: formatHash({ page: "account" }), icon: UserCircle, words: "account password two-factor totp colours api" });
+  out.push({
+    group: "pages",
+    label: i18n.t("shell.account"),
+    detail: i18n.t("shell.search.accountDetail"),
+    href: formatHash({ page: "account" }),
+    icon: UserCircle,
+    words: `${english("shell.search.accountWords")} ${i18n.t("shell.search.accountWords")}`,
+  });
   return out;
 }
 
@@ -65,7 +83,7 @@ function score(label: string, words: readonly string[]): number {
   return words.reduce((n, w) => n + (parts.some((p) => p.startsWith(w)) ? 2 : label.toLowerCase().includes(w) ? 1 : 0), 0);
 }
 
-const groupOrder: Record<SearchItem["group"], number> = { Sites: 0, "Site sections": 1, Pages: 2 };
+const groupOrder: Record<SearchItem["group"], number> = { sites: 0, sections: 1, pages: 2 };
 
 /**
  * matchItems keeps the items that contain every word of the query, the best
@@ -73,7 +91,7 @@ const groupOrder: Record<SearchItem["group"], number> = { Sites: 0, "Site sectio
  */
 export function matchItems(items: readonly SearchItem[], query: string): SearchItem[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return items.filter((i) => i.group !== "Site sections").slice(0, perGroup * 2);
+  if (words.length === 0) return items.filter((i) => i.group !== "sections").slice(0, perGroup * 2);
   const hits = items
     .map((item, at) => ({ item, at, score: score(item.label, words) }))
     .filter(({ item }) => {
@@ -99,6 +117,7 @@ export const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "
  * Esc closes.
  */
 export function Search({ role, onClose }: { role: string; onClose: () => void }) {
+  const { t, i18n: lang } = useTranslation();
   const [query, setQuery] = useState("");
   const [sites, setSites] = useState<Site[]>([]);
   const [active, setActive] = useState(0);
@@ -115,7 +134,8 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
     };
   }, []);
 
-  const items = useMemo(() => searchItems(role, sites), [role, sites]);
+  // The language is a dependency: the labels are built in it.
+  const items = useMemo(() => searchItems(role, sites), [role, sites, lang.language]);
   const hits = matchItems(items, query);
   const cur = Math.min(active, Math.max(hits.length - 1, 0));
 
@@ -127,7 +147,7 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
 
   return (
     <div className="app-search-back" ref={back} onMouseDown={(e) => e.target === back.current && onClose()}>
-      <div className="app-search-dialog" role="dialog" aria-modal="true" aria-label="Search">
+      <div className="app-search-dialog" role="dialog" aria-modal="true" aria-label={t("shell.search.dialog")}>
         <div className="app-search-input">
           <MagnifyingGlass size={20} aria-hidden="true" />
           <input
@@ -136,8 +156,8 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
             aria-expanded="true"
             aria-controls={listId}
             aria-activedescendant={hits.length > 0 ? `${listId}-${cur}` : undefined}
-            aria-label="Search sites, site sections and pages"
-            placeholder="Search sites, site sections and pages"
+            aria-label={t("shell.search.placeholder")}
+            placeholder={t("shell.search.placeholder")}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -154,8 +174,8 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
           />
           <kbd className="app-kbd">Esc</kbd>
         </div>
-        <ul className="app-search-list" id={listId} role="listbox" aria-label="Results">
-          {hits.length === 0 && <li className="app-search-empty">Nothing found.</li>}
+        <ul className="app-search-list" id={listId} role="listbox" aria-label={t("shell.search.results")}>
+          {hits.length === 0 && <li className="app-search-empty">{t("shell.search.empty")}</li>}
           {hits.map((h, k) => {
             const head = k === 0 || hits[k - 1]!.group !== h.group;
             const Icon = h.icon;
@@ -163,7 +183,7 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
               <li key={h.href} role="presentation">
                 {head && (
                   <div className="app-search-group" role="presentation">
-                    {h.group}
+                    {t(`shell.search.groups.${h.group}`)}
                   </div>
                 )}
                 <a
@@ -187,7 +207,7 @@ export function Search({ role, onClose }: { role: string; onClose: () => void })
             );
           })}
         </ul>
-        <p className="app-search-foot">↑ ↓ move · Enter opens · Esc closes</p>
+        <p className="app-search-foot">{t("shell.search.foot")}</p>
       </div>
     </div>
   );

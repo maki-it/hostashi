@@ -1,0 +1,9 @@
+{
+  "busy": "Der Server ist ausgelastet. Versuch es in einer Minute noch einmal.",
+  "invalid_credentials": "Benutzername oder Passwort ist falsch.",
+  "passkey_failed": "Der Passkey wurde nicht akzeptiert.",
+  "passkey_required": "Dieses Konto meldet sich mit einem Passkey an.",
+  "passkeys_unavailable": "Passkeys sind auf diesem Server nicht eingerichtet. Melde dich mit deinem Passwort an.",
+  "rate_limited": "Zu viele Versuche. Warte ein paar Minuten und versuch es dann noch einmal.",
+  "setup_not_allowed": "Das Setup-Token ist falsch oder abgelaufen."
+}

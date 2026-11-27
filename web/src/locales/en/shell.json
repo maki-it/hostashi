@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "label": "Main",
+    "groups": {
+      "hosting": "Hosting",
+      "server": "Server",
+      "administration": "Administration"
+    },
+    "pages": {
+      "home": "Overview",
+      "sites": "Sites",
+      "databases": "Databases",
+      "parked": "Parked domains",
+      "pages": "Maintenance pages",
+      "limits": "Limit presets",
+      "profiles": "App profiles",
+      "health": "Health",
+      "services": "Services",
+      "system": "System",
+      "pools": "Storage pools",
+      "php": "Runtimes",
+      "backups": "Backups",
+      "firewall": "Firewall",
+      "users": "Users",
+      "mail": "Email",
+      "import": "CloudPanel import",
+      "audit": "Audit log"
+    }
+  },
+  "account": "Your account",
+  "brandHome": "Hostashi, overview",
+  "openMenu": "Open menu",
+  "closeMenu": "Close menu",
+  "breadcrumb": "Breadcrumb",
+  "logout": "Log out",
+  "logoutFailed": "Logout failed. Try again.",
+  "schemeFailed": "The colour scheme could not be saved. It applies until you reload.",
+  "releaseNotes": "Release notes",
+  "useLight": "Use light colours",
+  "useDark": "Use dark colours",
+  "search": {
+    "open": "Search",
+    "dialog": "Search",
+    "placeholder": "Search sites, site sections and pages",
+    "results": "Results",
+    "empty": "Nothing found.",
+    "foot": "↑ ↓ move · Enter opens · Esc closes",
+    "groups": {
+      "sites": "Sites",
+      "sections": "Site sections",
+      "pages": "Pages"
+    },
+    "accountDetail": "Password, two-factor, colours, language",
+    "accountWords": "account password two-factor totp colours language api",
+    "runtimeWords": "versions"
+  }
+}

@@ -2,6 +2,8 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+// The languages start before the first render (ADR-0071).
+import "./i18n";
 import { App } from "./App";
 // Redesign (ADR-0037): the theme is set on <html data-theme> in index.html.
 import "./ui/tokens.css";
