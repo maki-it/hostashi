@@ -96,7 +96,7 @@ describe("Overview", () => {
   it("shows what needs attention and the state at a glance", async () => {
     mockFetch({
       "GET /api/v1/sites": { body: { sites: [site("shop"), broken, site("old", { disabled: true })] } },
-      "GET /api/v1/doctor": { body: doctor },
+      "GET /api/v1/doctor?lang=en": { body: doctor },
       "GET /api/v1/backups": { body: backups(true) },
       "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
       "GET /api/v1/pools": {
@@ -126,7 +126,7 @@ describe("Overview", () => {
     setLanguage("de");
     mockFetch({
       "GET /api/v1/sites": { body: { sites: [site("shop"), broken, site("old", { disabled: true })] } },
-      "GET /api/v1/doctor": { body: doctor },
+      "GET /api/v1/doctor?lang=de": { body: doctor },
       "GET /api/v1/backups": { body: backups(false) },
       "GET /api/v1/parked-domains": { body: { parkedDomains: [] } },
       "GET /api/v1/pools": {

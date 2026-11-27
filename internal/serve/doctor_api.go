@@ -43,6 +43,7 @@ type PanelChecks func(ctx context.Context, now time.Time) ([]agentapi.DoctorChec
 func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *slog.Logger) {
 	mux.Op("GET /api/v1/doctor", openapi.Operation{
 		ID: "runDoctor", Tag: "system", Summary: "Check the server and every site without changing anything", Out: doctorJSON{},
+		Query: []openapi.Param{{Name: "lang", Description: "de for German summaries and hints; anything else is English"}},
 	}, a.allow("doctor:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
@@ -79,8 +80,14 @@ func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *
 			out.Checks = []agentapi.DoctorCheck{}
 		}
 
-		for _, c := range rep.Checks {
+		german := r.URL.Query().Get("lang") == "de"
+
+		for i, c := range out.Checks {
 			out.Counts[c.Status]++
+
+			if german {
+				out.Checks[i].Summary, out.Checks[i].Hint = doctor.German(c)
+			}
 		}
 
 		w.Header().Set("Cache-Control", "no-store")

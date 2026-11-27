@@ -3,7 +3,7 @@
 // The read-only checks of hostashi doctor, run by the agent on request.
 
 import { request } from "./api";
-import i18n, { areaErrorText } from "./i18n";
+import i18n, { areaErrorText, currentLang } from "./i18n";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
@@ -22,7 +22,8 @@ export type DoctorReport = {
   counts: Record<DoctorStatus, number>;
 };
 
-export const runDoctor = () => request<DoctorReport>("GET", "/doctor");
+/** runDoctor runs the checks; summaries and hints come in the current language. */
+export const runDoctor = () => request<DoctorReport>("GET", `/doctor?lang=${currentLang()}`);
 
 /** checkTitle is the name of a check in the current language, its ID when it has none. */
 export function checkTitle(id: string): string {

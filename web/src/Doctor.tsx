@@ -45,7 +45,7 @@ function ServerWhere({ id }: { id: string }) {
 // Doctor shows the checks of hostashi doctor in one table, problems first.
 // Nothing here changes the server.
 export function Doctor({ query = new URLSearchParams(), onQuery = () => undefined }: QueryProps) {
-  const { t } = useTranslation();
+  const { t, i18n: lang } = useTranslation();
   const [report, setReport] = useState<DoctorReport | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -60,7 +60,8 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
     } finally {
       setBusy(false);
     }
-  }, []);
+    // The server writes the texts in the language; a switch loads them again.
+  }, [lang.language]);
 
   useEffect(() => {
     void load();
