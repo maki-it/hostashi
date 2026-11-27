@@ -27,7 +27,7 @@ func TestColorSchemePerUser(t *testing.T) {
 		t.Fatalf("stored: %s", rec.Body)
 	}
 
-	// The language changes on its own and keeps the colour scheme (ADR-0071).
+	// The language changes on its own and keeps the color scheme (ADR-0071).
 	rec = e.do(t, reqOpts{method: "PATCH", path: "/api/v1/me", cookie: c, body: `{"language":"de"}`})
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"colorScheme":"dark","theme":"default","language":"de"}` {
 		t.Fatalf("language: %d %s", rec.Code, rec.Body)
