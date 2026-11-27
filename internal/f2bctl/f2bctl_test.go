@@ -191,7 +191,7 @@ func TestStatusCacheAndTruncated(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	f := &fake{
 		out: map[string]string{
-			"ping": "pong",
+			"ping":        "pong",
 			"status sshd": sshdStatusOut, "status hostashi-panel": sshdStatusOut, "status hostashi-site-auth": statusOut, "status recidive": sshdStatusOut,
 			"get hostashi-site-auth banip --with-time": bansOut,
 		},
@@ -218,7 +218,6 @@ func TestStatusCacheAndTruncated(t *testing.T) {
 	}
 
 	// An unblock drops the cached reading.
-	calls = len(f.calls)
 	f.out["set sshd unbanip 203.0.113.7"] = "0"
 	f.out["set hostashi-panel unbanip 203.0.113.7"] = "0"
 	f.out["set hostashi-site-auth unbanip 203.0.113.7"] = "1"
