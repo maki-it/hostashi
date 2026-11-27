@@ -2,6 +2,7 @@
 
 import { ClockCounterClockwise, CloudArrowUp } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   backupMessage,
   confirmHostKey,
@@ -33,6 +34,7 @@ import {
   type Snapshot,
 } from "./backups";
 import { isPostgres, listServers, type DBServer } from "./databases";
+import i18n from "./i18n";
 import { Badge, Button, Card, CopyButton, exactTime, Field, IconButton, Notice, PageHead, RelTime, RowActions, Table, type Column, type Sort, type Tone } from "./ui";
 
 type QueryProps = {
@@ -46,6 +48,7 @@ type QueryProps = {
 // snapshots of a site in a table with restore, then target, schedule and
 // host key.
 export function Backups({ query, onQuery }: QueryProps) {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<BackupInfo | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,7 +73,7 @@ export function Backups({ query, onQuery }: QueryProps) {
     setNote("");
     try {
       await runBackup();
-      setNote("Backup started. It runs in the background; reload this page to see the result.");
+      setNote(t("backups.started"));
       await load();
     } catch (err) {
       setError(backupMessage(err));
@@ -82,12 +85,12 @@ export function Backups({ query, onQuery }: QueryProps) {
   return (
     <>
       <PageHead
-        title="Backups"
-        description="Scheduled restic backups of all sites and databases to any SFTP server, for example a Hetzner Storage Box, a NAS or another Linux server."
+        title={t("backups.title")}
+        description={t("backups.description")}
         actions={
           info?.ready && (
             <Button variant="primary" icon={<CloudArrowUp size={16} aria-hidden="true" />} disabled={busy || info.status.running} onClick={() => void run()}>
-              Back up now
+              {t("backups.backUpNow")}
             </Button>
           )
         }
@@ -95,7 +98,7 @@ export function Backups({ query, onQuery }: QueryProps) {
       {error && <Notice tone="err" title={error} />}
       {note && <Notice tone="info" title={note} />}
       {!info ? (
-        !error && <p aria-busy="true">Loading…</p>
+        !error && <p aria-busy="true">{t("common.status.loading")}</p>
       ) : (
         <>
           <StatusCard info={info} />
@@ -109,47 +112,47 @@ export function Backups({ query, onQuery }: QueryProps) {
 }
 
 function statusOf(info: BackupInfo): { tone: Tone; word: string; summary: ReactNode } {
+  const t = i18n.t;
   const st = info.status;
-  if (!info.ready) return { tone: "off", word: "Not set up", summary: "Not set up yet: set a target and confirm its host key." };
-  if (st.running) return { tone: "warn", word: "Running", summary: "A backup is running." };
-  if (!st.started) return { tone: "off", word: "No backup yet", summary: "No backup has run yet." };
+  if (!info.ready) return { tone: "off", word: t("backups.status.notSetUp"), summary: t("backups.status.notSetUpText") };
+  if (st.running) return { tone: "warn", word: t("backups.status.running"), summary: t("backups.status.runningText") };
+  if (!st.started) return { tone: "off", word: t("backups.status.none"), summary: t("backups.status.noneText") };
   if (info.overdue) {
     const h = info.settings.intervalHours;
     return {
       tone: "warn",
-      word: "Overdue",
-      summary: (
-        <>
-          No backup has finished in the last {overdueHours(h)} hours, although backups run {everyText(h)}. Check the timer on the server with{" "}
-          <code>systemctl status hostashi-backup.timer</code>.
-        </>
-      ),
+      word: t("backups.status.overdue"),
+      summary: <Trans i18nKey="backups.status.overdueText" values={{ hours: overdueHours(h), every: everyText(h) }} components={{ code: <code /> }} />,
     };
   }
-  if (st.ok) return { tone: "ok", word: "OK", summary: "The last backup succeeded." };
-  return { tone: "err", word: "Failed", summary: "The last backup failed" + (st.error ? ": " + st.error : ".") };
+  if (st.ok) return { tone: "ok", word: t("backups.status.ok"), summary: t("backups.status.okText") };
+  return { tone: "err", word: t("backups.status.failed"), summary: st.error ? t("backups.status.failedWith", { error: st.error }) : t("backups.status.failedText") };
 }
 
-const timeOrNever = (t?: string) => (t ? <RelTime iso={t} /> : "never");
+const timeOrNever = (t?: string) => (t ? <RelTime iso={t} /> : i18n.t("backups.status.never"));
+
+// kindLabel names what a failed item of a run backed up.
+const kindLabel = (kind: string) => (kind === "files" || kind === "db" || kind === "panel" ? i18n.t(`backups.status.kinds.${kind}`) : kind);
 
 function StatusCard({ info }: { info: BackupInfo }) {
+  const { t } = useTranslation();
   const st = info.status;
   const failed = st.items.filter((i) => i.error);
   const s = statusOf(info);
 
   return (
-    <Card title="Status" actions={<Badge tone={s.tone}>{s.word}</Badge>}>
+    <Card title={t("backups.status.title")} actions={<Badge tone={s.tone}>{s.word}</Badge>}>
       <div className="ui-stack">
         <p className="ui-flush">{s.summary}</p>
         {st.started && (
           <dl className="ui-facts">
-            <dt>Last run</dt>
+            <dt>{t("backups.status.lastRun")}</dt>
             <dd>{timeOrNever(st.started)}</dd>
-            <dt>Finished</dt>
+            <dt>{t("backups.status.finished")}</dt>
             <dd>{timeOrNever(st.finished)}</dd>
-            <dt>Last check</dt>
+            <dt>{t("backups.status.lastCheck")}</dt>
             <dd>{timeOrNever(st.lastCheck)}</dd>
-            <dt>Last data check</dt>
+            <dt>{t("backups.status.lastDataCheck")}</dt>
             <dd>{timeOrNever(st.lastReadCheck)}</dd>
           </dl>
         )}
@@ -157,23 +160,27 @@ function StatusCard({ info }: { info: BackupInfo }) {
           <ul className="ui-error ui-flush">
             {failed.map((i) => (
               <li key={i.kind + (i.site ?? "") + (i.database ?? "")}>
-                {i.kind} {i.site ?? ""} {i.database ?? ""}: {i.error}
+                {kindLabel(i.kind)} {i.site ?? ""} {i.database ?? ""}: {i.error}
               </li>
             ))}
           </ul>
         )}
-        {!st.maintenanceOk && st.maintenance && <p className="ui-error ui-flush">Maintenance: {st.maintenance}</p>}
+        {!st.maintenanceOk && st.maintenance && <p className="ui-error ui-flush">{t("backups.status.maintenance", { error: st.maintenance })}</p>}
         {st.removed && st.removed.length > 0 && (
           <ul className="ui-flush">
             {st.removed.map((x) => (
               <li key={x.site}>
-                Removed {x.snapshots} {x.snapshots === 1 ? "snapshot" : "snapshots"} of the deleted site <code>{x.site}</code>
-                {x.expired ? " (expired)" : ""}.
+                <Trans
+                  i18nKey={x.expired ? "backups.status.removedExpired" : "backups.status.removed"}
+                  count={x.snapshots}
+                  values={{ count: x.snapshots, site: x.site }}
+                  components={{ code: <code /> }}
+                />
               </li>
             ))}
           </ul>
         )}
-        {st.removeError && <p className="ui-error ui-flush">Removing backups of deleted sites failed: {st.removeError}</p>}
+        {st.removeError && <p className="ui-error ui-flush">{t("backups.status.removeFailed", { error: st.removeError })}</p>}
       </div>
     </Card>
   );
@@ -189,6 +196,7 @@ function num(v: string, fallback: number) {
 }
 
 function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupInfo) => void }) {
+  const { t } = useTranslation();
   const s = info.settings;
   const [user, setUser] = useState(s.target?.user ?? "");
   const [host, setHost] = useState(s.target?.host ?? "");
@@ -236,113 +244,106 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
   }
 
   return (
-    <Card title="Target and schedule">
+    <Card title={t("backups.target.title")}>
       <form className="ui-stack" onSubmit={(e) => void submit(e)}>
         <fieldset className="ui-fieldset ui-group ui-stack">
-          <legend>SFTP server</legend>
+          <legend>{t("backups.target.server")}</legend>
           <div className="ui-fields ui-fields-server">
-            <Field label="User">
-              <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder="backup" autoComplete="off" />
+            <Field label={t("backups.target.user")}>
+              <input className="ui-input" value={user} onChange={(e) => setUser(e.target.value)} required placeholder={t("backups.target.userExample")} autoComplete="off" />
             </Field>
-            <Field label="Host" hint="DNS name or IP address of the SSH server.">
+            <Field label={t("backups.target.host")} hint={t("backups.target.hostHint")}>
               <input className="ui-input" value={host} onChange={(e) => setHost(e.target.value)} required placeholder="backup.example.com" autoComplete="off" />
             </Field>
             <Field
-              label="Port"
-              {...(storageBox && (port.trim() === "23" ? { hint: "Right for a Hetzner Storage Box." } : { error: "Hetzner Storage Boxes serve SFTP on port 23." }))}
+              label={t("backups.target.port")}
+              {...(storageBox && (port.trim() === "23" ? { hint: t("backups.target.portStorageBox") } : { error: t("backups.target.portStorageBoxWrong") }))}
             >
               <input className="ui-input" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" required />
             </Field>
           </div>
           <div className="ui-wide">
-            <Field label="Directory" hint="Relative to the login directory, or absolute with a leading /. Created on the first run.">
+            <Field label={t("backups.target.directory")} hint={t("backups.target.directoryHint")}>
               <input className="ui-input" value={path} onChange={(e) => setPath(e.target.value)} required />
             </Field>
           </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-group ui-stack">
-          <legend>Keep snapshots</legend>
+          <legend>{t("backups.target.keep")}</legend>
           <div className="ui-fields ui-fields-num">
-            <Field label="Hourly">
+            <Field label={t("backups.target.hourly")}>
               <input className="ui-input" value={hourly} onChange={(e) => setHourly(e.target.value)} inputMode="numeric" required />
             </Field>
-            <Field label="Daily">
+            <Field label={t("backups.target.daily")}>
               <input className="ui-input" value={daily} onChange={(e) => setDaily(e.target.value)} inputMode="numeric" required />
             </Field>
-            <Field label="Weekly">
+            <Field label={t("backups.target.weekly")}>
               <input className="ui-input" value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" required />
             </Field>
-            <Field label="Monthly">
+            <Field label={t("backups.target.monthly")}>
               <input className="ui-input" value={monthly} onChange={(e) => setMonthly(e.target.value)} inputMode="numeric" required />
             </Field>
-            <Field label="Yearly">
+            <Field label={t("backups.target.yearly")}>
               <input className="ui-input" value={yearly} onChange={(e) => setYearly(e.target.value)} inputMode="numeric" required />
             </Field>
           </div>
-          <p className="ui-hint ui-flush">
-            The newest snapshot of each hour, day, week, month and year is kept, up to these counts. Hourly only matters when backups run more than once a day.
-          </p>
+          <p className="ui-hint ui-flush">{t("backups.target.keepHint")}</p>
           <div className="ui-fields ui-fields-num">
-            <Field
-              label="Deleted sites (days)"
-              hint="The snapshots of a deleted site are removed this many days after its last snapshot. 0 keeps them until you delete them."
-            >
+            <Field label={t("backups.target.deletedDays")} hint={t("backups.target.deletedDaysHint")}>
               <input className="ui-input" value={goneDays} onChange={(e) => setGoneDays(e.target.value)} inputMode="numeric" required />
             </Field>
           </div>
         </fieldset>
         <fieldset className="ui-fieldset ui-group ui-stack">
-          <legend>Schedule</legend>
+          <legend>{t("backups.target.schedule")}</legend>
           <div className="ui-fields ui-fields-num">
-            <Field label="Run backups">
+            <Field label={t("backups.target.run")}>
               <select className="ui-select" value={interval} onChange={(e) => setIntervalHours(e.target.value)}>
                 {intervals.map((h) => (
                   <option key={h} value={String(h)}>
-                    {h === 24 ? "Once a day" : h === 1 ? "Every hour" : `Every ${h} hours`}
+                    {h === 24 ? t("backups.target.onceADay") : t("backups.target.every", { count: h })}
                   </option>
                 ))}
               </select>
             </Field>
             {interval === "24" && (
               <>
-                <Field label="Start from (hour)">
+                <Field label={t("backups.target.startFrom")}>
                   <input className="ui-input" value={start} onChange={(e) => setStart(e.target.value)} inputMode="numeric" required />
                 </Field>
-                <Field label="Start until (hour)">
+                <Field label={t("backups.target.startUntil")}>
                   <input className="ui-input" value={end} onChange={(e) => setEnd(e.target.value)} inputMode="numeric" required />
                 </Field>
               </>
             )}
           </div>
           <p className="ui-hint ui-flush">
-            {interval === "24"
-              ? "The daily backup starts at a random time in this window, server time."
-              : "Backups start at a fixed random minute after each of these hours, counted from midnight, server time. A backup that is still running when the next one is due skips that one."}
+            {interval === "24" ? t("backups.target.windowHint") : t("backups.target.intervalHint")}
           </p>
           <div className="ui-fields ui-fields-num">
-            <Field label="Data check parts" hint="Each month 1 of these parts is read back and checked. 0 turns it off.">
+            <Field label={t("backups.target.readParts")} hint={t("backups.target.readPartsHint")}>
               <input className="ui-input" value={parts} onChange={(e) => setParts(e.target.value)} inputMode="numeric" required />
             </Field>
           </div>
         </fieldset>
         {error && <Notice tone="err" title={error} />}
-        {saved && <Notice tone="ok" title="Saved." />}
+        {saved && <Notice tone="ok" title={t("backups.target.saved")} />}
         <div className="ui-row">
           <Button variant="primary" type="submit" disabled={busy}>
-            Save
+            {t("common.actions.save")}
           </Button>
         </div>
         {info.publicKey && (
           <div className="ui-stack-tight">
             <p className="ui-flush">
-              Add this key to <code>~/.ssh/authorized_keys</code> of the SFTP account.
-              {savedStorageBox && <> On a Hetzner Storage Box you can also add it in Hetzner&apos;s console under SSH keys.</>}
+              <Trans i18nKey="backups.target.addKey" components={{ code: <code /> }} />
+              {savedStorageBox && <> {t("backups.target.addKeyStorageBox")}</>}
             </p>
-            <pre className="ui-code" aria-label="Public key">
+            <pre className="ui-code" aria-label={t("backups.target.publicKey")}>
               {info.publicKey}
             </pre>
             <div className="ui-row">
-              <CopyButton text={info.publicKey} label="Copy the public key" />
+              <CopyButton text={info.publicKey} label={t("backups.target.copyKey")} />
             </div>
           </div>
         )}
@@ -352,6 +353,7 @@ function TargetCard({ info, onSaved }: { info: BackupInfo; onSaved: (i: BackupIn
 }
 
 function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i: BackupInfo) => void }) {
+  const { t } = useTranslation();
   const [scanned, setScanned] = useState<{ key: string; fingerprint: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -383,37 +385,43 @@ function HostKeyCard({ info, onConfirmed }: { info: BackupInfo; onConfirmed: (i:
   }
 
   return (
-    <Card title="Host key">
+    <Card title={t("backups.hostKey.title")}>
       {info.hostKey ? (
         <p>
-          Trusted: <code>{info.hostKey}</code>
+          <Trans i18nKey="backups.hostKey.trusted" values={{ key: info.hostKey }} components={{ code: <code /> }} />
         </p>
       ) : (
-        <p>The server&apos;s SSH host key is not confirmed yet. Backups start once it is.</p>
+        <p>{t("backups.hostKey.unconfirmed")}</p>
       )}
       {scanned && (
         <>
           <p>
-            The target presents <code>{scanned.fingerprint}</code>. Compare it with the fingerprint of the server: run{" "}
-            <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> on that server, or ask your provider
-            {isStorageBox(info.settings.target?.host ?? "") && <> (Hetzner publishes the fingerprints of its Storage Boxes)</>}. Trust it only if it matches.
+            <Trans
+              i18nKey={isStorageBox(info.settings.target?.host ?? "") ? "backups.hostKey.compareStorageBox" : "backups.hostKey.compare"}
+              values={{ fingerprint: scanned.fingerprint }}
+              components={{ code: <code /> }}
+            />
           </p>
           <Button variant="primary" disabled={busy} onClick={() => void confirm()}>
-            Trust this key
+            {t("backups.hostKey.trust")}
           </Button>
         </>
       )}
       {error && <Notice tone="err" title={error} />}
       <Button disabled={busy} onClick={() => void scan()}>
-        {info.hostKey ? "Check the host key again" : "Fetch the host key"}
+        {info.hostKey ? t("backups.hostKey.checkAgain") : t("backups.hostKey.fetch")}
       </Button>
     </Card>
   );
 }
 
-const snapLabel = (s: Snapshot) => (s.kind === "db" ? "Database " + (s.database ?? "") : "Files");
+const snapLabel = (s: Snapshot) => (s.kind === "db" ? i18n.t("backups.snapshots.database", { name: s.database ?? "" }) : i18n.t("backups.snapshots.files"));
+// restoreWhat is the snapshot's content inside a sentence ("Restore files of …").
+const restoreWhat = (s: Snapshot) =>
+  s.kind === "db" ? i18n.t("backups.snapshots.restoreDatabase", { name: s.database ?? "" }) : i18n.t("backups.snapshots.restoreFiles");
 
 function SnapshotsCard({ query, onQuery }: QueryProps) {
+  const { t } = useTranslation();
   const [sites, setSites] = useState<Site[] | null>(null);
   // Deleted sites, and earlier sites of a reused name, with snapshots
   // (ADR-0074); only administrators get the list.
@@ -481,7 +489,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
   const columns: Column<Snapshot>[] = [
     {
       key: "time",
-      header: "Time",
+      header: t("backups.snapshots.time"),
       main: true,
       sortValue: (s) => s.time,
       cell: (s) => (
@@ -491,16 +499,16 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
         </>
       ),
     },
-    { key: "kind", header: "Content", sortValue: snapLabel, cell: snapLabel },
+    { key: "kind", header: t("backups.snapshots.content"), sortValue: snapLabel, cell: snapLabel },
     {
       key: "actions",
-      header: "Actions",
+      header: t("backups.snapshots.actions"),
       srHeader: true,
       cell: (s) => (
         <RowActions>
           <IconButton
-            label={`Restore ${snapLabel(s).toLowerCase()} of ${exactTime(new Date(s.time))}`}
-            text="Restore"
+            label={t("backups.snapshots.restoreLabel", { what: restoreWhat(s), time: exactTime(new Date(s.time)) })}
+            text={t("backups.snapshots.restore")}
             icon={<ClockCounterClockwise size={16} />}
             disabled={restoring || (gone !== "" && !into)}
             onClick={() => void doRestore(s)}
@@ -514,12 +522,12 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
   const r = active?.restore;
 
   return (
-    <Card title="Snapshots" padded={false}>
+    <Card title={t("backups.snapshots.title")} padded={false}>
       <div className="ui-filters">
         {sites && (sites.length > 0 || deleted.length > 0) && (
           <select
             className="ui-select"
-            aria-label="Site"
+            aria-label={t("backups.snapshots.site")}
             value={gone ? "d:" + gone : "s:" + site}
             onChange={(e) => {
               const v = e.target.value;
@@ -535,7 +543,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
             ) : (
               <>
                 {sites.length > 0 && (
-                  <optgroup label="Sites">
+                  <optgroup label={t("backups.snapshots.sites")}>
                     {sites.map((s) => (
                       <option key={s.name} value={"s:" + s.name}>
                         {s.name}
@@ -543,10 +551,10 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
                     ))}
                   </optgroup>
                 )}
-                <optgroup label="Deleted sites">
+                <optgroup label={t("backups.snapshots.deletedSites")}>
                   {deleted.map((d) => (
                     <option key={d.name} value={"d:" + d.name}>
-                      {d.name + (d.earlier ? " (earlier site)" : " (deleted)")}
+                      {d.earlier ? t("backups.snapshots.earlierSite", { name: d.name }) : t("backups.snapshots.deletedSite", { name: d.name })}
                     </option>
                   ))}
                 </optgroup>
@@ -556,7 +564,7 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
         )}
         {gone && sites && sites.length > 0 && (
           <label className="ui-filter-inline">
-            Restore into
+            {t("backups.snapshots.restoreInto")}
             <select className="ui-select" value={into} disabled={goneInfo?.earlier} onChange={(e) => setInto(e.target.value)}>
               {sites.map((s) => (
                 <option key={s.name} value={s.name}>
@@ -569,20 +577,14 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
         {gone ? (
           <p className="ui-hint ui-filters-note">
             {goneInfo?.earlier ? (
-              <>
-                These snapshots are from an earlier site named <code>{gone}</code>, from before the current site was created. Only administrators
-                see them. A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the home of the current site.
-              </>
+              <Trans i18nKey="backups.snapshots.earlierNote" values={{ site: gone }} components={{ code: <code /> }} />
             ) : (
-              <>
-                The site <code>{gone}</code> was deleted; its snapshots stay until you delete them. A restore writes into a new directory{" "}
-                <code>restore-&lt;time&gt;</code> in the home of the site you pick and never changes live files.
-              </>
+              <Trans i18nKey="backups.snapshots.deletedNote" values={{ site: gone }} components={{ code: <code /> }} />
             )}
           </p>
         ) : (
           <p className="ui-hint ui-filters-note">
-            A restore writes into a new directory <code>restore-&lt;time&gt;</code> in the site&apos;s home and never changes the live site.
+            <Trans i18nKey="backups.snapshots.note" components={{ code: <code /> }} />
           </p>
         )}
       </div>
@@ -590,39 +592,37 @@ function SnapshotsCard({ query, onQuery }: QueryProps) {
         <div className="ui-card-body ui-stack">
           {error && <Notice tone="err" title={error} />}
           {restoreError && <Notice tone="err" title={restoreError} />}
-          {active && restoring && <p aria-busy="true">Restoring {snapLabel(active.snap).toLowerCase()}…</p>}
-          {r?.state === "failed" && <Notice tone="err" title={"Restore failed: " + (r.error ?? "unknown error")} />}
+          {active && restoring && <p aria-busy="true">{t("backups.snapshots.restoring", { what: restoreWhat(active.snap) })}</p>}
+          {r?.state === "failed" && <Notice tone="err" title={t("backups.snapshots.restoreFailed", { error: r.error ?? t("backups.snapshots.unknownError") })} />}
           {r?.state === "done" && (
-            <Notice tone="ok" title="Restored">
+            <Notice tone="ok" title={t("backups.snapshots.restored")}>
               <p>
-                Restored {r.files} {r.files === 1 ? "file" : "files"} into <code>{r.dir}</code>
-                {r.source ? (
-                  <>
-                    {" "}
-                    of the site <code>{r.site}</code>
-                  </>
-                ) : null}
-                .
+                <Trans
+                  i18nKey={r.source ? "backups.snapshots.restoredFilesOf" : "backups.snapshots.restoredFiles"}
+                  count={r.files}
+                  values={{ count: r.files, dir: r.dir, site: r.site }}
+                  components={{ code: <code /> }}
+                />
               </p>
             </Notice>
           )}
           {r?.state === "done" && r.kind === "db" && <ImportForm key={r.id} site={r.site} restore={r} />}
-          {gone && sites && sites.length === 0 && <Notice tone="warn" title="Create a site first to restore these snapshots into." />}
+          {gone && sites && sites.length === 0 && <Notice tone="warn" title={t("backups.snapshots.createSiteFirst")} />}
         </div>
       )}
       {sites && sites.length === 0 && deleted.length === 0 ? (
-        <p className="ui-empty">No sites yet.</p>
+        <p className="ui-empty">{t("backups.snapshots.noSites")}</p>
       ) : !snaps ? (
-        !error && <p className="ui-empty" aria-busy="true">Loading…</p>
+        !error && <p className="ui-empty" aria-busy="true">{t("common.status.loading")}</p>
       ) : (
         <Table
-          label={"Snapshots of " + (gone || site)}
+          label={t("backups.snapshots.tableLabel", { site: gone || site })}
           columns={columns}
           rows={snaps}
           rowKey={(s) => s.id}
           sort={sort}
           onSort={(x) => set({ sort: x.key, dir: x.dir })}
-          empty="No snapshots of this site yet."
+          empty={t("backups.snapshots.empty")}
           compact
         />
       )}
@@ -638,7 +638,7 @@ function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => 
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const what = site.earlier ? "the earlier site's snapshots" : "all snapshots of this site";
+  const { t } = useTranslation();
 
   async function act(f: () => Promise<unknown>) {
     setBusy(true);
@@ -657,15 +657,15 @@ function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => 
   if (site.markedAt) {
     return (
       <div className="ui-card-body ui-stack">
-        <Notice tone="warn" title="Marked for deletion">
+        <Notice tone="warn" title={t("backups.delete.marked")}>
           <p>
-            The next backup run removes {what}. <strong>Back up now</strong> removes them at once. Until then you can keep them.
+            <Trans i18nKey={site.earlier ? "backups.delete.markedTextEarlier" : "backups.delete.markedText"} components={{ b: <strong /> }} />
           </p>
         </Notice>
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button disabled={busy} onClick={() => void act(() => keepBackups(site.name))}>
-            Keep backups
+            {t("backups.delete.keep")}
           </Button>
         </div>
       </div>
@@ -680,15 +680,11 @@ function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => 
         void act(() => markRemoval(site.name, typed));
       }}
     >
-      <h3 className="ui-flush">Delete backups</h3>
+      <h3 className="ui-flush">{t("backups.delete.title")}</h3>
       <div className="ui-narrow">
         <Field
-          label={
-            <>
-              Type <code className="ui-confirm-phrase">{site.name}</code> to confirm
-            </>
-          }
-          hint={`The next backup run removes ${what} (${site.snapshots}). Once removed, they cannot be restored.`}
+          label={<Trans i18nKey="backups.delete.confirm" values={{ name: site.name }} components={{ phrase: <code className="ui-confirm-phrase" /> }} />}
+          hint={t(site.earlier ? "backups.delete.hintEarlier" : "backups.delete.hint", { n: site.snapshots })}
         >
           <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
         </Field>
@@ -696,7 +692,7 @@ function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => 
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         <Button variant="danger" type="submit" disabled={busy || typed !== site.name}>
-          Delete backups of {site.name}
+          {t("backups.delete.submit", { name: site.name })}
         </Button>
       </div>
     </form>
@@ -707,6 +703,7 @@ function DeleteBackups({ site, onChange }: { site: DeletedSite; onChange: () => 
 // PostgreSQL dump (.dump, ADR-0051) needs a database on a PostgreSQL
 // server, a MariaDB dump one on this machine or a MariaDB/MySQL server.
 function ImportForm({ site, restore }: { site: string; restore: Restore }) {
+  const { t } = useTranslation();
   const postgres = restore.dumpFile?.endsWith(".dump") ?? false;
   const [name, setName] = useState((restore.database ?? site) + "_restored");
   const [servers, setServers] = useState<DBServer[] | null>(null);
@@ -726,7 +723,7 @@ function ImportForm({ site, restore }: { site: string; restore: Restore }) {
   }, [postgres]);
 
   if (postgres && servers && servers.length === 0) {
-    return <Notice tone="warn" title="This is a PostgreSQL dump. Add a PostgreSQL server under Databases to import it." />;
+    return <Notice tone="warn" title={t("backups.import.needPostgres")} />;
   }
 
   async function submit(e: FormEvent) {
@@ -737,31 +734,31 @@ function ImportForm({ site, restore }: { site: string; restore: Restore }) {
       await createDatabase(site, name.trim(), server);
       const job = await importDump(restore.id, name.trim());
       const end = await poll(() => getImport(job.id), (j) => j.state !== "running");
-      if (end.state === "failed") throw new Error(end.error ?? "import failed");
+      if (end.state === "failed") throw new Error(end.error ?? t("backups.snapshots.unknownError"));
       setState("done");
     } catch (err) {
-      setError(err instanceof Error && !(err instanceof TypeError) && !("code" in err) ? "Import failed: " + err.message : backupMessage(err));
+      setError(err instanceof Error && !(err instanceof TypeError) && !("code" in err) ? t("backups.import.failed", { error: err.message }) : backupMessage(err));
       setState("idle");
     }
   }
 
   if (state === "done") {
     return (
-      <Notice tone="ok" title={`The dump is in the new database ${name}. Point the site to it when you have checked it.`} />
+      <Notice tone="ok" title={t("backups.import.done", { name })} />
     );
   }
 
   return (
     <form className="ui-stack" onSubmit={(e) => void submit(e)}>
-      <Field label="Import into a new database">
+      <Field label={t("backups.import.into")}>
         <input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} required />
       </Field>
       {servers && servers.length > 1 && (
-        <Field label="On the server">
+        <Field label={t("backups.import.server")}>
           <select className="ui-select" value={server} onChange={(e) => setServer(e.target.value)}>
             {servers.map((s) => (
               <option key={s.name} value={s.name}>
-                {s.local ? "This machine (" + s.name + ")" : s.name}
+                {s.local ? t("backups.import.thisMachine", { name: s.name }) : s.name}
               </option>
             ))}
           </select>
@@ -769,7 +766,7 @@ function ImportForm({ site, restore }: { site: string; restore: Restore }) {
       )}
       {error && <Notice tone="err" title={error} />}
       <Button variant="primary" type="submit" disabled={state === "busy" || servers === null}>
-        Create and import
+        {t("backups.import.submit")}
       </Button>
     </form>
   );

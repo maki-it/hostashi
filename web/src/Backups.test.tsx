@@ -6,6 +6,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { Backups } from "./Backups";
 import type { BackupInfo } from "./backups";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const status = { running: false, ok: false, items: [], maintenanceOk: true };
@@ -386,5 +387,28 @@ describe("Backups", () => {
     await user.click(screen.getByRole("button", { name: "Keep backups" }));
     expect(await screen.findByRole("button", { name: "Delete backups of old" })).toBeInTheDocument();
     expect(calls.some((c) => c.method === "DELETE" && c.path.endsWith("/removal"))).toBe(true);
+  });
+
+  it("speaks German: status, deletion with the name to type and API errors", async () => {
+    setLanguage("de");
+    mockFetch({
+      "GET /api/v1/backups": { body: { ...ready, overdue: true, settings: { ...ready.settings, intervalHours: 6 } } },
+      "GET /api/v1/sites": { body: { sites: [{ name: "shop", state: "active" }] } },
+      "GET /api/v1/backups/deleted": { body: { sites: [{ name: "old", earlier: false, snapshots: 2, oldest: "2026-11-01T01:00:00Z", newest: "2026-11-02T01:00:00Z", markedAt: null }] } },
+      "GET /api/v1/backups/deleted/old": { body: { snapshots: [{ id: snapDB, time: "2026-11-02T01:00:00Z", kind: "db", database: "old_wp" }] } },
+      "POST /api/v1/backups/run": { status: 409, body: { error: { code: "running", message: "backup: a run is in progress" } } },
+    });
+    const user = userEvent.setup();
+    render(<Harness initial="deleted=old" />);
+    expect(await screen.findByText(/In den letzten 8 Stunden ist kein Backup fertig geworden, obwohl Backups alle 6 Stunden laufen/)).toBeInTheDocument();
+    expect(screen.getByText("Überfällig")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ziel und Zeitplan" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "old (gelöscht)" })).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "Datenbank old_wp" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Zum Bestätigen old eintippen/)).toBeInTheDocument();
+    expect(screen.getByText("old", { selector: "code.ui-confirm-phrase" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Backups von old löschen" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Jetzt sichern" }));
+    expect(await screen.findByText("Ein Backup-Lauf ist im Gange.")).toBeInTheDocument();
   });
 });
