@@ -132,7 +132,7 @@ jobs:
           sudo bash install.sh --yes --panel-domain panel.example.com</pre>
           <p>apt repository: <code>https://get.hostashi.com/apt</code>, suite <code>stable</code>,
           signing key <a href="apt/hostashi.asc">apt/hostashi.asc</a>;
-          suite <code>runtimes</code> (Node.js and CPython pins only),
+          suite <code>runtimes</code> (Node.js, CPython and WP-CLI pins only),
           signing key <a href="apt/hostashi-runtimes.asc">apt/hostashi-runtimes.asc</a>.
           <code>/wp-cli</code>: the pinned WP-CLI builds, for servers without IPv4.
           Source: <a href="https://github.com/maki-it/hostashi">github.com/maki-it/hostashi</a>.</p>

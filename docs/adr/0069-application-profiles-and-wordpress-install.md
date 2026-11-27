@@ -105,7 +105,7 @@ WP-CLI is downloaded from its GitHub release. GitHub (`github.com`, `release-ass
 
 - The Pages workflow mirrors the pinned phars at `https://get.hostashi.com/wp-cli/v<version>/wp-cli-<version>.phar`, GitHub's layout: the pin of main and the pin of the latest stable release (`packaging/get/wpcli-mirror.sh`). Each phar is downloaded from the GitHub release and kept only if it matches the pinned SHA-512.
 - The agent downloads from the mirror first and from GitHub when that fails. Integrity does not depend on the source: the SHA-512 is fixed in the binary and checked before the phar is moved into place, so a changed file on Pages is refused.
-- The pin stays in the binary; a new WP-CLI version still comes with a Hostashi release (Kim, 2026-11-27: WP-CLI changes rarely and does not run the sites, so no runtimes-package pin for now).
+- The pin also goes into the package `hostashi-runtimes` (ADR-0077 part 2): the binary takes a newer WP-CLI release with a well-formed SHA-512 from it and never goes back to an older one. A new WP-CLI version reaches servers through apt without a Hostashi release (Kim, 2026-11-27: there will be far fewer releases once Hostashi is stable). Merging the pin pull request rebuilds that package and starts the Pages run that mirrors the phar.
 
 ### Consequences
 

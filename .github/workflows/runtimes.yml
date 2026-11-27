@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds the apt suite "runtimes" of get.hostashi.com (ADR-0077 part 2):
-# the package hostashi-runtimes with the Node.js and CPython pins of main,
+# the package hostashi-runtimes with the Node.js, CPython and WP-CLI pins
+# of main,
 # signed with the runtimes key (environment "runtimes", main only, no
 # approval). Servers trust that key for this suite only, and the binary
 # takes from it only newer patch releases of the lines it knows; the
-# downloads still come from nodejs.org and python-build-standalone and must
-# match the checksum. No Hostashi code ships this way.
+# downloads still come from nodejs.org, python-build-standalone and the
+# WP-CLI mirror on get.hostashi.com (or GitHub) and must match the checksum. No Hostashi code ships this way.
 #
 # It runs when the pins change on main, when pin-auto-merge.yml merged a
 # pin pull request (a merge with GITHUB_TOKEN starts no push workflows),
@@ -22,6 +23,7 @@ on:
     paths:
       - "internal/agentapi/node_versions.go"
       - "internal/agentapi/python_versions.go"
+      - "internal/agentapi/wpcli.go"
       - "internal/runtimepins/**"
       - "tools/runtimepins/**"
       - "packaging/runtimes/**"
@@ -70,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S -- \
-            internal/agentapi/node_versions.go internal/agentapi/python_versions.go)
+            internal/agentapi/node_versions.go internal/agentapi/python_versions.go internal/agentapi/wpcli.go)
           [[ "$version" =~ ^[0-9]{14}$ ]] || { echo "::error::no commit of the pin files"; exit 1; }
           at=$(date -u -d "${version:0:8} ${version:8:2}:${version:10:2}:${version:12:2}" +%Y-%m-%dT%H:%M:%SZ)
           mkdir -p "$RUNNER_TEMP/runtimes"

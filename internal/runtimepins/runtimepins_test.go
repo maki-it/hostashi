@@ -164,9 +164,9 @@ func TestLoad(t *testing.T) {
 		t.Skip("needs a file owned by root")
 	}
 
-	saved := agentapi.NodeReleases
+	saved, savedWP := agentapi.NodeReleases, agentapi.WPCLI
 
-	t.Cleanup(func() { agentapi.NodeReleases = saved })
+	t.Cleanup(func() { agentapi.NodeReleases, agentapi.WPCLI = saved, savedWP })
 
 	agentapi.NodeReleases = builtinNode()
 
@@ -184,5 +184,38 @@ func TestLoad(t *testing.T) {
 
 	if r, _ := agentapi.NodeReleaseOf("24"); r.Version != "24.22.4" {
 		t.Errorf("pin %+v", r)
+	}
+}
+
+func TestApplyWPCLI(t *testing.T) {
+	sum := strings.Repeat("c", 128)
+	cur := agentapi.WPCLIRelease{Version: "2.12.0", SHA512: strings.Repeat("d", 128)}
+
+	for _, c := range []struct {
+		name, wpcli string
+		want        agentapi.WPCLIRelease
+		applied     int
+		skipped     int
+	}{
+		{"newer", `{"version":"2.13.0","sha512":"` + sum + `"}`, agentapi.WPCLIRelease{Version: "2.13.0", SHA512: sum}, 1, 0},
+		{"same", `{"version":"2.12.0","sha512":"` + sum + `"}`, cur, 0, 0},
+		{"older", `{"version":"2.11.0","sha512":"` + sum + `"}`, cur, 0, 0},
+		{"bad version", `{"version":"../2.13.0","sha512":"` + sum + `"}`, cur, 0, 1},
+		{"short sum", `{"version":"2.13.0","sha512":"` + sumA + `"}`, cur, 0, 1},
+		{"none", `null`, cur, 0, 0},
+	} {
+		got, res, err := ApplyWPCLI([]byte(`{"schema":1,"wpcli":`+c.wpcli+`}`), cur)
+		if err != nil || got != c.want || len(res.Applied) != c.applied || len(res.Skipped) != c.skipped {
+			t.Errorf("%s: %+v %+v %v", c.name, got, res, err)
+		}
+	}
+
+	if _, _, err := ApplyWPCLI([]byte(`{"schema":2}`), cur); !errors.Is(err, ErrSchema) {
+		t.Errorf("schema 2: %v", err)
+	}
+
+	// Files without WP-CLI (written before it) still apply to Node.js and Python.
+	if _, _, _, err := Apply([]byte(`{"schema":1,"wpcli":{"version":"2.13.0","sha512":"`+sum+`"}}`), builtinNode(), builtinPython()); err != nil {
+		t.Errorf("Apply with a WP-CLI pin: %v", err)
 	}
 }

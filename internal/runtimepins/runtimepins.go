@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package runtimepins applies newer Node.js and CPython pins from the
-// runtimes data file over the ones built into the binary (ADR-0077 part 2).
+// Package runtimepins applies newer Node.js, CPython and WP-CLI pins from
+// the runtimes data file over the ones built into the binary (ADR-0077
+// part 2, ADR-0069 addendum 2).
 //
 // The file comes from the package hostashi-runtimes in the signed apt suite
 // "runtimes"; apt checks its signature, this package only checks what may
@@ -42,6 +43,14 @@ type File struct {
 	Generated string   `json:"generated"` // UTC, RFC 3339
 	Node      []Node   `json:"node"`
 	Python    []Python `json:"python"`
+	// WPCLI is the pinned WP-CLI release; older binaries ignore it.
+	WPCLI *WPCLI `json:"wpcli,omitempty"`
+}
+
+// WPCLI is the pinned WP-CLI phar.
+type WPCLI struct {
+	Version string `json:"version"`
+	SHA512  string `json:"sha512"`
 }
 
 // Node is one pinned Node.js line.
@@ -81,6 +90,7 @@ var (
 	tagRe     = regexp.MustCompile(`^[0-9]{8}$`)
 	dateRe    = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
 	sumRe     = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	sum512Re  = regexp.MustCompile(`^[0-9a-f]{128}$`)
 )
 
 // nodeArches and pythonArches are the checksums every pin needs.
@@ -120,9 +130,47 @@ func Load(path string) (Result, error) {
 		return Result{}, fmt.Errorf("%s: %w", path, err)
 	}
 
-	agentapi.NodeReleases, agentapi.PythonReleases = node, python
+	wp, wres, err := ApplyWPCLI(buf.Bytes(), agentapi.WPCLI)
+	if err != nil {
+		return Result{}, fmt.Errorf("%s: %w", path, err)
+	}
+
+	agentapi.NodeReleases, agentapi.PythonReleases, agentapi.WPCLI = node, python, wp
+	res.Applied = append(res.Applied, wres.Applied...)
+	res.Skipped = append(res.Skipped, wres.Skipped...)
 
 	return res, nil
+}
+
+// ApplyWPCLI returns cur, or the WP-CLI pin of data when it is a newer
+// release with a well-formed SHA-512. It never goes back to an older one.
+func ApplyWPCLI(data []byte, cur agentapi.WPCLIRelease) (agentapi.WPCLIRelease, Result, error) {
+	var f File
+
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&f); err != nil {
+		return cur, Result{}, err
+	}
+
+	if f.Schema != Schema {
+		return cur, Result{}, fmt.Errorf("%w %d", ErrSchema, f.Schema)
+	}
+
+	var res Result
+
+	p := f.WPCLI
+
+	switch {
+	case p == nil:
+	case !versionRe.MatchString(p.Version):
+		res.Skipped = append(res.Skipped, "WP-CLI "+p.Version+": not a release")
+	case !sum512Re.MatchString(p.SHA512):
+		res.Skipped = append(res.Skipped, "WP-CLI "+p.Version+": checksum missing or malformed")
+	case compare(p.Version, cur.Version) > 0:
+		res.Applied = append(res.Applied, "WP-CLI: "+cur.Version+" -> "+p.Version)
+		cur = agentapi.WPCLIRelease{Version: p.Version, SHA512: p.SHA512}
+	}
+
+	return cur, res, nil
 }
 
 // safe accepts a regular file owned by root that only root can write.
