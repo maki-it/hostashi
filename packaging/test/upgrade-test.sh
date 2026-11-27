@@ -9,10 +9,16 @@
 # options stop the upgrade until they are fixed, that only the newest
 # copies are kept, that a downgrade goes through with the same database
 # schema and stops otherwise, and that hostashi-rollback goes back.
+# The server comes from a local signed repository, as from get.hostashi.com,
+# but was set up without the suite runtimes (before ADR-0077): the upgrade
+# adds it and hostashi-runtimes arrives right after dpkg is done, and
+# 'install.sh upgrade' brings it back when it is missing.
 #
 #   upgrade-test.sh IMAGE DIST_DIR      e.g. debian:trixie ./dist
 #
-# The newer versions are the same package with a higher version number.
+# DIST_DIR holds hostashi_*_<arch>.deb and runtimes/hostashi-runtimes_*.deb.
+# The newer versions are the same package with a higher version number,
+# carrying the test repository's key for the suite runtimes.
 # KEEP=1 leaves the container running after the test, for debugging.
 # The single-quoted scripts and formats expand inside the container.
 # shellcheck disable=SC2016
@@ -39,6 +45,8 @@ fail() {
 arch=$(docker run --rm "$IMG" dpkg --print-architecture)
 debs=("$DIST"/hostashi_*_"$arch".deb)
 [ ${#debs[@]} -eq 1 ] && [ -f "${debs[0]}" ] || { echo "expected one hostashi_*_$arch.deb in $DIST" >&2; exit 1; }
+rdebs=("$DIST"/runtimes/hostashi-runtimes_*_all.deb)
+[ ${#rdebs[@]} -eq 1 ] && [ -f "${rdebs[0]}" ] || { echo "expected one runtimes/hostashi-runtimes_*_all.deb in $DIST" >&2; exit 1; }
 
 step "start $IMG with systemd"
 # systemd 258 and later (Ubuntu 26.04) need cgroup v2; on a cgroup v1 host
@@ -65,13 +73,32 @@ for _ in $(seq 1 60); do
 done
 echo "systemd: $state"
 
-# The same package as version V.1, V.2, ...: only the number changes.
-x mkdir -p /pkg
+# A local repository with the suites stable and runtimes, signed by a
+# throwaway key (packaging/apt-repo/build.sh), at file:/repo.
+x mkdir -p /pkg/rt /pkg/tools
 docker cp "${debs[0]}" "$NAME:/pkg/hostashi.deb"
+docker cp "${rdebs[0]}" "$NAME:/pkg/rt/"
+docker cp "$(dirname "$0")/../apt-repo/build.sh" "$NAME:/pkg/tools/build.sh"
+x bash -c '
+  set -e
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install -y -qq --no-install-recommends apt-utils gnupg xz-utils >/dev/null
+  mkdir -m 0700 /pkg/gpg
+  mkdir /pkg/stable
+  cp /pkg/hostashi.deb /pkg/stable/
+  GNUPGHOME=/pkg/gpg gpg --batch --quiet --passphrase "" --quick-gen-key "Hostashi test <test@example.invalid>" ed25519 sign 1d 2>/dev/null
+  GNUPGHOME=/pkg/gpg /pkg/tools/build.sh /pkg/stable /pkg/repo-s >/dev/null
+  GNUPGHOME=/pkg/gpg SUITE=runtimes PACKAGE=hostashi-runtimes /pkg/tools/build.sh /pkg/rt /pkg/repo-r >/dev/null
+  mkdir -m 0755 /repo
+  cp -a /pkg/repo-s/. /pkg/repo-r/. /repo/
+  chmod -R a+rX /repo'
+
+# The same package as version V.1, V.2, ...: only the number changes.
 x bash -c '
   set -e
   v=$(dpkg-deb -f /pkg/hostashi.deb Version)
   dpkg-deb -R /pkg/hostashi.deb /pkg/tree
+  cp /repo/hostashi-runtimes.asc /pkg/tree/usr/share/keyrings/hostashi-runtimes-keyring.asc
   for n in 1 2 3 4; do
     sed -i "s/^Version: .*/Version: $v.$n/" /pkg/tree/DEBIAN/control
     dpkg-deb -b /pkg/tree "/pkg/hostashi-$n.deb" >/dev/null
@@ -104,6 +131,12 @@ x test -f /etc/hostashi/install.options || fail "no options saved"
 x test -f /var/lib/hostashi/hostashi.db || fail "no panel database"
 health || fail "panel not up after setup"
 
+# As packaging/get/install.sh leaves it; the setup above did not know the
+# suite runtimes yet, like an installer before ADR-0077.
+x bash -c 'install -m 0644 /repo/hostashi.asc /usr/share/keyrings/hostashi-test.asc
+  printf "Types: deb\nURIs: file:/repo\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/hostashi-test.asc\n" >/etc/apt/sources.list.d/hostashi.sources'
+x test ! -e /etc/apt/sources.list.d/hostashi-runtimes.sources || fail "suite runtimes before the upgrade"
+
 step "upgrade keeps a database copy and restarts the panel"
 out=$(apt /pkg/hostashi-1.deb 2>&1) || { echo "$out" >&2; fail "upgrade"; }
 grep -q "saved to /var/lib/hostashi-installer/upgrade/hostashi-$v.db" <<<"$out" || fail "no database copy reported: $out"
@@ -114,6 +147,32 @@ x grep -q ' is up$' /var/log/hostashi-upgrade.log || fail "postinst did not see 
 [ "$(x dpkg-query -W -f '${Status} ${Version}' hostashi)" = "install ok installed $v.1" ] || fail "not configured"
 x systemctl is-active -q hostashi-agent hostashi || fail "services not active"
 health || fail "panel not up after upgrade"
+
+# runtimes_installed waits up to 120 s for hostashi-runtimes: the unit the
+# upgrade started waits for dpkg's lock.
+runtimes_installed() {
+  local _
+  for _ in $(seq 1 60); do
+    [ "$(x dpkg-query -W -f '${Status}' hostashi-runtimes 2>/dev/null)" = "install ok installed" ] && return 0
+    sleep 2
+  done
+  x journalctl --no-pager -u hostashi-runtimes-install -n 30 >&2 || true
+  return 1
+}
+step "the upgrade adds the suite runtimes and installs hostashi-runtimes after dpkg"
+x test -f /etc/apt/sources.list.d/hostashi-runtimes.sources || fail "no source for the suite runtimes"
+x systemctl is-enabled -q hostashi-runtimes-install.timer || fail "timer not enabled"
+x grep -q 'hostashi-runtimes: installing it in the background' /var/log/hostashi-upgrade.log || fail "the upgrade did not start the install"
+runtimes_installed || fail "hostashi-runtimes not installed after the upgrade"
+x grep -q '"schema": 1' /usr/share/hostashi/runtimes.json || fail "runtimes.json content"
+health || fail "panel not up after hostashi-runtimes"
+
+step "install.sh upgrade brings a missing hostashi-runtimes back"
+x env DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq hostashi-runtimes >/dev/null 2>&1 || fail "remove hostashi-runtimes"
+out=$(x /usr/share/hostashi/install.sh upgrade 2>&1) || { echo "$out" >&2; fail "install.sh upgrade"; }
+grep -q 'installing it in the background' <<<"$out" || fail "install.sh upgrade did not start the install: $out"
+runtimes_installed || fail "hostashi-runtimes not installed after install.sh upgrade"
+health || fail "panel not up after install.sh upgrade"
 
 step "broken saved options stop the upgrade until fixed"
 x chmod 0666 /etc/hostashi/install.options

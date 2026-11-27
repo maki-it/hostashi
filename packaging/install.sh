@@ -1237,7 +1237,9 @@ do_updates() {
 # the source uses the same address with the suite runtimes and the key the
 # package ships; the pin lets the suite provide hostashi-runtimes only.
 # unattended-upgrades upgrades it (uu_origins). An upgrade from the package
-# runs with --no-apt and cannot install it: the daily RUNTIMES_TIMER does.
+# runs with --no-apt and cannot install it: runtimes_later starts
+# RUNTIMES_UNIT, which installs it once dpkg is done, and the daily
+# RUNTIMES_TIMER tries again where that failed.
 HOSTASHI_SOURCES=/etc/apt/sources.list.d/hostashi.sources
 RUNTIMES_SOURCES=/etc/apt/sources.list.d/hostashi-runtimes.sources
 RUNTIMES_PIN=/etc/apt/preferences.d/00hostashi-runtimes
@@ -1263,6 +1265,22 @@ chk_runtimes() {
   [ "$(systemctl is-enabled "$RUNTIMES_TIMER" 2>/dev/null)" = enabled ] || { echo "$RUNTIMES_TIMER not enabled"; return 1; }
   # With --no-apt the timer installs the package later.
   [ "$NO_APT" = yes ] || pkg_installed hostashi-runtimes || { echo "hostashi-runtimes not installed"; return 1; }
+}
+
+# runtimes_later starts RUNTIMES_UNIT without waiting for it when apt was
+# not allowed (an upgrade of the hostashi package) and hostashi-runtimes is
+# missing. The unit fetches the suite's list, and its apt-get waits for
+# the lock that dpkg holds, so the package arrives right after the upgrade
+# instead of at the next run of RUNTIMES_TIMER. The step itself passes with
+# --no-apt, so this runs after the steps, on every upgrade until it is there.
+runtimes_later() {
+  [ "$NO_APT" = yes ] && [ -f "$RUNTIMES_SOURCES" ] && [ -f "/etc/systemd/system/$RUNTIMES_UNIT" ] || return 0
+  ! pkg_installed hostashi-runtimes || return 0
+  if systemctl start --no-block "$RUNTIMES_UNIT" >>"$LOG" 2>&1; then
+    echo "hostashi-runtimes: installing it in the background (journalctl -u $RUNTIMES_UNIT)"
+  else
+    log "WARNING: could not start $RUNTIMES_UNIT; $RUNTIMES_TIMER installs hostashi-runtimes later"
+  fi
 }
 do_runtimes() {
   local rc reload=no
@@ -1872,6 +1890,7 @@ main() {
   fi
 
   if [ $CHANGES -eq 0 ]; then echo "Nothing to do. (changes=0)"; else echo "Done. changes=$CHANGES"; fi
+  runtimes_later
   quota_detect
   case "$QUOTA" in
     pending) echo "REBOOT REQUIRED: disk quota is prepared and becomes active after one reboot. Re-run the installer afterwards to check it.";;
