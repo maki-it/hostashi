@@ -2,6 +2,8 @@
 
 import { ArrowClockwise, CaretLeft, CaretRight, LockOpen } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { formatCount } from "./format";
 import {
   banPageSize,
   fail2banMessage,
@@ -16,7 +18,6 @@ import {
 import { Badge, Button, Card, IconButton, Notice, RelTime, RowActions, Table, type Column } from "./ui";
 
 const typingDelay = 300;
-const count = new Intl.NumberFormat("en");
 
 // filterOf reads the filter from the address of the page, so a filtered
 // list can be linked and survives a reload.
@@ -40,6 +41,7 @@ type Props = { query: URLSearchParams; onQuery: (q: URLSearchParams) => void };
 // repeat-offender jail does not stay behind. Thresholds are not set here;
 // they stay in fail2ban's files (ADR-0021).
 export function BlockedAddressesCard({ query, onQuery }: Props) {
+  const { t } = useTranslation();
   const filter = filterOf(query);
   const key = JSON.stringify(filter);
   const [st, setSt] = useState<Fail2banStatus | null>(null);
@@ -97,7 +99,7 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
     setDone("");
     try {
       await unban(b.address);
-      setDone(b.address + " is unblocked.");
+      setDone(t("server.blocked.unblocked", { address: b.address }));
     } catch (err) {
       setError(fail2banMessage(err));
     } finally {
@@ -109,10 +111,10 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
 
   const filtered = filter.jail !== "" || filter.address.trim() !== "";
   const columns: Column<BlockedAddress>[] = [
-    { key: "address", header: "Address", cell: (b) => <code className="ui-mono">{b.address}</code> },
+    { key: "address", header: t("server.blocked.columns.address"), cell: (b) => <code className="ui-mono">{b.address}</code> },
     {
       key: "jails",
-      header: "Blocked by",
+      header: t("server.blocked.columns.jails"),
       cell: (b) => (
         <span className="ui-row">
           {b.jails.map((j) => (
@@ -123,17 +125,21 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
         </span>
       ),
     },
-    { key: "since", header: "Since", cell: (b) => <RelTime iso={b.since} /> },
-    { key: "until", header: "Until", cell: (b) => (b.until === null ? <Badge tone="err">No end</Badge> : <RelTime iso={b.until} />) },
+    { key: "since", header: t("server.blocked.columns.since"), cell: (b) => <RelTime iso={b.since} /> },
+    {
+      key: "until",
+      header: t("server.blocked.columns.until"),
+      cell: (b) => (b.until === null ? <Badge tone="err">{t("server.blocked.noEnd")}</Badge> : <RelTime iso={b.until} />),
+    },
     {
       key: "actions",
-      header: "Actions",
+      header: t("server.blocked.columns.actions"),
       srHeader: true,
       cell: (b) => (
         <RowActions>
           <IconButton
-            label={"Unblock " + b.address}
-            text="Unblock"
+            label={t("server.blocked.unblockLabel", { address: b.address })}
+            text={t("server.blocked.unblock")}
             icon={<LockOpen size={16} />}
             disabled={busy}
             onClick={() => {
@@ -152,43 +158,42 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
 
   return (
     <Card
-      title="Blocked addresses"
+      title={t("server.blocked.title")}
       padded={false}
       actions={
         <Button icon={<ArrowClockwise size={16} aria-hidden="true" />} disabled={busy || loading} onClick={() => setReload((n) => n + 1)}>
-          Refresh
+          {t("server.blocked.refresh")}
         </Button>
       }
     >
       <div className="ui-card-body ui-stack">
-        <p className="ui-flush ui-hint">
-          fail2ban blocks an address for a while after too many failed logins. A blocked address reaches neither the sites nor the panel,
-          and after repeated blocks not SSH either. Unblock an address here when a customer or you were locked out by mistake; it is
-          blocked again after new failed logins.
-        </p>
+        <p className="ui-flush ui-hint">{t("server.blocked.intro")}</p>
         {unblocking && (
-          <Notice tone="warn" title={"Unblock " + unblocking.address + "?"}>
+          <Notice tone="warn" title={t("server.blocked.unblockTitle", { address: unblocking.address })}>
             <p className="ui-flush">
-              <code className="ui-confirm-phrase">{unblocking.address}</code> is unblocked in every jail at once:{" "}
-              {unblocking.jails.map(jailLabel).join(", ")}.
+              <Trans
+                i18nKey="server.blocked.unblockText"
+                values={{ address: unblocking.address, jails: unblocking.jails.map(jailLabel).join(", ") }}
+                components={{ code: <code className="ui-confirm-phrase" /> }}
+              />
             </p>
             <div className="ui-row">
               <Button variant="primary" disabled={busy} onClick={() => void doUnban(unblocking)}>
-                Unblock address
+                {t("server.blocked.unblockSubmit")}
               </Button>
               <Button disabled={busy} onClick={() => setUnblocking(null)}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </Notice>
         )}
         {done && <Notice tone="ok" title={done} />}
         {error && <Notice tone="err" title={error} />}
-        {st === null && !error && <p aria-busy="true">Loading…</p>}
+        {st === null && !error && <p aria-busy="true">{t("common.status.loading")}</p>}
         {st && <JailList st={st} />}
         {st?.truncated && (
-          <Notice tone="warn" title="fail2ban blocks more addresses than the panel reads, so some are missing below.">
-            The counters above are complete. Narrow the list with the filters, or use fail2ban-client on the server.
+          <Notice tone="warn" title={t("server.blocked.truncated")}>
+            {t("server.blocked.truncatedText")}
           </Notice>
         )}
       </div>
@@ -197,11 +202,11 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
           <div className="ui-filters">
             <select
               className="ui-select"
-              aria-label="Block type"
+              aria-label={t("server.blocked.blockType")}
               value={filter.jail}
               onChange={(e) => set({ jail: e.target.value, page: "" })}
             >
-              <option value="">All block types</option>
+              <option value="">{t("server.blocked.allTypes")}</option>
               {st.jails.map((j) => (
                 <option key={j.name} value={j.name}>
                   {jailLabel(j.name)}
@@ -211,8 +216,8 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
             <input
               className="ui-input ui-mono"
               type="search"
-              aria-label="IP address"
-              placeholder="IP address or range"
+              aria-label={t("server.blocked.ipAddress")}
+              placeholder={t("server.blocked.ipPlaceholder")}
               maxLength={64}
               spellCheck={false}
               value={typed}
@@ -225,25 +230,25 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
                   set({ jail: "", address: "", page: "" });
                 }}
               >
-                Clear filters
+                {t("server.blocked.clear")}
               </Button>
             )}
           </div>
           <div aria-busy={loading}>
             <Table
-              label="Blocked addresses"
+              label={t("server.blocked.title")}
               columns={columns}
               rows={st.addresses}
               rowKey={(b) => b.address}
-              empty={filtered ? "No blocked address matches the filters." : "No address is blocked."}
+              empty={filtered ? t("server.blocked.noMatch") : t("server.blocked.none")}
             />
           </div>
           {st.total > 0 && (
             <div className="ui-pager">
               <span className="ui-hint" aria-live="polite">
                 {first === 0
-                  ? "No address on this page; " + count.format(st.total) + " in all."
-                  : count.format(first) + "–" + count.format(last) + " of " + count.format(st.total) + (st.total === 1 ? " address" : " addresses")}
+                  ? t("server.blocked.emptyPage", { total: formatCount(st.total) })
+                  : t("server.blocked.range", { count: st.total, first: formatCount(first), last: formatCount(last), total: formatCount(st.total) })}
               </span>
               {pages > 1 && (
                 <span className="ui-row">
@@ -252,13 +257,13 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
                     disabled={loading || st.page <= 1}
                     onClick={() => set({ page: st.page > 2 ? String(Math.min(st.page - 1, pages)) : "" })}
                   >
-                    Previous
+                    {t("server.blocked.previous")}
                   </Button>
                   <span className="ui-hint">
-                    Page {count.format(Math.min(st.page, pages))} of {count.format(pages)}
+                    {t("server.blocked.page", { page: formatCount(Math.min(st.page, pages)), pages: formatCount(pages) })}
                   </span>
                   <Button disabled={loading || st.page >= pages} onClick={() => set({ page: String(st.page + 1) })}>
-                    Next
+                    {t("server.blocked.next")}
                     <CaretRight size={16} aria-hidden="true" />
                   </Button>
                 </span>
@@ -272,8 +277,9 @@ export function BlockedAddressesCard({ query, onQuery }: Props) {
 }
 
 function JailList({ st }: { st: Fail2banStatus }) {
+  const { t } = useTranslation();
   return (
-    <ul className="ui-jails" aria-label="Jails">
+    <ul className="ui-jails" aria-label={t("server.blocked.jailList")}>
       {st.jails.map((j) => (
         <li key={j.name}>
           <span className="ui-cell-main">
@@ -282,15 +288,11 @@ function JailList({ st }: { st: Fail2banStatus }) {
           </span>
           {j.running ? (
             <>
-              <span className="ui-hint">
-                Failed logins: {count.format(j.currentlyFailed)} now, {count.format(j.totalFailed)} since start
-              </span>
-              <span className="ui-hint">
-                Blocked: {count.format(j.currentlyBanned)} now, {count.format(j.totalBanned)} since start
-              </span>
+              <span className="ui-hint">{t("server.blocked.failed", { now: formatCount(j.currentlyFailed), total: formatCount(j.totalFailed) })}</span>
+              <span className="ui-hint">{t("server.blocked.banned", { now: formatCount(j.currentlyBanned), total: formatCount(j.totalBanned) })}</span>
             </>
           ) : (
-            <Badge tone="err">Not running</Badge>
+            <Badge tone="err">{t("server.blocked.notRunning")}</Badge>
           )}
         </li>
       ))}

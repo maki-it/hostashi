@@ -2,10 +2,12 @@
 
 import { PencilSimple, Power } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { PanelCertificate } from "./Certificate";
 import { LogRetentionCard } from "./Logs";
 import { MalwareEngineCard } from "./Malware";
 import { PanelRealIPCard } from "./RealIP";
+import { formatDateTime } from "./format";
 import { formatHash } from "./routes";
 import { serviceMessage } from "./services";
 import {
@@ -37,6 +39,7 @@ type RebootState = { phase: "idle" } | { phase: "going-down" | "starting" } | { 
  * warns about the certificate.
  */
 export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [zones, setZones] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -85,21 +88,21 @@ export function System({ wait = waitForPanel }: { wait?: typeof waitForPanel }) 
   return (
     <>
       <PageHead
-        title="System"
-        description="The server's name, time zone and clock, and the panel's own address. A reboot stops every site until the server is back."
+        title={t("server.system.title")}
+        description={t("server.system.description")}
       />
       {error && <Notice tone="err" title={error} />}
       {done && <Notice tone="ok" title={done} />}
       {reboot.phase !== "idle" && <RebootProgress state={reboot} />}
       {info === null ? (
-        !error && <p aria-busy="true">Loading the server settings…</p>
+        !error && <p aria-busy="true">{t("server.system.loading")}</p>
       ) : (
         <>
           <Overview
             info={info}
             zones={zones}
-            onHostname={(n) => changed(n, `The hostname is now ${n.hostname}.`)}
-            onTimezone={(n) => changed(n, `The time zone is now ${n.timezone}.`)}
+            onHostname={(n) => changed(n, t("server.system.hostnameDone", { name: n.hostname }))}
+            onTimezone={(n) => changed(n, t("server.system.timezoneDone", { zone: n.timezone }))}
             onError={setError}
           />
           <UpdatesCard updates={info.updates} onChanged={changed} onError={setError} />
@@ -129,41 +132,52 @@ function Overview({
   onTimezone: (i: SystemInfo) => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useTranslation();
   const [edit, setEdit] = useState<"" | "hostname" | "timezone">("");
   const change = (what: "hostname" | "timezone", label: string) =>
     edit !== what && (
-      <Button small icon={<PencilSimple size={16} aria-hidden />} aria-label={`Change ${label}`} onClick={() => setEdit(what)}>
-        Change
+      <Button small icon={<PencilSimple size={16} aria-hidden />} aria-label={label} onClick={() => setEdit(what)}>
+        {t("server.system.server.change")}
       </Button>
     );
   return (
     <Card
-      title="Server"
-      actions={info.rebootRequired ? <Badge tone="warn">Reboot needed</Badge> : <Badge tone="ok">Up to date</Badge>}
+      title={t("server.system.server.title")}
+      actions={
+        info.rebootRequired ? (
+          <Badge tone="warn">{t("server.system.server.rebootNeeded")}</Badge>
+        ) : (
+          <Badge tone="ok">{t("server.system.server.upToDate")}</Badge>
+        )
+      }
     >
       <div className="ui-stack">
         <dl className="ui-facts">
-          <dt>Hostname</dt>
+          <dt>{t("server.system.server.hostname")}</dt>
           <dd className="ui-row">
             <span>
               <code>{info.hostname}</code>
               {info.transientHostname && info.transientHostname !== info.hostname && (
-                <span className="ui-hint"> (the kernel still uses {info.transientHostname})</span>
+                <span className="ui-hint">{t("server.system.server.kernelName", { name: info.transientHostname })}</span>
               )}
             </span>
-            {change("hostname", "hostname")}
+            {change("hostname", t("server.system.server.changeHostname"))}
           </dd>
-          <dt>Time zone</dt>
+          <dt>{t("server.system.server.timezone")}</dt>
           <dd className="ui-row">
-            <span>{info.timezone || "not set"}</span>
-            {change("timezone", "time zone")}
+            <span>{info.timezone || t("server.system.server.notSet")}</span>
+            {change("timezone", t("server.system.server.changeTimezone"))}
           </dd>
-          <dt>Server time</dt>
+          <dt>{t("server.system.server.time")}</dt>
           <dd>
             {clockIn(info.time, info.timezone || "UTC") || info.time}{" "}
-            {info.ntpSynchronized ? <Badge tone="ok">Synchronized</Badge> : <Badge tone="warn">Not synchronized</Badge>}
+            {info.ntpSynchronized ? (
+              <Badge tone="ok">{t("server.system.server.synced")}</Badge>
+            ) : (
+              <Badge tone="warn">{t("server.system.server.notSynced")}</Badge>
+            )}
           </dd>
-          <dt>Uptime</dt>
+          <dt>{t("server.system.server.uptime")}</dt>
           <dd>{uptime(info.uptimeSeconds)}</dd>
         </dl>
         {edit === "hostname" && (
@@ -191,9 +205,9 @@ function Overview({
         )}
         {info.rebootRequired && (
           <p className="ui-flush">
-            Updates wait for a reboot
-            {info.rebootPackages && info.rebootPackages.length > 0 ? <>: {info.rebootPackages.join(", ")}.</> : "."} The server never
-            reboots by itself.
+            {info.rebootPackages && info.rebootPackages.length > 0
+              ? t("server.system.server.rebootWaitsPackages", { packages: info.rebootPackages.join(", ") })
+              : t("server.system.server.rebootWaits")}
           </p>
         )}
       </div>
@@ -213,10 +227,11 @@ function UpdatesCard({
   onChanged: (i: SystemInfo, text: string) => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   if (!updates) return null;
   const version = (v: string) => (
-    <a href={releaseUrl(v)} target="_blank" rel="noopener noreferrer" title="Release notes">
+    <a href={releaseUrl(v)} target="_blank" rel="noopener noreferrer" title={t("server.system.updates.releaseNotes")}>
       {versionLabel(v)}
     </a>
   );
@@ -226,9 +241,7 @@ function UpdatesCard({
       const next = await setAutoUpdate(on);
       onChanged(
         next,
-        on
-          ? "Automatic updates are on. New Hostashi versions install with the next daily security updates."
-          : "Automatic updates are off. New Hostashi versions wait for sudo apt upgrade.",
+        on ? t("server.system.updates.on") : t("server.system.updates.off"),
       );
     } catch (err) {
       onError(serviceMessage(err));
@@ -238,33 +251,40 @@ function UpdatesCard({
   }
   return (
     <Card
-      title="Updates"
-      actions={updates.update ? <Badge tone="warn">Update available</Badge> : updates.available ? <Badge tone="ok">Up to date</Badge> : undefined}
+      title={t("server.system.updates.title")}
+      actions={
+        updates.update ? (
+          <Badge tone="warn">{t("server.system.updates.available")}</Badge>
+        ) : updates.available ? (
+          <Badge tone="ok">{t("server.system.updates.upToDate")}</Badge>
+        ) : undefined
+      }
     >
       <div className="ui-stack">
         <dl className="ui-facts">
           <dt>Hostashi</dt>
           <dd>
             {version(updates.installed)}
-            {updates.update && updates.available && <> (newest: {version(updates.available)})</>}
+            {updates.update && updates.available && <Trans i18nKey="server.system.updates.newest" components={{ link: version(updates.available) }} />}
           </dd>
-          <dt>Node.js and Python patches</dt>
+          <dt>{t("server.system.updates.runtimes")}</dt>
           <dd>
             {updates.runtimes && updates.runtimesAuto ? (
               <>
-                <Badge tone="ok">Automatic</Badge>{" "}
-                <span className="ui-hint">pins of {pinsDate(updates.runtimes) || updates.runtimes}, always on</span>
+                <Badge tone="ok">{t("server.system.updates.automatic")}</Badge>{" "}
+                <span className="ui-hint">{t("server.system.updates.pins", { date: pinsDate(updates.runtimes) || updates.runtimes })}</span>
               </>
             ) : (
               <>
-                <Badge tone="warn">Not set up</Badge> <span className="ui-hint">the installer sets them up on its next run</span>
+                <Badge tone="warn">{t("server.system.updates.notSetUp")}</Badge>{" "}
+                <span className="ui-hint">{t("server.system.updates.notSetUpHint")}</span>
               </>
             )}
           </dd>
           {updates.listedAt && (
             <>
-              <dt>Last checked</dt>
-              <dd>{new Date(updates.listedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd>
+              <dt>{t("server.system.updates.lastChecked")}</dt>
+              <dd>{formatDateTime(new Date(updates.listedAt))}</dd>
             </>
           )}
         </dl>
@@ -272,17 +292,11 @@ function UpdatesCard({
           checked={updates.auto}
           disabled={busy}
           hint={
-            updates.auto ? (
-              "unattended-upgrades installs new Hostashi versions with the daily security updates, after a copy of the panel database."
-            ) : (
-              <>
-                New Hostashi versions wait for <code>sudo apt upgrade</code>. Health and an email say when one is out.
-              </>
-            )
+            updates.auto ? t("server.system.updates.hintOn") : <Trans i18nKey="server.system.updates.hintOff" components={{ code: <code /> }} />
           }
           onChange={(on) => void toggle(on)}
         >
-          Automatic updates
+          {t("server.system.updates.switch")}
         </Switch>
       </div>
     </Card>
@@ -300,13 +314,14 @@ function HostnameForm({
   onCancel: () => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(info.hostname);
   const [busy, setBusy] = useState(false);
   const problem = hostnameError(name);
   const same = name === info.hostname;
 
   return (
-    <section className="ui-edit" aria-label="Hostname">
+    <section className="ui-edit" aria-label={t("server.system.hostname.label")}>
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -323,22 +338,22 @@ function HostnameForm({
       >
         <div className="ui-narrow">
           <Field
-            label="Hostname"
-            hint="Lowercase letters, digits and hyphens; a full name such as web2.example.org works too. The panel's address and the sites do not change."
+            label={t("server.system.hostname.label")}
+            hint={t("server.system.hostname.hint")}
             {...(!same && problem ? { error: problem } : {})}
           >
             <input className="ui-input" value={name} onChange={(e) => setName(e.target.value.trim())} autoComplete="off" spellCheck={false} />
           </Field>
         </div>
         {info.cloudInit && (
-          <p className="ui-flush ui-hint">cloud-init is installed: Hostashi tells it to keep this name at the next boot.</p>
+          <p className="ui-flush ui-hint">{t("server.system.hostname.cloudInit")}</p>
         )}
         <div className="ui-row">
           <Button variant="primary" type="submit" disabled={busy || same || problem !== ""}>
-            Save hostname
+            {t("server.system.hostname.save")}
           </Button>
           <Button disabled={busy} onClick={onCancel}>
-            Cancel
+            {t("common.actions.cancel")}
           </Button>
         </div>
       </form>
@@ -359,6 +374,7 @@ function TimezoneForm({
   onCancel: () => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useTranslation();
   const [zone, setZone] = useState(info.timezone);
   const [busy, setBusy] = useState(false);
   const known = zones.length === 0 || zones.includes(zone);
@@ -366,7 +382,7 @@ function TimezoneForm({
   const preview = known && !same ? clockIn(info.time, zone) : "";
 
   return (
-    <section className="ui-edit" aria-label="Time zone">
+    <section className="ui-edit" aria-label={t("server.system.timezone.label")}>
       <form
         className="ui-stack"
         onSubmit={async (e) => {
@@ -383,9 +399,9 @@ function TimezoneForm({
       >
         <div className="ui-narrow">
           <Field
-            label="Time zone"
-            hint={preview ? `The server's clock would show ${preview}.` : "Type to search, for example Europe/Berlin."}
-            {...(!known ? { error: "The server does not know this time zone." } : {})}
+            label={t("server.system.timezone.label")}
+            hint={preview ? t("server.system.timezone.preview", { time: preview }) : t("server.system.timezone.hint")}
+            {...(!known ? { error: t("server.system.timezone.unknown") } : {})}
           >
             <input
               className="ui-input"
@@ -402,16 +418,15 @@ function TimezoneForm({
             ))}
           </datalist>
         </div>
-        <Notice tone="info" title="What follows the time zone">
-          The sites' cron jobs run by the new time at once. MariaDB uses it after its next restart on the{" "}
-          <a href={formatHash({ page: "services" })}>Services</a> page. PHP keeps its own <code>date.timezone</code> setting.
+        <Notice tone="info" title={t("server.system.timezone.followsTitle")}>
+          <Trans i18nKey="server.system.timezone.follows" components={{ a: <a href={formatHash({ page: "services" })} />, code: <code /> }} />
         </Notice>
         <div className="ui-row">
           <Button variant="primary" type="submit" disabled={busy || same || !known || zone === ""}>
-            Save time zone
+            {t("server.system.timezone.save")}
           </Button>
           <Button disabled={busy} onClick={onCancel}>
-            Cancel
+            {t("common.actions.cancel")}
           </Button>
         </div>
       </form>
@@ -420,19 +435,18 @@ function TimezoneForm({
 }
 
 function RebootCard({ info, busy, onReboot }: { info: SystemInfo; busy: boolean; onReboot: (confirm: string) => void }) {
+  const { t } = useTranslation();
   const [asking, setAsking] = useState(false);
   const [typed, setTyped] = useState("");
 
   return (
-    <Card title="Reboot">
+    <Card title={t("server.system.reboot.title")}>
       <div className="ui-stack">
-        <p className="ui-flush">
-          Every site, the databases and this panel stop until the server has started again, usually within one or two minutes.
-        </p>
+        <p className="ui-flush">{t("server.system.reboot.text")}</p>
         {!asking ? (
           <div className="ui-row">
             <Button variant="danger" disabled={busy} onClick={() => setAsking(true)}>
-              <Power size={16} aria-hidden="true" /> Reboot server…
+              <Power size={16} aria-hidden="true" /> {t("server.system.reboot.button")}
             </Button>
           </div>
         ) : (
@@ -448,14 +462,12 @@ function RebootCard({ info, busy, onReboot }: { info: SystemInfo; busy: boolean;
             }}
           >
             <h3 id="reboot-confirm-title" className="ui-flush">
-              Reboot {info.hostname}?
+              {t("server.system.reboot.confirmTitle", { name: info.hostname })}
             </h3>
             <div className="ui-narrow">
               <Field
                 label={
-                  <>
-                    Type <code className="ui-confirm-phrase">{info.hostname}</code> to confirm
-                  </>
+                  <Trans i18nKey="server.system.reboot.type" values={{ name: info.hostname }} components={{ code: <code className="ui-confirm-phrase" /> }} />
                 }
               >
                 <input className="ui-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
@@ -463,7 +475,7 @@ function RebootCard({ info, busy, onReboot }: { info: SystemInfo; busy: boolean;
             </div>
             <div className="ui-row">
               <Button variant="danger" type="submit" disabled={busy || typed !== info.hostname}>
-                Reboot now
+                {t("server.system.reboot.now")}
               </Button>
               <Button
                 onClick={() => {
@@ -471,7 +483,7 @@ function RebootCard({ info, busy, onReboot }: { info: SystemInfo; busy: boolean;
                   setTyped("");
                 }}
               >
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
             </div>
           </form>
@@ -482,17 +494,26 @@ function RebootCard({ info, busy, onReboot }: { info: SystemInfo; busy: boolean;
 }
 
 function RebootProgress({ state }: { state: RebootState }) {
+  const { t } = useTranslation();
   switch (state.phase) {
     case "going-down":
-      return <Notice tone="warn" title="The server is shutting down…">This page waits and reconnects by itself.</Notice>;
+      return (
+        <Notice tone="warn" title={t("server.system.reboot.goingDown")}>
+          {t("server.system.reboot.goingDownText")}
+        </Notice>
+      );
     case "starting":
-      return <Notice tone="warn" title="The server is starting…">This page reconnects as soon as the panel answers.</Notice>;
+      return (
+        <Notice tone="warn" title={t("server.system.reboot.starting")}>
+          {t("server.system.reboot.startingText")}
+        </Notice>
+      );
     case "back":
-      return <Notice tone="ok" title="The server is back." />;
+      return <Notice tone="ok" title={t("server.system.reboot.back")} />;
     case "lost":
       return (
-        <Notice tone="err" title="The panel has not answered for ten minutes.">
-          Check the server in your hosting provider's console.
+        <Notice tone="err" title={t("server.system.reboot.lost")}>
+          {t("server.system.reboot.lostText")}
         </Notice>
       );
     default:

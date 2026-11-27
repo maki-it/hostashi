@@ -7,9 +7,10 @@ import account from "./account.json";
 import auth from "./auth.json";
 import common from "./common.json";
 import errors from "./errors.json";
+import server from "./server.json";
 import shell from "./shell.json";
 import tokens from "./tokens.json";
 
-const de: Catalog = { account, auth, common, errors, shell, tokens };
+const de: Catalog = { account, auth, common, errors, server, shell, tokens };
 
 export default de;

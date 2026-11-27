@@ -5,6 +5,7 @@
 // without one.
 
 import { ApiError, request } from "./api";
+import { apiErrorText, areaErrorText } from "./i18n";
 
 export type FirewallRule = {
   proto: "tcp" | "udp";
@@ -46,23 +47,8 @@ export const parseList = (text: string): string[] =>
 export const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export function firewallMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "forbidden":
-        return "Only administrators can change the firewall.";
-      case "not_pending":
-        return "The change was no longer pending: it was rolled back. Check the rules and try again.";
-      case "firewall_unavailable":
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "The firewall is not available.";
-      case "agent_error":
-        return "The firewall could not load the rules. The previous rules stay.";
-      case "agent_timeout":
-      case "agent_unavailable":
-        return "The firewall could not be reached. Try again.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  // The firewall's own reason (for example "ufw is not installed") says
+  // more than the general text, so it wins when there is one.
+  if (err instanceof ApiError && err.code === "firewall_unavailable" && err.message.trim() !== "") return apiErrorText(err);
+  return areaErrorText("server.firewall.errors", err);
 }

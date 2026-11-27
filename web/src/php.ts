@@ -3,6 +3,8 @@
 // More PHP versions from sury.org, installed from the panel (ADR-0036).
 
 import { ApiError, request } from "./api";
+import { formatDate } from "./format";
+import i18n from "./i18n";
 import type { PHPVersions } from "./sites";
 
 export type PHPInstallState = "idle" | "running" | "succeeded" | "failed";
@@ -43,28 +45,34 @@ export const daysUntil = (day: string, today: string) =>
 export const todayUTC = () => new Date().toISOString().slice(0, 10);
 
 export function phpMessage(err: unknown): string {
+  const e = (k: "forbidden" | "running" | "alreadyInstalled" | "inUse" | "notInstalled" | "notStarted" | "php_default" | "timeout") =>
+    i18n.t(`server.runtimes.php.errors.${k}`);
   if (err instanceof ApiError) {
     switch (err.code) {
       case "forbidden":
-        return "Only administrators can install PHP versions.";
+        return e("forbidden");
       case "php_install_refused":
         return err.message.includes("already running")
-          ? "Another installation is still running. Wait until it is done."
+          ? e("running")
           : err.message.includes("already installed")
-            ? "This version is already installed."
+            ? e("alreadyInstalled")
             : err.message.includes("still run")
-              ? "Sites still run on this version. Move them to another version first."
+              ? e("inUse")
               : err.message.includes("not installed")
-                ? "This version is not installed."
-                : "The installation could not start.";
+                ? e("notInstalled")
+                : e("notStarted");
       case "php_in_use":
-        return "Sites still run on this version. Move them to another version first.";
+        return e("inUse");
       case "php_default":
-        return "The distribution's PHP stays installed.";
+        return e("php_default");
       case "agent_timeout":
       case "agent_unavailable":
-        return "The server did not answer. Try again in a moment.";
+        return e("timeout");
     }
   }
-  return "Something went wrong. Try again.";
+  return i18n.t("common.errors.generic");
 }
+
+/** formatDay writes a day of the form YYYY-MM-DD in the current language; anything else stays as it is. */
+export const formatDay = (day: string): string =>
+  /^\d{4}-\d{2}-\d{2}$/.test(day) ? formatDate(new Date(day + "T00:00:00Z"), { dateStyle: "medium", timeZone: "UTC" }) || day : day;

@@ -72,9 +72,12 @@ The same English term is always translated the same way.
 | user (role, page) | Benutzer | |
 | API token | API-Token | das Token |
 | app profile | App-Profil | |
+| allowlist | Allowlist | die Allowlist |
 | audit log | Audit-Log | |
 | backup | Backup | das Backup; restore: wiederherstellen |
+| blocked address | gesperrte Adresse | fail2ban; unblock: entsperren |
 | certificate | Zertifikat | |
+| check (Health) | Prüfung | |
 | colour scheme | Farbschema | |
 | cron job | Cron-Job | |
 | database | Datenbank | |
@@ -85,6 +88,7 @@ The same English term is always translated the same way.
 | firewall | Firewall | die Firewall |
 | hardening | Härtung | |
 | health | Zustand | the Health page |
+| jail (fail2ban) | Jail | das Jail |
 | limit preset | Limit-Vorlage | |
 | log in / log out | anmelden / abmelden | |
 | maintenance page | Wartungsseite | |
@@ -93,6 +97,7 @@ The same English term is always translated the same way.
 | parked domain | geparkte Domain | |
 | passkey | Passkey | der Passkey |
 | password | Passwort | |
+| reboot | Neustart | neu starten |
 | recovery code | Wiederherstellungscode | |
 | redirect | Weiterleitung | |
 | reverse proxy | Reverse Proxy | |

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Doctor } from "./Doctor";
 import type { DoctorReport } from "./doctor";
+import { setLanguage } from "./i18n";
 import { mockFetch } from "./test-utils";
 
 const report: DoctorReport = {
@@ -47,6 +48,18 @@ describe("Doctor", () => {
     expect(rows[1]).toContain("Server");
     expect(rows.at(-1)).toContain("OK");
     expect(screen.getAllByRole("link", { name: "Site shop" })[0]).toHaveAttribute("href", "#/sites/shop");
+  });
+
+  it("speaks German", async () => {
+    setLanguage("de");
+    mockFetch({ "GET /api/v1/doctor": { body: report } });
+    render(<Harness />);
+
+    expect(await screen.findByText("1 Prüfung fehlgeschlagen, 1 Warnung.")).toBeInTheDocument();
+    const rows = within(screen.getByRole("table", { name: "Prüfungen" })).getAllByRole("row");
+    expect(rows[1]?.textContent).toContain("Zertifikat");
+    expect(rows[1]?.textContent).toContain("Fehlgeschlagen");
+    expect(rows[2]?.textContent).toContain("Speicherlimits");
   });
 
   it("keeps checks with the same ID apart when sorting", async () => {

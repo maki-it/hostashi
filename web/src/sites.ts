@@ -7,6 +7,7 @@
 import type { NodeApp, ProgramApp } from "./node";
 import type { PythonApp } from "./python";
 import { ApiError, request } from "./api";
+import i18n from "./i18n";
 import { formatBytes } from "./limits";
 
 export type SiteTLS = {
@@ -299,9 +300,9 @@ const poolName = /^[a-z][a-z0-9-]{0,31}$/;
 
 /** Why a new pool name cannot be used, or "". */
 export function poolNameProblem(name: string, pools: readonly Pool[], current: string): string {
-  if (name === "") return "Enter a name.";
-  if (!poolName.test(name)) return "Lowercase letters, digits and hyphens, starting with a letter, at most 32 characters.";
-  if (name !== current && pools.some((p) => p.name === name)) return "Another pool already has this name.";
+  if (name === "") return i18n.t("server.pools.nameErrors.empty");
+  if (!poolName.test(name)) return i18n.t("server.pools.nameErrors.chars");
+  if (name !== current && pools.some((p) => p.name === name)) return i18n.t("server.pools.nameErrors.taken");
   return "";
 }
 

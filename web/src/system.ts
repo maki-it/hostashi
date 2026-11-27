@@ -3,6 +3,8 @@
 // Time zone, hostname and reboot of the server (ADR-0060).
 
 import { request } from "./api";
+import { formatDate, locale } from "./format";
+import i18n from "./i18n";
 
 export type SystemInfo = {
   hostname: string;
@@ -38,7 +40,7 @@ export function pinsDate(v: string): string {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(v);
   if (!m) return "";
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
-  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+  return formatDate(d);
 }
 
 export const getSystem = () => request<SystemInfo>("GET", "/system");
@@ -57,11 +59,11 @@ const labelRe = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /** hostnameError mirrors the server's check; "" means the name is fine. */
 export function hostnameError(name: string): string {
-  if (name === "") return "Enter a hostname.";
-  if (name.length > 64) return "At most 64 characters.";
+  if (name === "") return i18n.t("server.system.hostname.errors.empty");
+  if (name.length > 64) return i18n.t("server.system.hostname.errors.long");
   const labels = name.split(".");
-  if (!labels.every((l) => labelRe.test(l))) return "Use lowercase letters, digits and hyphens, with dots between the parts.";
-  if (/^[0-9]+$/.test(labels[labels.length - 1] ?? "")) return "This looks like an address, not a name.";
+  if (!labels.every((l) => labelRe.test(l))) return i18n.t("server.system.hostname.errors.chars");
+  if (/^[0-9]+$/.test(labels[labels.length - 1] ?? "")) return i18n.t("server.system.hostname.errors.address");
   return "";
 }
 
@@ -71,15 +73,15 @@ export function uptime(seconds: number): string {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d} d ${h} h`;
-  if (h > 0) return `${h} h ${m} min`;
-  return `${m} min`;
+  if (d > 0) return i18n.t("server.system.uptime.days", { days: d, hours: h });
+  if (h > 0) return i18n.t("server.system.uptime.hours", { hours: h, minutes: m });
+  return i18n.t("server.system.uptime.minutes", { minutes: m });
 }
 
 /** clockIn shows the instant iso in a zone, as the server would; "" if the browser does not know the zone. */
 export function clockIn(iso: string, zone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale(), {
       timeZone: zone,
       dateStyle: "medium",
       timeStyle: "long",
