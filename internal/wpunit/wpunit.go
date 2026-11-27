@@ -45,7 +45,7 @@ const (
 	DefaultCredDir = "/run/hostashi-wp" //nolint:gosec // a directory, not a credential
 	// DefaultLogDir holds <site>/wordpress.log, opened by systemd as root.
 	DefaultLogDir = appunit.DefaultLogDir
-	DefaultExe    = "/usr/local/bin/hostashi"
+	DefaultExe    = "/usr/bin/hostashi"
 	// DropIn names the drop-in with the run.
 	DropIn    = "60-hostashi-wp.conf"
 	LogName   = "wordpress.log"

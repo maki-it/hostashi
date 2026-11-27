@@ -150,7 +150,7 @@ for u in nginx hostashi-agent hostashi mariadb fail2ban hostashi-firewall; do
 done
 
 step "setup, second factor and an API token"
-tok=$(x /usr/local/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
+tok=$(x /usr/bin/hostashi setup-token -db /var/lib/hostashi/hostashi.db)
 pw="test-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 api() {
   x curl -sS -o /tmp/api.out -w '%{http_code}' -X "$1" -H 'Content-Type: application/json' \
@@ -199,7 +199,7 @@ scopes=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.dumps([s["
 token=$(x cat /tmp/api.out | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 code=$(panel /api/v1/sites -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token")
 [ "$code" = 200 ] || fail "token over IPv6 answered $code"
-xi /usr/local/bin/hostashi login -token http://127.0.0.1:8080 <<<"$token" >/dev/null || fail "hostashi login -token"
+xi /usr/bin/hostashi login -token http://127.0.0.1:8080 <<<"$token" >/dev/null || fail "hostashi login -token"
 
 step "the API allowlist takes IPv6 prefixes"
 [ "$(api PUT /api/v1/settings/api-ip-allowlist "{\"entries\":[\"$C64\"]}")" = 200 ] || fail "set allowlist: $(x cat /tmp/api.out)"
@@ -326,7 +326,7 @@ x sh -c "grep -h '^IPAddressAllow=' /etc/systemd/system/hostashi-dbjob@*.service
 
 step "hostashi doctor without IPv4"
 rc=0
-doc=$(x /usr/local/bin/hostashi doctor) || rc=$?
+doc=$(x /usr/bin/hostashi doctor) || rc=$?
 echo "$doc"
 for id in system.os service.panel service.nginx service.mariadb service.fail2ban system.firewall; do
   grep -Eq "^  ok    $id " <<<"$doc" || fail "doctor: $id is not ok"

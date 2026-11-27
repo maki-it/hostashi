@@ -24,7 +24,7 @@ Wants=network-online.target
 # No core dumps: they would hold keys, passwords and session data (ADR-0033).
 LimitCORE=0
 Type=oneshot
-ExecStart=/usr/local/bin/hostashi backup -state-dir /var/lib/hostashi-agent run
+ExecStart=/usr/bin/hostashi backup -state-dir /var/lib/hostashi-agent run
 # A run of a large server can take hours; this bounds a hanging one.
 TimeoutStartSec=12h
 StateDirectory=hostashi-agent/backup

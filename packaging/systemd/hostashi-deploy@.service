@@ -2,7 +2,7 @@
 # Oneshot unit that runs one Git deploy of a site (ADR-0062). The agent
 # writes two drop-ins, as for hostashi-python-venv@: 50-hostashi-slice.conf
 # (slice and home) and 60-hostashi-deploy.conf with the run, from typed
-# values it checked: ExecStart=/usr/local/bin/hostashi git-sync ... into a
+# values it checked: ExecStart=/usr/bin/hostashi git-sync ... into a
 # new release below <home>/.deploy/releases, the time limit, the log and
 # the token or deploy key as credentials (LoadCredential=). The build
 # commands run afterwards in hostashi-build@, without the credentials. The

@@ -52,7 +52,7 @@ const (
 	// root (StandardOutput=truncate:).
 	DefaultLogDir = appunit.DefaultLogDir
 	// DefaultExe is the hostashi binary with the git-sync command.
-	DefaultExe = "/usr/local/bin/hostashi"
+	DefaultExe = "/usr/bin/hostashi"
 	// DefaultNodeDir and DefaultPythonDir hold the runtime lines.
 	DefaultNodeDir = appunit.DefaultNodeDir
 	// DropIn names the drop-in with the run.

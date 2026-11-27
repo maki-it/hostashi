@@ -2,7 +2,7 @@
 # Oneshot unit that runs the WordPress quick install of site %i
 # (ADR-0069), as the site user. The agent writes two drop-ins:
 # 50-hostashi-slice.conf (slice and home) and 60-hostashi-wp.conf with
-# ExecStart=/usr/local/bin/hostashi wp-run <phar>, the log and the job and
+# ExecStart=/usr/bin/hostashi wp-run <phar>, the log and the job and
 # both passwords as credentials (LoadCredential=). The runner starts the
 # site's PHP CLI with the pinned WP-CLI phar and fixed sub-commands, and
 # passes the passwords on standard input. The agent starts it without
