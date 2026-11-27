@@ -92,7 +92,6 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 	// missing volume they would report the root disk.
 	var (
 		pools     []string
-		poolName  = map[string]string{}
 		poolCheck []agentapi.DoctorCheck
 	)
 
@@ -107,7 +106,6 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 
 			if ps.Unavailable == nil {
 				pools = append(pools, p.Path)
-				poolName[p.Path] = p.Name
 			}
 		}
 	}
@@ -120,7 +118,7 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		disk = []string{"/", "/var/lib/hostashi", orDefault(d.stateDir, DefaultStateDir)}
 	}
 
-	out = append(out, sys.Disk(append(disk, pools...), poolName)...)
+	out = append(out, sys.Disk(append(disk, pools...))...)
 
 	for _, p := range pools {
 		if d.h.quota == nil {
@@ -128,12 +126,12 @@ func (d *doctorOps) run(ctx context.Context) agentapi.DoctorReport {
 		}
 
 		st, err := d.h.quota.Status(p)
-		out = append(out, doctor.Quota(poolName[p], p, st, err))
+		out = append(out, doctor.Quota(p, st, err))
 	}
 
 	out = append(out, sys.Proc())
 	for _, p := range pools {
-		out = append(out, doctor.PoolMode(poolName[p], p))
+		out = append(out, doctor.PoolMode(p))
 	}
 
 	out = append(out, doctor.Panel(ctx, orDefault(d.env.PanelSocket, PanelSocket)))

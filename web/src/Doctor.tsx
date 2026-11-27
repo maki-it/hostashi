@@ -114,15 +114,11 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
     {
       key: "where",
       header: "Where",
-      sortValue: (c) => (c.site ? "2" + c.site : c.pool ? "1" + c.pool : "0"),
+      sortValue: (c) => (c.site ? "1" + c.site : "0"),
       cell: (c) =>
         c.site ? (
           <a className="ui-nowrap" href={formatHash({ page: "sites", site: { name: c.site, tab: "overview" } })}>
             Site {c.site}
-          </a>
-        ) : c.pool ? (
-          <a className="ui-nowrap" href={formatHash({ page: "pools" })}>
-            Pool {c.pool}
           </a>
         ) : (
           <ServerWhere id={c.id} />
@@ -141,7 +137,7 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
   const shown = report.checks.filter(
     (c) =>
       (!problemsOnly || c.status !== "ok") &&
-      (!q || [checkTitle(c.id), c.summary, c.hint ?? "", c.site ?? (c.pool ? "pool " + c.pool : "server")].some((s) => s.toLowerCase().includes(q))),
+      (!q || [checkTitle(c.id), c.summary, c.hint ?? "", c.site ?? "server"].some((s) => s.toLowerCase().includes(q))),
   );
   const sortKey = query.get("sort");
   const sort: Sort = sortKey ? { key: sortKey, dir: query.get("dir") === "desc" ? "desc" : "asc" } : { key: "status", dir: "asc" };
@@ -172,7 +168,7 @@ export function Doctor({ query = new URLSearchParams(), onQuery = () => undefine
           label="Checks"
           columns={columns}
           rows={shown}
-          rowKey={(c) => [c.id, c.site ?? "", c.pool ?? "", c.summary].join("/")}
+          rowKey={(c) => [c.id, c.site ?? "", c.summary].join("/")}
           sort={sort}
           onSort={(s) => set({ sort: s.key, dir: s.dir })}
           empty={problemsOnly && !q ? "No problems." : "No check matches the filter."}

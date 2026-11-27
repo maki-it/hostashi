@@ -638,16 +638,10 @@ const routes = [
   ["GET", /^\/doctor$/, () => ({
     status: "warn",
     checkedAt: day(0),
-    counts: { ok: 9, warn: 1, fail: 0 },
+    counts: { ok: 3, warn: 1, fail: 0 },
     checks: [
       { id: "panel.tls", status: "warn", summary: "certificate for panel.example.com valid until 2026-12-10 (17 days); the last renewal failed: acme: no DNS record for panel.example.com", hint: "See System → Panel certificate. Let's Encrypt needs the panel's host name to point at this server; an own certificate is never renewed automatically: upload a new one." },
-      { id: "system.os", status: "ok", summary: "Debian GNU/Linux 13 (trixie) is supported" },
-      { id: "system.pool.volume", pool: "root", status: "ok", summary: "pool root (/home) is available" },
-      { id: "system.pool.volume", pool: "vol1", status: "ok", summary: "pool vol1 (/srv/vol1) is mounted with its marker, nosuid,nodev and an fstab entry" },
-      { id: "system.disk", status: "ok", summary: "/: 31.2 GiB free of 38.0 GiB (82 %)" },
-      { id: "system.disk", pool: "vol1", status: "ok", summary: "/srv/vol1: 37.1 GiB free of 39.1 GiB (94 %)" },
-      { id: "system.quota", pool: "root", status: "ok", summary: "/home: disk limits are enforced (project quota)" },
-      { id: "system.quota", pool: "vol1", status: "ok", summary: "/srv/vol1: disk limits are enforced (project quota)" },
+      { id: "system.disk", status: "ok", summary: "31.2 GiB of 38.0 GiB free" },
       { id: "service.nginx", status: "ok", summary: "nginx is running" },
       { id: "site.tls", site: "blog", status: "ok", summary: "certificate valid until 2027-02-14 (81 days)" },
     ],

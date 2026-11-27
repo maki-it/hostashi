@@ -2685,9 +2685,6 @@
           "id": {
             "type": "string"
           },
-          "pool": {
-            "type": "string"
-          },
           "site": {
             "type": "string"
           },

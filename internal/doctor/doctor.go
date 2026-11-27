@@ -142,9 +142,7 @@ func (s System) OS() Check {
 
 // Disk checks the free space of each file system that holds one of paths.
 // Paths on the same file system are reported once, under the first path.
-// pools names the storage pool of a path, so the check says which pool's
-// volume it is; other paths are the server's.
-func (s System) Disk(paths []string, pools map[string]string) []Check {
+func (s System) Disk(paths []string) []Check {
 	const id = "system.disk"
 
 	var (
@@ -155,7 +153,7 @@ func (s System) Disk(paths []string, pools map[string]string) []Check {
 	for _, p := range paths {
 		var st unix.Statfs_t
 		if err := s.statfs(p, &st); err != nil {
-			out = append(out, inPool(fail(id, p+": "+describe(err), "Check that the directory exists and its file system is mounted."), pools[p]))
+			out = append(out, fail(id, p+": "+describe(err), "Check that the directory exists and its file system is mounted."))
 
 			continue
 		}
@@ -175,38 +173,21 @@ func (s System) Disk(paths []string, pools map[string]string) []Check {
 		pct := free * 100 / total
 		summary := fmt.Sprintf("%s: %s free of %s (%d %%)", p, Bytes(free), Bytes(total), pct)
 
-		var c Check
-
 		switch {
 		case pct < DiskFailPercent || free < DiskFailBytes:
-			c = fail(id, summary, "Free space now: sites, databases and backups fail when the disk is full.")
+			out = append(out, fail(id, summary, "Free space now: sites, databases and backups fail when the disk is full."))
 		case pct < DiskWarnPercent:
-			c = warn(id, summary, "The disk is filling up. Check the sites' disk use and old backups.")
+			out = append(out, warn(id, summary, "The disk is filling up. Check the sites' disk use and old backups."))
 		default:
-			c = ok(id, summary)
+			out = append(out, ok(id, summary))
 		}
-
-		out = append(out, inPool(c, pools[p]))
 	}
 
 	return out
 }
 
-// inPool marks c as a check of the storage pool name; an empty name keeps
-// it a check of the server.
-func inPool(c Check, name string) Check {
-	c.Pool = name
-
-	return c
-}
-
-// Quota reports whether the file system of dir, the storage pool pool,
-// enforces project quota.
-func Quota(pool, dir string, st quota.State, err error) Check {
-	return inPool(quotaCheck(dir, st, err), pool)
-}
-
-func quotaCheck(dir string, st quota.State, err error) Check {
+// Quota reports whether the file system of dir enforces project quota.
+func Quota(dir string, st quota.State, err error) Check {
 	const id = "system.quota"
 
 	switch {
@@ -284,10 +265,6 @@ type PoolState struct {
 // unavailable pool fails: its sites do not start, and the free space
 // reported for its path would be the root disk's.
 func (s System) PoolVolume(p PoolState) Check {
-	return inPool(s.poolVolume(p), p.Name)
-}
-
-func (s System) poolVolume(p PoolState) Check {
 	const id = "system.pool.volume"
 
 	where := fmt.Sprintf("pool %s (%s)", p.Name, p.Path)
@@ -324,13 +301,9 @@ func (s System) poolVolume(p PoolState) Check {
 	return ok(id, where+" is mounted with its marker, nosuid,nodev and an fstab entry")
 }
 
-// PoolMode checks that the home directory dir of the storage pool pool is
-// root 0711, so site users cannot list each other (ADR-0032).
-func PoolMode(pool, dir string) Check {
-	return inPool(poolMode(dir), pool)
-}
-
-func poolMode(dir string) Check {
+// PoolMode checks that a pool of homes is root 0711, so site users cannot
+// list each other (ADR-0032).
+func PoolMode(dir string) Check {
 	const id = "system.pool"
 
 	fi, err := os.Stat(dir)

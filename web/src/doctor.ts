@@ -9,8 +9,6 @@ export type DoctorStatus = "ok" | "warn" | "fail";
 export type DoctorCheck = {
   id: string;
   site?: string;
-  /** The storage pool of a per-pool check. */
-  pool?: string;
   status: DoctorStatus;
   summary: string;
   hint?: string;

@@ -3,7 +3,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Doctor } from "./Doctor";
 import type { DoctorReport } from "./doctor";
 import { mockFetch } from "./test-utils";
@@ -49,17 +49,16 @@ describe("Doctor", () => {
     expect(screen.getAllByRole("link", { name: "Site shop" })[0]).toHaveAttribute("href", "#/sites/shop");
   });
 
-  it("names the storage pool of a per-pool check", async () => {
+  it("keeps checks with the same ID apart when sorting", async () => {
     const user = userEvent.setup();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mockFetch({
       "GET /api/v1/doctor": {
         body: {
           ...report,
           checks: [
             { id: "system.disk", status: "ok", summary: "/: 32.7 GiB free of 39.2 GiB (83 %)" },
-            { id: "system.disk", pool: "vol1", status: "ok", summary: "/srv/vol1: 37.1 GiB free of 39.1 GiB (94 %)" },
-            { id: "system.quota", pool: "root", status: "ok", summary: "/home: disk limits are enforced (project quota)" },
-            { id: "system.quota", pool: "vol1", status: "ok", summary: "/srv/vol1: disk limits are enforced (project quota)" },
+            { id: "system.disk", status: "warn", summary: "/srv/vol1: 3.1 GiB free of 39.1 GiB (8 %)" },
           ],
         },
       },
@@ -67,14 +66,13 @@ describe("Doctor", () => {
     render(<Harness />);
 
     await screen.findByRole("table", { name: "Checks" });
+    expect(rowTexts()[0]).toContain("/srv/vol1");
+    await user.click(screen.getByRole("button", { name: /^Check$/i }));
     const rows = rowTexts();
-    expect(rows).toHaveLength(4);
-    expect(rows.filter((r) => r.includes("Server"))).toHaveLength(1);
-    expect(screen.getAllByRole("link", { name: "Pool vol1" })).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Pool root" })).toHaveAttribute("href", "#/pools");
-
-    await user.click(screen.getByRole("button", { name: /Where/ }));
-    expect(rowTexts()[0]).toContain("Server");
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => r.includes("/srv/vol1"))).toHaveLength(1);
+    expect(logged.mock.calls.flat().join(" ")).not.toContain("same key");
+    logged.mockRestore();
   });
 
   it("leaves the panel's settings to the System page", async () => {

@@ -152,16 +152,6 @@ func TestDoctor(t *testing.T) {
 		}
 	}
 
-	// The per-pool checks name their pool, for the Where column of the
-	// Health page.
-	for _, id := range []string{"system.quota", "system.pool", "system.pool.volume"} {
-		for _, c := range m[id] {
-			if c.Pool == "" {
-				t.Errorf("%s names no pool: %+v", id, c)
-			}
-		}
-	}
-
 	shopDisk := m["shop/site.disk"]
 	if len(shopDisk) != 2 || shopDisk[0].Status != agentapi.DoctorFail || shopDisk[1].Status != agentapi.DoctorOK {
 		t.Errorf("shop disk = %+v", shopDisk)

@@ -71,14 +71,14 @@ func TestDisk(t *testing.T) {
 		return nil
 	}}
 
-	got := s.Disk([]string{"/", "/var", "/data", "/full", "/small", "/proc", "/missing"}, map[string]string{"/data": "vol1"})
+	got := s.Disk([]string{"/", "/var", "/data", "/full", "/small", "/proc", "/missing"})
 
-	want := []struct{ status, summary, pool string }{
-		{agentapi.DoctorOK, "/: 20.0 GiB free of 40.0 GiB (50 %)", ""},
-		{agentapi.DoctorWarn, "/data: 4.0 GiB free of 40.0 GiB (10 %)", "vol1"},
-		{agentapi.DoctorFail, "/full: 1.0 GiB free of 40.0 GiB (2 %)", ""},
-		{agentapi.DoctorFail, "/small: 512.0 MiB free of 1.0 GiB (50 %)", ""},
-		{agentapi.DoctorFail, "/missing: not found", ""},
+	want := []struct{ status, summary string }{
+		{agentapi.DoctorOK, "/: 20.0 GiB free of 40.0 GiB (50 %)"},
+		{agentapi.DoctorWarn, "/data: 4.0 GiB free of 40.0 GiB (10 %)"},
+		{agentapi.DoctorFail, "/full: 1.0 GiB free of 40.0 GiB (2 %)"},
+		{agentapi.DoctorFail, "/small: 512.0 MiB free of 1.0 GiB (50 %)"},
+		{agentapi.DoctorFail, "/missing: not found"},
 	}
 
 	if len(got) != len(want) {
@@ -86,7 +86,7 @@ func TestDisk(t *testing.T) {
 	}
 
 	for i, w := range want {
-		if got[i].Status != w.status || got[i].Summary != w.summary || got[i].ID != "system.disk" || got[i].Pool != w.pool {
+		if got[i].Status != w.status || got[i].Summary != w.summary || got[i].ID != "system.disk" {
 			t.Errorf("check %d = %+v, want %s %q", i, got[i], w.status, w.summary)
 		}
 	}
@@ -114,8 +114,8 @@ func TestPoolMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := PoolMode("root", d)
-	if c.Status != agentapi.DoctorWarn || !strings.Contains(c.Summary, "0755") || c.Hint == "" || c.Pool != "root" {
+	c := PoolMode(d)
+	if c.Status != agentapi.DoctorWarn || !strings.Contains(c.Summary, "0755") || c.Hint == "" {
 		t.Errorf("0755 pool: %+v", c)
 	}
 
@@ -124,12 +124,12 @@ func TestPoolMode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if c := PoolMode("root", d); c.Status != agentapi.DoctorOK {
+		if c := PoolMode(d); c.Status != agentapi.DoctorOK {
 			t.Errorf("root 0711 pool: %+v", c)
 		}
 	}
 
-	if c := PoolMode("root", filepath.Join(d, "missing")); c.Status != agentapi.DoctorFail {
+	if c := PoolMode(filepath.Join(d, "missing")); c.Status != agentapi.DoctorFail {
 		t.Errorf("missing pool: %+v", c)
 	}
 }
@@ -162,26 +162,26 @@ func TestPoolVolume(t *testing.T) {
 
 	for _, c := range cases {
 		got := s.PoolVolume(c.p)
-		if got.ID != "system.pool.volume" || got.Status != c.status || !strings.Contains(got.Summary, c.text) || got.Pool != c.p.Name {
+		if got.ID != "system.pool.volume" || got.Status != c.status || !strings.Contains(got.Summary, c.text) {
 			t.Errorf("%+v: %+v, want %s with %q", c.p, got, c.status, c.text)
 		}
 	}
 }
 
 func TestQuota(t *testing.T) {
-	if c := Quota("root", "/home", quota.Enforced, nil); c.Status != agentapi.DoctorOK || c.Pool != "root" {
+	if c := Quota("/home", quota.Enforced, nil); c.Status != agentapi.DoctorOK {
 		t.Errorf("available: %+v", c)
 	}
 
-	if c := Quota("root", "/home", quota.Counting, nil); c.Status != agentapi.DoctorFail || !strings.Contains(c.Summary, "not enforced") {
+	if c := Quota("/home", quota.Counting, nil); c.Status != agentapi.DoctorFail || !strings.Contains(c.Summary, "not enforced") {
 		t.Errorf("counting only: %+v", c)
 	}
 
-	if c := Quota("root", "/home", quota.Off, nil); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Hint, "installer") {
+	if c := Quota("/home", quota.Off, nil); c.Status != agentapi.DoctorWarn || !strings.Contains(c.Hint, "installer") {
 		t.Errorf("unavailable: %+v", c)
 	}
 
-	if c := Quota("root", "/home", quota.Off, os.ErrPermission); c.Status != agentapi.DoctorFail {
+	if c := Quota("/home", quota.Off, os.ErrPermission); c.Status != agentapi.DoctorFail {
 		t.Errorf("error: %+v", c)
 	}
 }
