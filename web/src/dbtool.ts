@@ -5,6 +5,7 @@
 // stays on the server.
 
 import { ApiError, request } from "./api";
+import i18n, { areaErrorText } from "./i18n";
 
 export type DBToolStatus = { available: boolean; minutes: number[] };
 export type DBToolSession = { url: string; expires: string };
@@ -15,34 +16,13 @@ export const openDBTool = (db: string, minutes: number) =>
   request<DBToolSession>("POST", "/databases/" + encodeURIComponent(db) + "/tool", { minutes });
 
 // durationLabel names a session length.
-export const durationLabel = (m: number) => (m % 60 === 0 ? (m === 60 ? "1 hour" : `${m / 60} hours`) : `${m} minutes`);
+export const durationLabel = (m: number) =>
+  m % 60 === 0 ? i18n.t("databases.tool.hours", { count: m / 60 }) : i18n.t("databases.tool.minutes", { count: m });
 
 // toolMessage turns an API error into a sentence.
 export function toolMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.code) {
-      case "dbtool_unavailable":
-        return "The database tool is not available. It needs the panel's own certificate; see System.";
-      case "not_found":
-        return err.message === "the session has ended" ? "This session has ended already." : "This database does not exist any more. Reload the page.";
-      case "dbtool_session_limit":
-        return "A session can run at most two hours ahead. Extend it again later.";
-      case "forbidden":
-        return "Your role does not allow opening this database.";
-      case "site_busy":
-        return "The site is being created or deleted. Try again in a moment.";
-      case "db_server_unresolved":
-        return "The database server's name does not resolve to an address this machine can reach. Check its DNS records.";
-      case "db_server_unavailable":
-        return "The database server is not reachable. Check it on the Servers tab or try again later.";
-      case "db_server_denied":
-        return "The database server refused the panel's administrator. Check the server's privileges.";
-      default:
-        return err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + "." : "Something went wrong (" + err.code + ").";
-    }
-  }
-  if (err instanceof TypeError) return "The server is not reachable.";
-  return "Something went wrong. Try again.";
+  if (err instanceof ApiError && err.code === "not_found" && err.message === "the session has ended") return i18n.t("databases.tool.errors.sessionEnded");
+  return areaErrorText("databases.tool.errors", err);
 }
 
 // safeToolURL accepts only the https address the panel built.

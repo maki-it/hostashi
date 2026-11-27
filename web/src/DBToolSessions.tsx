@@ -2,6 +2,7 @@
 
 import { ClockClockwise, StopCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { endToolSession, extendToolSession, listToolSessions, toolMessage, type DBToolOpen } from "./dbtool";
 import { Badge, Button, Card, exactTime, IconButton, Notice, RelTime, RowActions } from "./ui";
 
@@ -13,6 +14,7 @@ export const minutesLeft = (iso: string, now = Date.now()) => Math.max(0, Math.c
 // temporary user at once and cuts its connections. Nothing shows while no
 // session is open.
 export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }) {
+  const { t: tr } = useTranslation();
   const [open, setOpen] = useState<DBToolOpen[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -53,7 +55,7 @@ export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }
   if (live.length === 0 && !error) return null;
 
   return (
-    <Card title="Adminer sessions">
+    <Card title={tr("databases.sessions.title")}>
       {error && <Notice tone="err" title={error} />}
       <ul className="ui-plain-list">
         {live.map((s) => {
@@ -62,25 +64,31 @@ export function ToolSessions({ db, reload = 0 }: { db: string; reload?: number }
             <li key={s.id} className="ui-list-row">
               <span className="ui-tool-who">
                 <span>
-                  <strong>{s.user || "A removed account"}</strong> opened it <RelTime iso={s.opened} />
+                  <Trans
+                    i18nKey="databases.sessions.openedBy"
+                    values={{ user: s.user || tr("databases.sessions.removedAccount") }}
+                    components={{ b: <strong />, time: <RelTime iso={s.opened} /> }}
+                  />
                 </span>
-                <Badge tone={left <= 5 ? "warn" : "ok"}>{left <= 5 ? "Ends soon" : "Open"}</Badge>
+                <Badge tone={left <= 5 ? "warn" : "ok"}>{left <= 5 ? tr("databases.sessions.endsSoon") : tr("databases.sessions.open")}</Badge>
               </span>
               <span className="ui-tool-end">
                 <span className="ui-hint" title={exactTime(new Date(s.expires))}>
-                  ends in {left} min
+                  {tr("databases.sessions.endsIn", { count: left })}
                 </span>
                 <RowActions>
                   <IconButton
-                    label="Extend by 30 minutes"
-                    text="Extend" icon={<ClockClockwise size={18} />}
+                    label={tr("databases.sessions.extendLabel")}
+                    text={tr("databases.sessions.extend")}
+                    icon={<ClockClockwise size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => extendToolSession(db, s.id))}
                   />
                   <IconButton
-                    label="End now"
+                    label={tr("databases.sessions.endNow")}
                     danger
-                    text="End now" icon={<StopCircle size={18} />}
+                    text={tr("databases.sessions.endNow")}
+                    icon={<StopCircle size={18} />}
                     disabled={busy !== ""}
                     onClick={() => void act(s.id, () => endToolSession(db, s.id))}
                   />
@@ -109,6 +117,7 @@ export function toolAction(query: URLSearchParams): { action: ToolAction; sessio
 // (ADR-0038 addendum 1): Adminer cannot reach the agent, so it sends the
 // browser here, and one click extends or ends the session.
 export function ToolActionDialog({ db, action, session, onClose }: { db: string; action: ToolAction; session: string; onClose: () => void }) {
+  const { t: tr } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<string | null>(null);
@@ -124,10 +133,10 @@ export function ToolActionDialog({ db, action, session, onClose }: { db: string;
     try {
       if (action === "extend") {
         const s = await extendToolSession(db, session);
-        setDone(`The session now ends at ${exactTime(new Date(s.expires))}. Go back to the Adminer tab; it shows the new time.`);
+        setDone(tr("databases.sessions.action.extendedText", { time: exactTime(new Date(s.expires)) }));
       } else {
         await endToolSession(db, session);
-        setDone("The temporary database user is gone and its connections are closed.");
+        setDone(tr("databases.sessions.action.endedText"));
       }
     } catch (err) {
       setError(toolMessage(err));
@@ -140,28 +149,26 @@ export function ToolActionDialog({ db, action, session, onClose }: { db: string;
   return (
     <section className="ui-card ui-card-body ui-stack" role="dialog" aria-labelledby="dbtool-action-title">
       <h2 id="dbtool-action-title" className="ui-flush" tabIndex={-1} ref={heading}>
-        {extend ? `Extend the Adminer session on ${db}` : `End the Adminer session on ${db}`}
+        {tr(extend ? "databases.sessions.action.extendTitle" : "databases.sessions.action.endTitle", { db })}
       </h2>
       {done ? (
-        <Notice tone="ok" title={extend ? "Extended by 30 minutes." : "Session ended."}>
+        <Notice tone="ok" title={tr(extend ? "databases.sessions.action.extended" : "databases.sessions.action.ended")}>
           {done}
         </Notice>
       ) : (
         <p className="ui-flush">
-          {extend
-            ? "The session gets 30 more minutes, up to two hours ahead."
-            : "Adminer logs out, the temporary database user is removed and its open connections are closed. Queries still running stop."}
+          {tr(extend ? "databases.sessions.action.extendText" : "databases.sessions.action.endText")}
         </p>
       )}
       {error && <Notice tone="err" title={error} />}
       <div className="ui-row">
         {!done && (
           <Button variant={extend ? "primary" : "danger"} disabled={busy} onClick={() => void run()}>
-            {extend ? "Extend by 30 minutes" : "End session"}
+            {tr(extend ? "databases.sessions.action.extendSubmit" : "databases.sessions.action.endSubmit")}
           </Button>
         )}
         <Button disabled={busy} onClick={onClose}>
-          {done ? "Close" : "Cancel"}
+          {done ? tr("databases.tool.close") : tr("common.actions.cancel")}
         </Button>
       </div>
     </section>
