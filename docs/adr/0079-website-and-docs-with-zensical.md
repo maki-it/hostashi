@@ -1,6 +1,6 @@
 # ADR-0079 Website and documentation with Zensical, self-hosted on Hostashi
 
-**Status:** Proposed. **Date drafted:** 2026-11-28. **Decides:** Kim. **Related:** ADR-0043 (user documentation in the GitHub wiki, superseded in part by this ADR), ADR-0050 (releases, `get.hostashi.com`), ADR-0054 addendum 1 (static sites), ADR-0062 (Git deploy), ADR-0002 (documentation is CC-BY-4.0).
+**Status:** Accepted (Kim, 2026-11-28). **Date drafted:** 2026-11-28. **Decides:** Kim. **Related:** ADR-0043 (user documentation in the GitHub wiki, superseded in part by this ADR), ADR-0050 (releases, `get.hostashi.com`), ADR-0054 addendum 1 (static sites), ADR-0062 (Git deploy), ADR-0002 (documentation is CC-BY-4.0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -67,4 +67,4 @@ The wiki sync (`wiki.yml`) is removed once the site is live. The wiki keeps one 
 
 ## Open questions for Kim
 
-None left; decided by Kim in the thread on 2026-11-28: deploy option A, one site, a detailed start page. `www.hostashi.com` redirects to `hostashi.com` with the site's www setting (ADR-0065), and `hostashi.de` with `www.hostashi.de` redirect there too, as redirect domains of the same site (ADR-0068) [A: recommendation, not asked yet].
+None left; decided by Kim in the thread on 2026-11-28: deploy option A, one site, a detailed start page. Accepted by Kim on 2026-11-28. `www.hostashi.com` redirects to `hostashi.com` with the site's www setting (ADR-0065), and `hostashi.de` with `www.hostashi.de` redirect there too, as redirect domains of the same site (ADR-0068) [A: recommendation, not asked yet].

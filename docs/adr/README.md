@@ -73,7 +73,7 @@ Full drafts for the decisions that need the project owner's input. The overview 
 | [0076](0076-dns-01-certificates-via-dns-provider-apis.md) | DNS-01 certificates via DNS provider APIs | Accepted |
 | [0077](0077-automatic-security-updates-for-pinned-runtimes.md) | Automatic security updates for pinned runtimes | Accepted |
 | [0078](0078-fail2ban-bans-in-the-panel.md) | fail2ban bans in the panel | Accepted |
-| [0079](0079-website-and-docs-with-zensical.md) | Website and documentation with Zensical, self-hosted on Hostashi | Proposed |
+| [0079](0079-website-and-docs-with-zensical.md) | Website and documentation with Zensical, self-hosted on Hostashi | Accepted |
 
 Only the project owner sets a status to `Accepted`.
 
