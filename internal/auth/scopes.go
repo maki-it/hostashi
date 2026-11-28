@@ -41,6 +41,8 @@ var scopeCatalog = map[string]ScopeInfo{
 	"databases:write":         {Description: "Create databases and users, set passwords, remove users"},
 	"databases:delete":        {Description: "Delete databases and their data", HighRisk: true},
 	"db_servers:write":        {Description: "Add, check and remove external database servers (stores their administrator password)", HighRisk: true},
+	"dns_accounts:read":       {Description: "List the DNS accounts for DNS-01 certificates with their zones and check results (never their secrets)"},
+	"dns_accounts:write":      {Description: "Add, change, check and remove DNS accounts (stores DNS provider credentials that can change DNS records)", HighRisk: true},
 	"backups:read":            {Description: "Read backup settings, status and snapshots"},
 	"backups:write":           {Description: "Change backup settings, confirm the target's host key, start a backup"},
 	"audit:read":              {Description: "Read and export the audit log of the panel (every account, site, action and the IP addresses involved)"},
