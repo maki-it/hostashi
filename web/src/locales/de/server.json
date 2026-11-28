@@ -125,7 +125,10 @@
         "started": "Gestartet",
         "action": "Aktion"
       },
-      "line": "{{text}}, <time/>"
+      "line": "{{text}}, <time/>",
+      "more_one": "{{count}} älteres Ereignis zeigen",
+      "more_other": "{{count}} ältere Ereignisse zeigen",
+      "fewer": "Weniger zeigen"
     },
     "ofSite": "{{name}} der Site {{site}}",
     "done": "{{action}}: {{name}} erledigt.",

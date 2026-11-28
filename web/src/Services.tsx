@@ -382,26 +382,44 @@ const eventTones: Record<ServiceEvent["kind"], Tone> = {
   action: "off",
 };
 
+/** eventsShown is how many events the card lists at first and adds per click. */
+const eventsShown = 10;
+
 function Events({ events }: { events: ServiceEvent[] }) {
   const { t } = useTranslation();
+  const [shown, setShown] = useState(eventsShown);
+  const visible = events.slice(0, shown);
+  const hidden = events.length - visible.length;
   return (
     <Card title={t("server.services.events.title")} padded={events.length === 0}>
       {events.length === 0 ? (
         <p className="ui-flush ui-hint">{t("server.services.events.none")}</p>
       ) : (
-        <ul className="ui-attention-list" aria-label={t("server.services.events.title")}>
-          {events.map((e, i) => (
-            <li key={e.at + e.service + (e.site ?? "") + i}>
-              <Badge tone={eventTones[e.kind]}>{t(`server.services.events.badges.${e.kind}`)}</Badge>
-              <div className="ui-stack-tight">
-                <strong>{ofSite({ id: e.service, site: e.site })}</strong>
-                <span className="ui-hint">
-                  <Trans i18nKey="server.services.events.line" values={{ text: eventText(e) }} components={{ time: <RelTime iso={e.at} /> }} />
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="ui-attention-list" aria-label={t("server.services.events.title")}>
+            {visible.map((e, i) => (
+              <li key={e.at + e.service + (e.site ?? "") + i}>
+                <Badge tone={eventTones[e.kind]}>{t(`server.services.events.badges.${e.kind}`)}</Badge>
+                <div className="ui-stack-tight">
+                  <strong>{ofSite({ id: e.service, site: e.site })}</strong>
+                  <span className="ui-hint">
+                    <Trans i18nKey="server.services.events.line" values={{ text: eventText(e) }} components={{ time: <RelTime iso={e.at} /> }} />
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {(hidden > 0 || shown > eventsShown) && (
+            <div className="ui-card-body ui-row">
+              {hidden > 0 && (
+                <Button onClick={() => setShown((n) => n + eventsShown)}>
+                  {t("server.services.events.more", { count: Math.min(hidden, eventsShown) })}
+                </Button>
+              )}
+              {shown > eventsShown && <Button onClick={() => setShown(eventsShown)}>{t("server.services.events.fewer")}</Button>}
+            </div>
+          )}
+        </>
       )}
     </Card>
   );
