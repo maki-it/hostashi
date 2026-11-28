@@ -103,6 +103,9 @@ ConditionPathExists=$RT_CONF
 [Service]
 ExecStart=
 ExecStart=/usr/sbin/clamonacc --foreground --fdpass --config-file=$RT_CONF --log=$RT_LOG
+# The distribution's unit stops clamonacc with ExecStop=kill -SIGKILL:
+# without this, every stop leaves the unit "failed" (result 'signal').
+SuccessExitStatus=SIGKILL
 EOF
   systemctl daemon-reload
 }
@@ -168,6 +171,7 @@ check() {
     on)
       for p in "${RT_PKGS[@]}"; do installed "$p" || { echo "$p not installed"; return 1; }; done
       grep -q -- '--fdpass' "$UNIT_DIR/$ONACC.d/50-hostashi.conf" 2>/dev/null || { echo "$ONACC drop-in missing"; return 1; }
+      grep -qx 'SuccessExitStatus=SIGKILL' "$UNIT_DIR/$ONACC.d/50-hostashi.conf" 2>/dev/null || { echo "$ONACC drop-in outdated"; return 1; }
       aa_ok || { echo "AppArmor lets clamd not read $RT_CONF"; return 1; }
       ;;
     off) ;;
@@ -233,8 +237,9 @@ do_realtime_off() {
   remove_dropins
   remove_apparmor
   rm -f "$RT_CONF"
-  # A unit killed while stopping stays "failed" after its package is
-  # gone, and monitoring reports it until the state is cleared.
+  # A unit that ended "failed" (clamonacc before its drop-in had
+  # SuccessExitStatus=SIGKILL) stays so after its package is gone, and
+  # monitoring reports it until the state is cleared.
   systemctl reset-failed "$ONACC" "$CLAMD" clamav-daemon.socket 2>/dev/null
   record_rt off || return 1
   say "done: real-time mode removed"

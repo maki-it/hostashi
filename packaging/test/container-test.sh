@@ -692,6 +692,11 @@ x cp /tmp/aa.keep /etc/apparmor.d/local/usr.sbin.clamd
 onacc_exec="$(x systemctl show -p ExecStart --value clamav-clamonacc.service)"
 case "$onacc_exec" in *--fdpass*) ;; *) fail "clamonacc does not run from the Hostashi drop-in: $onacc_exec";; esac
 case "$onacc_exec" in *--move*) fail "clamonacc would move files: $onacc_exec";; esac
+# The distribution's ExecStop kills clamonacc with SIGKILL; a stop must
+# still leave the unit inactive, not failed (CheckMK reported it CRIT).
+x systemctl stop clamav-clamonacc.service
+! x systemctl is-failed --quiet clamav-clamonacc.service || fail "stopping clamonacc left it failed: $(x systemctl status --no-pager clamav-clamonacc.service)"
+x systemctl start clamav-clamonacc.service || fail "cannot start clamonacc again"
 # shellcheck disable=SC2016 # the inner shell expands nothing either
 x sh -c 'printf "%s%s" "X5O!P%@AP[4\PZX54(P^)7CC)7}\$EICAR-STANDARD-" "ANTIVIRUS-TEST-FILE!\$H+H*" >/home/blog/htdocs/new.com; chown blog:blog /home/blog/htdocs/new.com'
 found=
