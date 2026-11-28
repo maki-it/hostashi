@@ -52,6 +52,16 @@ export const sites = [
     tls: tls(["api.example.com"]),
   }),
   site("intranet", { type: "proxy", account: false, domains: ["intranet.example.com"], proxy: { target: "http://10.0.0.5:8080", targetHost: false, insecure: false }, tls: tls(["intranet.example.com"]) }),
+  // A wildcard below its own domain (ADR-0075), not yet on HTTPS.
+  site("tenants", {
+    type: "proxy",
+    account: false,
+    domains: ["apps.example.net", "*.apps.example.net"],
+    servedElsewhere: ["status.apps.example.net"],
+    wildcardsWithoutDns: ["*.apps.example.net"],
+    proxy: { target: "http://10.0.0.7:8080", targetHost: false, insecure: false },
+    tls: { enabled: false, active: false, hsts: false, domains: [], notAfter: null, source: "letsencrypt", certSource: "", trusted: false, challenge: "http" },
+  }),
   site("old-domain", { type: "redirect", account: false, domains: ["example.net", "www.example.net"], redirect: { target: "https://www.example.com", status: 301, keepPath: true }, tls: tls(["example.net", "www.example.net"]) }),
   // A domain change that waits for its certificate (ADR-0068).
   site("news", {

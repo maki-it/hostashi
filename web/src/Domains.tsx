@@ -8,7 +8,20 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { hadWWW, newNames, planPrimaryChange, uncovered, waitsForCertificate, wpSearchReplace, type DomainPlan } from "./domains";
 import i18n from "./i18n";
-import { cancelDomainChange, changeDomains, domainProblem, domainsProblem, maxDomainsPerSite, parseDomains, siteMessage, siteType, type Site } from "./sites";
+import { formatHash } from "./routes";
+import {
+  cancelDomainChange,
+  changeDomains,
+  domainProblem,
+  domainsProblem,
+  isWildcard,
+  maxDomainsPerSite,
+  parseDomains,
+  siteMessage,
+  siteType,
+  wildcardKind,
+  type Site,
+} from "./sites";
 import { Button, Card, Field, Notice, RelTime } from "./ui";
 
 type Props = { site: Site; onChange: () => Promise<void> };
@@ -52,6 +65,8 @@ export function DomainsCard({ site, onChange }: Props) {
   const [changing, setChanging] = useState(false);
   const a = useAct(onChange);
   const redirectSite = siteType(site) === "redirect";
+  const wildcardSite = wildcardKind(siteType(site));
+  const wildcards = site.domains.filter(isWildcard);
 
   // Show the stored lists again after any change, also one made by the
   // www card or the change form.
@@ -65,7 +80,7 @@ export function DomainsCard({ site, onChange }: Props) {
     e.preventDefault();
     const list = parseDomains(domains);
     const red = redirectSite ? [] : parseDomains(redirect);
-    const problem = domainsProblem(list) || red.map(domainProblem).find((p) => p) || "";
+    const problem = domainsProblem(list, wildcardSite) || red.map(domainProblem).find((p) => p) || "";
     const both = red.find((d) => list.includes(d));
     if (problem || both || list.length + red.length > maxDomainsPerSite) {
       a.setError(problem || (both ? t("siteDomains.card.both", { domain: both }) : t("siteDomains.card.tooMany", { max: maxDomainsPerSite })));
@@ -91,9 +106,13 @@ export function DomainsCard({ site, onChange }: Props) {
         }
       >
         <form className="ui-stack" onSubmit={save} noValidate>
-          <Field label={t("siteDomains.card.domainsOf", { site: site.name })} hint={t("siteDomains.card.domainsHint")}>
+          <Field
+            label={t("siteDomains.card.domainsOf", { site: site.name })}
+            hint={wildcardSite ? t("siteDomains.card.domainsHintWildcard") : t("siteDomains.card.domainsHint")}
+          >
             <textarea className="ui-input ui-textarea" value={domains} onChange={(e) => setDomainsText(e.target.value)} rows={4} autoComplete="off" spellCheck={false} />
           </Field>
+          {wildcards.length > 0 && <WildcardNotes site={site} wildcards={wildcards} />}
           {!redirectSite && (
             <Field
               label={t("siteDomains.card.redirect")}
@@ -121,6 +140,47 @@ export function DomainsCard({ site, onChange }: Props) {
             await onChange();
           }}
         />
+      )}
+    </>
+  );
+}
+
+/**
+ * WildcardDNSWarning says which wildcards no DNS account serves: Let's
+ * Encrypt cannot issue them. Nothing for an own certificate.
+ */
+export function WildcardDNSWarning({ site }: { site: Site }) {
+  const { t } = useTranslation();
+  const missing = site.wildcardsWithoutDns ?? [];
+  if (missing.length === 0 || site.tls.source === "custom") return null;
+  const w = missing[0]!;
+  return (
+    <Notice tone="warn" title={t("siteDomains.wildcard.noZone", { domain: missing.join(", ") })}>
+      <p className="ui-flush">
+        <Trans
+          i18nKey="siteDomains.wildcard.noZoneText"
+          values={{ record: "_acme-challenge." + w.slice(2) }}
+          components={{ a: <a href={formatHash({ page: "dns", query: new URLSearchParams() })} /> }}
+        />
+      </p>
+    </Notice>
+  );
+}
+
+/** What a wildcard domain of the site matches, and what it does not. */
+function WildcardNotes({ site, wildcards }: { site: Site; wildcards: string[] }) {
+  const { t } = useTranslation();
+  const w = wildcards[0]!;
+  const parent = w.slice(2);
+  const elsewhere = site.servedElsewhere ?? [];
+  return (
+    <>
+      <WildcardDNSWarning site={site} />
+      <p className="ui-hint ui-flush">{t("siteDomains.wildcard.depth", { wildcard: w, one: "a." + parent, deep: "a.b." + parent, parent })}</p>
+      {elsewhere.length > 0 && (
+        <Notice tone="info" title={t("siteDomains.wildcard.elsewhere", { count: elsewhere.length })}>
+          <p className="ui-mono">{elsewhere.join(", ")}</p>
+        </Notice>
       )}
     </>
   );

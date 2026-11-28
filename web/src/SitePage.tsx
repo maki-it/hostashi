@@ -25,6 +25,7 @@ import {
   deleteAndPark,
   deleteSite,
   hasAccount,
+  isWildcard,
   httpsLabel,
   httpsTone,
   setDisabled,
@@ -63,7 +64,7 @@ import { groupsForSite, SiteNav, type SiteGroup } from "./SiteNav";
 import { useUnsaved } from "./Unsaved";
 import { SiteUsageCard } from "./Usage";
 import { WWWCard } from "./WWW";
-import { DomainsCard, PendingDomainsNotice } from "./Domains";
+import { DomainsCard, PendingDomainsNotice, WildcardDNSWarning } from "./Domains";
 
 type Props = {
   name: string;
@@ -730,6 +731,9 @@ function HTTPSTab({ site, onChange, staff, admin }: TabProps & { staff: boolean;
       return on ? t("sites.httpsTab.hstsOn") : t("sites.httpsTab.hstsOff");
     });
 
+  // Let's Encrypt checks a wildcard only over DNS (ADR-0075).
+  const wildcardHTTP = site.tls.source !== "custom" && site.tls.challenge !== "dns" ? site.domains.find(isWildcard) : undefined;
+
   return (
     <>
       <Card title={t("sites.httpsTab.title")} actions={<AppliesAtOnce />}>
@@ -776,6 +780,8 @@ function HTTPSTab({ site, onChange, staff, admin }: TabProps & { staff: boolean;
               </div>
             </Notice>
           )}
+          {wildcardHTTP && <Notice tone="info" title={t("sites.httpsTab.wildcardDNS", { domain: wildcardHTTP })} />}
+          <WildcardDNSWarning site={site} />
           {site.tls.hsts && !site.tls.active && <p className="ui-hint">{t("sites.httpsTab.hstsOnlyHttps")}</p>}
           {h.result}
         </div>

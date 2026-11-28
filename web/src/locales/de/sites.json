@@ -84,7 +84,10 @@
     "domainParts": "„{{domain}}“ braucht mindestens zwei Teile, etwa example.com.",
     "domainChars": "„{{domain}}“ ist keine Domain. Erlaubt sind Buchstaben, Ziffern und Bindestriche im Inneren; andere Zeichen in ihrer xn---Form.",
     "domainIp": "„{{domain}}“ ist keine Domain. IP-Adressen sind nicht erlaubt.",
-    "domainTwice": "„{{domain}}“ steht doppelt in der Liste."
+    "domainTwice": "„{{domain}}“ steht doppelt in der Liste.",
+    "wildcardType": "„{{domain}}“: Nur Weiterleitungen und Reverse Proxys können eine Wildcard-Domain haben.",
+    "wildcardPrimary": "„{{domain}}“ kann nicht die Hauptdomain sein. Setze einen genauen Namen wie {{example}} an den Anfang.",
+    "wildcardForm": "„{{domain}}“ ist keine Wildcard-Domain. Nutze *. und eine Domain, etwa *.example.com."
   },
   "pool": {
     "label": "{{name}} ({{path}})",
@@ -184,7 +187,9 @@
     "tlsHint": "Die Domains müssen auf diesen Server zeigen, sonst kann das Zertifikat nicht ausgestellt werden.",
     "creating": "Wird angelegt …",
     "submit": "Site anlegen",
-    "back": "Zurück zu den Sites"
+    "back": "Zurück zu den Sites",
+    "domainsHintWildcard": "Eine pro Zeile. Die erste ist die Hauptdomain. Danach passt *.example.com auf jede Subdomain von example.com, die keine andere Site bedient.",
+    "tlsWildcard": "HTTPS für {{domain}} braucht Let's Encrypt über DNS oder ein hochgeladenes Zertifikat. Lege die Site ohne HTTPS an und richte es danach im Tab HTTPS ein."
   },
   "choice": {
     "legend": "Typ",
@@ -319,7 +324,8 @@
     "askHsts": "HSTS einschalten?",
     "askHstsText": "Browser, die die Site besuchen, merken sich ein Jahr lang, nur HTTPS zu nutzen, auch wenn HTTPS hier später ausgeschaltet wird. Schalte es ein, sobald das Zertifikat für alle Domains der Site funktioniert.",
     "turnHstsOn": "HSTS einschalten",
-    "hstsOnlyHttps": "HSTS wird nur gesendet, solange die Site über HTTPS ausgeliefert wird."
+    "hstsOnlyHttps": "HSTS wird nur gesendet, solange die Site über HTTPS ausgeliefert wird.",
+    "wildcardDNS": "Let's Encrypt prüft {{domain}} nur über DNS. Wähle unten im Zertifikat „DNS“ oder lade ein Zertifikat hoch, das alle Domains abdeckt. Hochgeladene Zertifikate werden nicht automatisch erneuert."
   },
   "phpTab": {
     "title": "PHP-Version",

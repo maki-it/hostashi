@@ -13,7 +13,8 @@
     "thePrimary": "die Hauptdomain",
     "save": "Domains speichern",
     "both": "„{{domain}}“ ist zugleich Domain und Weiterleitungs-Domain.",
-    "tooMany": "Eine Site hat höchstens {{max}} Domains, Weiterleitungs-Domains mitgezählt."
+    "tooMany": "Eine Site hat höchstens {{max}} Domains, Weiterleitungs-Domains mitgezählt.",
+    "domainsHintWildcard": "Eine pro Zeile. Die erste ist die Hauptdomain. Danach passt *.example.com auf jede Subdomain von example.com, die keine andere Site bedient."
   },
   "pending": {
     "title": "Domainwechsel wartet auf sein Zertifikat",
@@ -123,5 +124,12 @@
     "multicastBroadcast": "Multicast- und Broadcast-Adressen sind nicht erlaubt.",
     "linkLocal": "Link-lokale Adressen sind nicht erlaubt.",
     "multicast": "Multicast-Adressen sind nicht erlaubt."
+  },
+  "wildcard": {
+    "depth": "{{wildcard}} passt auf {{one}} und auch auf tiefere Namen wie {{deep}}, aber nicht auf {{parent}} selbst. Ein Wildcard-Zertifikat deckt nur eine Ebene ab: {{deep}} bekommt über HTTPS einen Zertifikatsfehler.",
+    "elsewhere_one": "Diesen Namen bedient eine andere Site, eine geparkte Domain oder das Panel:",
+    "elsewhere_other": "Diese {{count}} Namen bedienen andere Sites, geparkte Domains oder das Panel:",
+    "noZoneText": "Let's Encrypt kann das Zertifikat erst ausstellen, wenn die Zone von {{record}} oder des Namens, auf den sein CNAME zeigt, in einem der <a>DNS-Konten</a> steht.",
+    "noZone": "Kein DNS-Konto hat eine Zone für {{domain}}."
   }
 }

@@ -34,6 +34,42 @@ const pending = {
 };
 
 describe("domains card", () => {
+  it("explains a wildcard of a proxy site and lists the names served elsewhere", () => {
+    mockFetch({});
+    const proxy = site({ type: "proxy", php: "", domains: ["example.com", "*.example.com"], servedElsewhere: ["www.example.com"] });
+    render(<DomainsCard site={proxy} onChange={() => Promise.resolve()} />);
+
+    expect(screen.getByText(/\*\.example\.com matches every subdomain/)).toBeInTheDocument();
+    expect(screen.getByText(/also deeper names such as a\.b\.example\.com/)).toBeInTheDocument();
+    expect(screen.getByText("This name is served by another site, a parked domain or the panel:")).toBeInTheDocument();
+    expect(screen.getByText("www.example.com")).toBeInTheDocument();
+  });
+
+  it("warns when no DNS account serves the wildcard", () => {
+    mockFetch({});
+    const proxy = site({ type: "proxy", php: "", domains: ["example.com", "*.example.com"], wildcardsWithoutDns: ["*.example.com"] });
+    const { rerender } = render(<DomainsCard site={proxy} onChange={() => Promise.resolve()} />);
+
+    expect(screen.getByText("No DNS account has a zone for *.example.com.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "DNS accounts" })).toHaveAttribute("href", "#/dns");
+    expect(screen.getByText(/_acme-challenge\.example\.com/)).toBeInTheDocument();
+
+    // Not for an own certificate.
+    rerender(<DomainsCard site={{ ...proxy, tls: { ...proxy.tls, source: "custom" } }} onChange={() => Promise.resolve()} />);
+    expect(screen.queryByText(/No DNS account has a zone/)).not.toBeInTheDocument();
+  });
+
+  it("refuses a wildcard on a PHP site before saving", async () => {
+    const calls = mockFetch({});
+    render(<DomainsCard site={site()} onChange={() => Promise.resolve()} />);
+
+    await userEvent.type(screen.getByLabelText("Domains of blog"), "{enter}*.old.example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Save domains" }));
+
+    expect(screen.getByText(/only redirect and reverse proxy sites can have a wildcard domain/)).toBeInTheDocument();
+    expect(calls).toHaveLength(0);
+  });
+
   it("saves served and redirect domains and says when the change waits", async () => {
     const calls = mockFetch({ "PUT /api/v1/sites/blog/domains": { status: 202, body: site({ pendingDomains: { ...pending, domains: ["old.example.com", "a.example.com"] } }) } });
     render(<DomainsCard site={site()} onChange={() => Promise.resolve()} />);
