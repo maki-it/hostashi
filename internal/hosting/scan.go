@@ -233,12 +233,11 @@ func (s *Service) SiteScan(ctx context.Context, name string) (SiteScan, error) {
 			continue
 		}
 
-		if p, ok := s.scanProgress.Load(r.ID); ok {
-			out.Progress[r.ID] = p.(agentapi.ScanProgress)
-		} else {
-			out.Progress[r.ID] = agentapi.ScanProgress{}
-		}
+		p, _ := s.scanProgress.Load(r.ID)
+		sp, _ := p.(agentapi.ScanProgress)
+		out.Progress[r.ID] = sp
 	}
+
 	if sched != store.ScanScheduleOff {
 		out.NextScheduled = nextScanSlot(site.Name, sched, s.now())
 	}

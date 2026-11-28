@@ -232,6 +232,7 @@ func TestStatusVanishedAndTail(t *testing.T) {
 
 	// A failed run says why without the lines about single files.
 	write(t, m.LogFile("blog"), strings.Repeat(home+"/a.php: OK\n", 5000)+"LibClamAV Error: out of memory\n")
+
 	ctl.props["ActiveState"], ctl.props["Result"] = "failed", "exit-code"
 
 	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 5}); st.Error != "the scanner failed: LibClamAV Error: out of memory" {
@@ -292,7 +293,7 @@ func TestProgressAfterRestart(t *testing.T) {
 	write(t, m.LogFile("blog"), home+"/a.php: OK\n")
 
 	m2 := &Manager{Dir: m.Dir, UnitDir: m.UnitDir, LogDir: m.LogDir, ListDir: m.ListDir, QuarantineDir: m.QuarantineDir, DatabaseDir: m.DatabaseDir, Site: m.Site, Ctl: ctl}
-	m2.now = func() time.Time { return time.Now() }
+	m2.now = time.Now
 
 	st, _ := m2.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 4})
 	if st.State != agentapi.ScanRunning || st.Progress == nil || *st.Progress != (agentapi.ScanProgress{Scanned: 1, Total: 2}) {
