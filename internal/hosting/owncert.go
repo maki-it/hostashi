@@ -141,7 +141,12 @@ func (s *Service) SetTLSSource(ctx context.Context, actor int64, name, source st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, err := s.activeSite(ctx, name); err != nil {
+	site, err := s.activeSite(ctx, name)
+	if err != nil {
+		return store.Site{}, err
+	}
+
+	if err := checkWildcardTLS(site.TLS, source, site.TLSChallenge, site.AllDomains()); err != nil {
 		return store.Site{}, err
 	}
 
