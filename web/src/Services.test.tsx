@@ -59,6 +59,33 @@ describe("Services", () => {
     expect(screen.getByText("Restarted by systemd 2 times after a crash", { exact: false })).toBeInTheDocument();
   });
 
+  it("lists the 10 newest events and shows older ones on demand", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      at: new Date(Date.UTC(2026, 10, 21, 9, 0, 0) - i * 60_000).toISOString(),
+      service: "nginx",
+      kind: "action",
+      detail: "reload",
+      user: `u${i}`,
+    }));
+    mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events: many } } });
+    render(<Services />);
+
+    const list = await screen.findByRole("list", { name: "Recent events" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(list).getByText(/by u0\b/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show fewer" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show 10 older events" }));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(20);
+    await user.click(screen.getByRole("button", { name: "Show 5 older events" }));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(25);
+    expect(screen.queryByRole("button", { name: /older event/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
+  });
+
   it("groups the server and the sites and filters the problems", async () => {
     const user = userEvent.setup();
     mockFetch({ "GET /api/v1/services": { body: { services: rows } }, "GET /api/v1/services/events?limit=50": { body: { events } } });
