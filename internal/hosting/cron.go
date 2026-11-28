@@ -9,16 +9,19 @@ import (
 	"strconv"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cron"
 	"github.com/maki-it/hostashi/internal/store"
 )
 
 // Errors of the cron jobs.
 var (
-	ErrNoCron        = errors.New("hosting: cron jobs are not available")
-	ErrCronNotFound  = errors.New("hosting: no such cron job")
-	ErrCronLimit     = fmt.Errorf("hosting: a site has at most %d cron jobs", cron.MaxJobsPerSite)
-	errCronNotActive = fmt.Errorf("%w: the site is not active", ErrState)
+	ErrNoCron       = errors.New("hosting: cron jobs are not available")
+	ErrCronNotFound = errors.New("hosting: no such cron job")
+	// ErrCronRunNotFound: the run is not among the last runs of the job.
+	ErrCronRunNotFound = errors.New("hosting: no such run among the last runs of the cron job")
+	ErrCronLimit       = fmt.Errorf("hosting: a site has at most %d cron jobs", cron.MaxJobsPerSite)
+	errCronNotActive   = fmt.Errorf("%w: the site is not active", ErrState)
 )
 
 // CronAgent is the part of the agent the cron jobs use (ADR-0028).
@@ -26,7 +29,8 @@ type CronAgent interface {
 	CronApply(ctx context.Context, req agentapi.CronApplyRequest) error
 	CronRun(ctx context.Context, site string, id int64) error
 	CronStatus(ctx context.Context, site string) (agentapi.CronSiteStatus, error)
-	CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error)
+	CronOutput(ctx context.Context, site string, id int64, invocation string) (agentapi.CronJobOutput, error)
+	CronRuns(ctx context.Context, site string, id int64) (agentapi.CronJobRuns, error)
 }
 
 // CronApply calls cron.apply.
@@ -49,8 +53,13 @@ func (a RPCAgent) CronStatus(ctx context.Context, site string) (agentapi.CronSit
 }
 
 // CronOutput calls cron.output.
-func (a RPCAgent) CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
-	return agentapi.CronOutput.Call(ctx, a.C, agentapi.CronRunRequest{Site: site, ID: id})
+func (a RPCAgent) CronOutput(ctx context.Context, site string, id int64, invocation string) (agentapi.CronJobOutput, error) {
+	return agentapi.CronOutput.Call(ctx, a.C, agentapi.CronOutputRequest{Site: site, ID: id, Invocation: invocation})
+}
+
+// CronRuns calls cron.runs.
+func (a RPCAgent) CronRuns(ctx context.Context, site string, id int64) (agentapi.CronJobRuns, error) {
+	return agentapi.CronRuns.Call(ctx, a.C, agentapi.CronRunRequest{Site: site, ID: id})
 }
 
 // EnableCron sets the agent for cron jobs. Without it they answer ErrNoCron.
@@ -313,21 +322,50 @@ func (s *Service) CronStatus(ctx context.Context, site string) (agentapi.CronSit
 	return s.cron.CronStatus(ctx, site)
 }
 
-// CronOutput reads what the last run of a job wrote (ADR-0028 Addendum 1).
-// Reading is not audited, like the site logs (ADR-0053).
-func (s *Service) CronOutput(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
+// CronOutput reads what one run of a job wrote: the last run when
+// invocation is empty (ADR-0028 Addendum 1), else one of the last runs
+// (Addendum 2). Reading is not audited, like the site logs (ADR-0053).
+func (s *Service) CronOutput(ctx context.Context, site string, id int64, invocation string) (agentapi.CronJobOutput, error) {
+	if invocation != "" && !agentapi.ValidInvocation(invocation) {
+		return agentapi.CronJobOutput{}, ErrCronRunNotFound
+	}
+
+	if err := s.cronJob(ctx, site, id); err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	out, err := s.cron.CronOutput(ctx, site, id, invocation)
+	if invocation != "" && isCode(err, agentrpc.CodeNotFound) {
+		return agentapi.CronJobOutput{}, ErrCronRunNotFound
+	}
+
+	return out, err
+}
+
+// CronRuns lists the last runs of a job, newest first (ADR-0028 Addendum
+// 2). Not audited, like CronOutput.
+func (s *Service) CronRuns(ctx context.Context, site string, id int64) (agentapi.CronJobRuns, error) {
+	if err := s.cronJob(ctx, site, id); err != nil {
+		return agentapi.CronJobRuns{}, err
+	}
+
+	return s.cron.CronRuns(ctx, site, id)
+}
+
+// cronJob checks that the site has cron jobs and the job.
+func (s *Service) cronJob(ctx context.Context, site string, id int64) error {
 	st, err := s.cronSite(ctx, site)
 	if err != nil {
-		return agentapi.CronJobOutput{}, err
+		return err
 	}
 
 	if _, err := s.st.CronJob(ctx, st.ID, id); errors.Is(err, store.ErrNotFound) {
-		return agentapi.CronJobOutput{}, ErrCronNotFound
+		return ErrCronNotFound
 	} else if err != nil {
-		return agentapi.CronJobOutput{}, err
+		return err
 	}
 
-	return s.cron.CronOutput(ctx, site, id)
+	return nil
 }
 
 // SyncCron sends the jobs of every active site again, for example after

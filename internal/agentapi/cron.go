@@ -109,16 +109,19 @@ func (r CronApplyRequest) Validate() error {
 
 // Cron operations. cron.apply replaces a site's jobs; cron.run starts one
 // job now; cron.status reports the last and next runs; cron.output reads
-// what the last run of one job wrote (ADR-0028 Addendum 1).
+// what one run of a job wrote (ADR-0028 Addendum 1); cron.runs lists the
+// last runs of a job (Addendum 2).
 var (
 	CronApply  = agentrpc.Op[CronApplyRequest, CronApplied]{Name: "cron.apply"}
 	CronRun    = agentrpc.Op[CronRunRequest, CronRunResponse]{Name: "cron.run"}
 	CronStatus = agentrpc.Op[CronStatusRequest, CronSiteStatus]{Name: "cron.status"}
-	CronOutput = agentrpc.Op[CronRunRequest, CronJobOutput]{Name: "cron.output"}
+	CronOutput = agentrpc.Op[CronOutputRequest, CronJobOutput]{Name: "cron.output"}
+	CronRuns   = agentrpc.Op[CronRunRequest, CronJobRuns]{Name: "cron.runs"}
 )
 
-// Limits of cron.output (ADR-0028 Addendum 1).
+// Limits of cron.output (ADR-0028 Addendum 1) and cron.runs (Addendum 2).
 const (
+	CronMaxRuns            = 10
 	CronOutputMaxLines     = 200
 	CronOutputMaxLineBytes = 2 << 10
 	CronOutputMaxBytes     = 64 << 10
@@ -151,6 +154,58 @@ func (r CronRunRequest) Validate() error {
 	}
 
 	return ValidateSiteUser(r.Site)
+}
+
+// CronOutputRequest asks what one run of a job wrote. An empty
+// Invocation means the last run.
+type CronOutputRequest struct {
+	Site       string `json:"site"`
+	ID         int64  `json:"id"`
+	Invocation string `json:"invocation,omitempty"`
+}
+
+// Validate checks the site, the id and the invocation id.
+func (r CronOutputRequest) Validate() error {
+	if r.Invocation != "" && !ValidInvocation(r.Invocation) {
+		return fmt.Errorf("cron: invalid run id %q", r.Invocation)
+	}
+
+	return CronRunRequest{Site: r.Site, ID: r.ID}.Validate()
+}
+
+// ValidInvocation tells whether s looks like a systemd invocation id: 32
+// lowercase hex digits.
+func ValidInvocation(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+
+	return true
+}
+
+// CronJobRuns answers cron.runs: the last runs of a job, newest first, at
+// most CronMaxRuns.
+type CronJobRuns struct {
+	Runs []CronRunEntry `json:"runs"`
+}
+
+// CronRunEntry is one run of a job as systemd logged it. Start and End are Unix
+// microseconds; End is 0 while the run goes on or when the journal has no
+// end. Result is systemd's ("success", "exit-code", "timeout", ...),
+// empty when unknown.
+type CronRunEntry struct {
+	Invocation string `json:"invocation"`
+	Start      int64  `json:"start"`
+	End        int64  `json:"end,omitempty"`
+	Running    bool   `json:"running,omitempty"`
+	Result     string `json:"result,omitempty"`
+	ExitStatus *int   `json:"exit_status,omitempty"`
 }
 
 // CronRunResponse answers cron.run; the run itself goes on in systemd.

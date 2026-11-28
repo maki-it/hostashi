@@ -63,6 +63,23 @@ type cronOutputJSON struct {
 	Truncated bool     `json:"truncated"`
 }
 
+// cronRunsJSON lists the last runs of a job, newest first (ADR-0028
+// Addendum 2). Times are Unix seconds; end is absent while a run goes on
+// or when the journal has no end. result is systemd's ("success",
+// "exit-code", "timeout", ...), absent when unknown.
+type cronRunsJSON struct {
+	Runs []cronRunJSON `json:"runs"`
+}
+
+type cronRunJSON struct {
+	ID         string `json:"id"`
+	Start      int64  `json:"start"`
+	End        int64  `json:"end,omitempty"`
+	Running    bool   `json:"running"`
+	Result     string `json:"result,omitempty"`
+	ExitStatus *int   `json:"exitStatus,omitempty"`
+}
+
 type cronInputJSON struct {
 	Schedule   string `json:"schedule"`
 	Command    string `json:"command"`
@@ -81,6 +98,8 @@ func cronFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusServiceUnavailable, "cron_unavailable", "cron jobs are not available on this panel")
 	case errors.Is(err, hosting.ErrCronNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "no such cron job")
+	case errors.Is(err, hosting.ErrCronRunNotFound):
+		writeError(w, http.StatusNotFound, "run_not_found", "no such run among the last runs of the cron job")
 	case errors.Is(err, hosting.ErrCronLimit):
 		writeError(w, http.StatusConflict, "too_many_cron_jobs", err.Error())
 	default:
@@ -243,7 +262,8 @@ func registerCron(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 	}))
 
 	mux.Op("GET /api/v1/sites/{name}/cron/{id}/output", openapi.Operation{
-		ID: "getCronJobOutput", Tag: "cron", Summary: "What the last run of a cron job wrote", Out: cronOutputJSON{},
+		ID: "getCronJobOutput", Tag: "cron", Summary: "What a run of a cron job wrote, by default the last one", Out: cronOutputJSON{},
+		Query: []openapi.Param{{Name: "run", Description: "id of one of the last runs, from the runs list; absent for the last run"}},
 	}, a.allow("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 		id, ok := cronID(w, r)
 		if !ok {
@@ -253,7 +273,7 @@ func registerCron(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
 		defer cancel()
 
-		out, err := svc.CronOutput(ctx, r.PathValue("name"), id)
+		out, err := svc.CronOutput(ctx, r.PathValue("name"), id, r.URL.Query().Get("run"))
 		if err != nil {
 			cronFail(log, w, err, "read cron job output")
 
@@ -266,6 +286,36 @@ func registerCron(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logger
 		}
 
 		writeJSON(w, http.StatusOK, cronOutputJSON{Ran: out.Ran, Lines: lines, Truncated: out.Truncated})
+	}))
+
+	mux.Op("GET /api/v1/sites/{name}/cron/{id}/runs", openapi.Operation{
+		ID: "listCronJobRuns", Tag: "cron", Summary: "The last runs of a cron job, newest first", Out: cronRunsJSON{},
+	}, a.allow("cron:read", func(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+		id, ok := cronID(w, r)
+		if !ok {
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+		defer cancel()
+
+		runs, err := svc.CronRuns(ctx, r.PathValue("name"), id)
+		if err != nil {
+			cronFail(log, w, err, "list cron job runs")
+
+			return
+		}
+
+		out := cronRunsJSON{Runs: make([]cronRunJSON, 0, len(runs.Runs))}
+
+		for _, run := range runs.Runs {
+			out.Runs = append(out.Runs, cronRunJSON{
+				ID: run.Invocation, Start: run.Start / 1_000_000, End: run.End / 1_000_000,
+				Running: run.Running, Result: run.Result, ExitStatus: run.ExitStatus,
+			})
+		}
+
+		writeJSON(w, http.StatusOK, out)
 	}))
 
 	// Starts the job now, paused or not; the run goes on in the background.

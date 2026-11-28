@@ -48,14 +48,24 @@ func (h *siteOps) registerCron(s *agentrpc.Server) {
 		return agentapi.CronRunResponse{}, mapCronError(h.cron.Run(ctx, req.Site, req.ID))
 	})
 
-	agentrpc.Handle(s, agentapi.CronOutput, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronRunRequest) (agentapi.CronJobOutput, error) {
+	agentrpc.Handle(s, agentapi.CronOutput, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronOutputRequest) (agentapi.CronJobOutput, error) {
 		if h.cron == nil {
 			return agentapi.CronJobOutput{}, errNoCron
 		}
 
-		out, err := h.cron.Output(ctx, req.Site, req.ID)
+		out, err := h.cron.Output(ctx, req.Site, req.ID, req.Invocation)
 
 		return out, mapCronError(err)
+	})
+
+	agentrpc.Handle(s, agentapi.CronRuns, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronRunRequest) (agentapi.CronJobRuns, error) {
+		if h.cron == nil {
+			return agentapi.CronJobRuns{}, errNoCron
+		}
+
+		runs, err := h.cron.Runs(ctx, req.Site, req.ID)
+
+		return runs, mapCronError(err)
 	})
 
 	agentrpc.Handle(s, agentapi.CronStatus, func(ctx context.Context, _ agentrpc.Caller, req agentapi.CronStatusRequest) (agentapi.CronSiteStatus, error) {
@@ -108,6 +118,8 @@ func mapCronError(err error) error {
 		return nil
 	case errors.Is(err, cronjobs.ErrUnknownJob):
 		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such cron job"}
+	case errors.Is(err, cronjobs.ErrUnknownRun):
+		return &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such run among the last runs"}
 	case errors.Is(err, cronjobs.ErrDisabled):
 		return &agentrpc.Error{Code: agentrpc.CodePrecondition, Message: "the site is disabled"}
 	case errors.Is(err, cronjobs.ErrRootSite):

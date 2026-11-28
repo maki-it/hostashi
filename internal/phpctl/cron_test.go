@@ -3,9 +3,13 @@
 package phpctl
 
 import (
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/maki-it/hostashi/internal/agentapi"
 )
 
 func TestCronRefusesOddUnits(t *testing.T) {
@@ -157,5 +161,111 @@ func TestParseJournalInvocation(t *testing.T) {
 	lines, _ = parseJournal(`{"MESSAGE":"x","__MONOTONIC_TIMESTAMP":"x"}`, false, inv, 1)
 	if len(lines) != 0 {
 		t.Errorf("bad timestamp: %q", lines)
+	}
+}
+
+func TestCronJournalRangeAndRunsRefuseOddInput(t *testing.T) {
+	var c CronController
+
+	inv := "0123456789abcdef0123456789abcdef"
+	svc := "hostashi-cron-shop-1.service"
+
+	for _, u := range []string{"hostashi-cron-shop-1.timer", "nginx.service", "", svc + " _UID=0"} {
+		if _, _, err := c.JournalRange(t.Context(), u, inv, 1, 0); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("range unit %q: %v", u, err)
+		}
+
+		if _, err := c.Runs(t.Context(), u); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("runs unit %q: %v", u, err)
+		}
+	}
+
+	if _, _, err := c.JournalRange(t.Context(), svc, inv+"0", 1, 0); err == nil || !strings.Contains(err.Error(), "refusing") {
+		t.Errorf("range invocation: %v", err)
+	}
+
+	for _, r := range [][2]int64{{0, 0}, {-5, 0}, {10, 10}, {10, 5}} {
+		if _, _, err := c.JournalRange(t.Context(), svc, inv, r[0], r[1]); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("range %v: %v", r, err)
+		}
+	}
+}
+
+func TestJournalTime(t *testing.T) {
+	for us, want := range map[int64]string{1795880604914769: "@1795880604.914769", 1795880604000001: "@1795880604.000001", 1: "@0.000001"} {
+		if got := journalTime(us); got != want {
+			t.Errorf("%d: %q", us, got)
+		}
+	}
+}
+
+// TestParseRuns uses systemd 257's entries about a unit (Debian 13): a run
+// that failed with exit status 3, one that succeeded, one that timed out,
+// one whose start is older than what was read, a forged-looking entry
+// without a valid id, and a run still going on.
+func TestParseRuns(t *testing.T) {
+	const (
+		failed  = "0a2d3aa75594430b9dfe6ea1a1b255f7"
+		ok      = "1e68564f9432460e8f472682fd9ae514"
+		timeout = "2b2d3aa75594430b9dfe6ea1a1b255f7"
+		cutoff  = "3c2d3aa75594430b9dfe6ea1a1b255f7"
+		running = "4d2d3aa75594430b9dfe6ea1a1b255f7"
+	)
+
+	e := func(inv, msg, extra string, t int64) string {
+		return `{"INVOCATION_ID":"` + inv + `","MESSAGE_ID":"` + msg + `","__REALTIME_TIMESTAMP":"` + strconv.FormatInt(t, 10) + `"` + extra + "}\n"
+	}
+
+	out := e(cutoff, msgUnitStarted, `,"JOB_RESULT":"done"`, 900) +
+		e(failed, msgUnitStarting, `,"JOB_TYPE":"start"`, 1000) +
+		e(failed, msgProcessExit, `,"EXIT_CODE":"exited","EXIT_STATUS":"3"`, 1100) +
+		e(failed, "d9b373ed55a64feb8242e02dbe79a49c", `,"UNIT_RESULT":"exit-code"`, 1101) +
+		e(failed, msgUnitFailed, `,"JOB_RESULT":"failed"`, 1102) +
+		e(ok, msgUnitStarting, "", 2000) +
+		e(ok, "7ad2d189f7e94e70a38c781354912448", "", 2100) +
+		e(ok, msgUnitStarted, `,"JOB_RESULT":"done"`, 2101) +
+		e(timeout, msgUnitStarting, "", 3000) +
+		e(timeout, msgProcessExit, `,"EXIT_CODE":"killed","EXIT_STATUS":"15"`, 3100) +
+		e(timeout, "d9b373ed55a64feb8242e02dbe79a49c", `,"UNIT_RESULT":"timeout"`, 3101) +
+		e(timeout, msgUnitFailed, `,"JOB_RESULT":"failed"`, 3102) +
+		e("not-an-id", msgUnitStarting, "", 3500) +
+		e(running, msgUnitStarting, "", 4000) +
+		"{broken\n"
+
+	runs := parseRuns(out)
+	if len(runs) != 4 {
+		t.Fatalf("%+v", runs)
+	}
+
+	if r := runs[0]; r.Invocation != running || r.Start != 4000 || r.End != 0 || !r.Running || r.Result != "" {
+		t.Errorf("running: %+v", r)
+	}
+
+	if r := runs[1]; r.Invocation != timeout || r.End != 3102 || r.Result != "timeout" || r.ExitStatus != nil || r.Running {
+		t.Errorf("timeout: %+v", r)
+	}
+
+	if r := runs[2]; r.Invocation != ok || r.Start != 2000 || r.End != 2101 || r.Result != "success" || r.ExitStatus == nil || *r.ExitStatus != 0 {
+		t.Errorf("ok: %+v", r)
+	}
+
+	if r := runs[3]; r.Invocation != failed || r.End != 1102 || r.Result != "exit-code" || r.ExitStatus == nil || *r.ExitStatus != 3 {
+		t.Errorf("failed: %+v", r)
+	}
+
+	if runs := parseRuns(""); runs == nil || len(runs) != 0 {
+		t.Errorf("empty: %+v", runs)
+	}
+
+	// At most CronMaxRuns, the newest.
+	var many strings.Builder
+	for i := range 15 {
+		many.WriteString(e(fmt.Sprintf("%032x", i+1), msgUnitStarting, "", int64(1000*(i+1))))
+		many.WriteString(e(fmt.Sprintf("%032x", i+1), msgUnitStarted, `,"JOB_RESULT":"done"`, int64(1000*(i+1)+1)))
+	}
+
+	runs = parseRuns(many.String())
+	if len(runs) != agentapi.CronMaxRuns || runs[0].Start != 15000 || runs[9].Start != 6000 || runs[0].Running {
+		t.Errorf("many: %d %+v", len(runs), runs[0])
 	}
 }

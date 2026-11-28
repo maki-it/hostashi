@@ -27,6 +27,11 @@ type fakeCtl struct {
 	cut     bool
 	// start is what the last Journal call got as the run's start.
 	start uint64
+	// runs is what Runs returns; ranges holds "inv since until" of each
+	// JournalRange call, whose lines come from rangeLines.
+	runs       []agentapi.CronRunEntry
+	ranges     []string
+	rangeLines []string
 }
 
 func (f *fakeCtl) DaemonReload(context.Context) error {
@@ -61,6 +66,16 @@ func (f *fakeCtl) Journal(_ context.Context, u, inv string, start uint64) ([]str
 	f.start = start
 
 	return f.journal[u+" "+inv], f.cut, nil
+}
+
+func (f *fakeCtl) JournalRange(_ context.Context, _, inv string, since, until int64) ([]string, bool, error) {
+	f.ranges = append(f.ranges, inv+" "+strconv.FormatInt(since, 10)+" "+strconv.FormatInt(until, 10))
+
+	return f.rangeLines, false, nil
+}
+
+func (f *fakeCtl) Runs(context.Context, string) ([]agentapi.CronRunEntry, error) {
+	return slices.Clone(f.runs), nil
 }
 
 func (f *fakeCtl) NextElapse(_ context.Context, timers ...string) (map[string]int64, error) {
@@ -371,7 +386,7 @@ func TestOutput(t *testing.T) {
 	ctl.props = map[string]map[string]string{"hostashi-cron-shop-1.service": {"InvocationID": inv, "ExecMainStartTimestampMonotonic": "133924909"}}
 	ctl.journal = map[string][]string{"hostashi-cron-shop-1.service " + inv: {"Hi!", "Fri Nov 27 15:35:00 CET 2026"}}
 
-	out, err := m.Output(t.Context(), "shop", 1)
+	out, err := m.Output(t.Context(), "shop", 1, "")
 	must(t, err)
 
 	if !out.Ran || out.Truncated || !slices.Equal(out.Lines, []string{"Hi!", "Fri Nov 27 15:35:00 CET 2026"}) {
@@ -385,7 +400,7 @@ func TestOutput(t *testing.T) {
 	// Without a start time only lines with the invocation id may count.
 	ctl.props["hostashi-cron-shop-1.service"]["ExecMainStartTimestampMonotonic"] = ""
 
-	_, err = m.Output(t.Context(), "shop", 1)
+	_, err = m.Output(t.Context(), "shop", 1, "")
 	must(t, err)
 
 	if ctl.start != math.MaxUint64 {
@@ -393,28 +408,103 @@ func TestOutput(t *testing.T) {
 	}
 
 	// Job 2 has no invocation: it has not run.
-	out, err = m.Output(t.Context(), "shop", 2)
+	out, err = m.Output(t.Context(), "shop", 2, "")
 	must(t, err)
 
 	if out.Ran || out.Lines == nil || len(out.Lines) != 0 {
 		t.Errorf("not run: %+v", out)
 	}
 
-	if _, err := m.Output(t.Context(), "shop", 3); !errors.Is(err, ErrUnknownJob) {
+	if _, err := m.Output(t.Context(), "shop", 3, ""); !errors.Is(err, ErrUnknownJob) {
 		t.Errorf("unknown job: %v", err)
 	}
 
-	if _, err := m.Output(t.Context(), "blog", 1); !errors.Is(err, ErrUnknownJob) {
+	if _, err := m.Output(t.Context(), "blog", 1, ""); !errors.Is(err, ErrUnknownJob) {
 		t.Errorf("other site: %v", err)
 	}
 
 	ctl.cut = true
 
-	out, err = m.Output(t.Context(), "shop", 1)
+	out, err = m.Output(t.Context(), "shop", 1, "")
 	must(t, err)
 
 	if !out.Truncated {
 		t.Errorf("cut by journalctl: %+v", out)
+	}
+}
+
+func TestRunsAndRunOutput(t *testing.T) {
+	m, ctl := newManager(t)
+	must(t, m.Apply(t.Context(), shop, []agentapi.CronJob{{ID: 1, Schedule: "@hourly", Command: "x"}}))
+
+	const (
+		newest = "11111111111111111111111111111111"
+		middle = "22222222222222222222222222222222"
+		oldest = "33333333333333333333333333333333"
+	)
+
+	ctl.runs = []agentapi.CronRunEntry{
+		{Invocation: newest, Start: 3_000_000, Running: true},
+		{Invocation: middle, Start: 2_000_000, End: 2_100_000, Result: "success"},
+		{Invocation: oldest, Start: 1_000_000, End: 1_100_000, Result: "exit-code"},
+	}
+	ctl.rangeLines = []string{"Hi!", "Sat Nov 28 16:42:39 CET 2026"}
+
+	// The middle run's lines end where the newest run starts.
+	out, err := m.Output(t.Context(), "shop", 1, middle)
+	must(t, err)
+
+	if !out.Ran || !slices.Equal(out.Lines, ctl.rangeLines) || len(ctl.ranges) != 1 || ctl.ranges[0] != middle+" 2000000 3000000" {
+		t.Errorf("middle: %+v %q", out, ctl.ranges)
+	}
+
+	// The newest run has no next start.
+	_, err = m.Output(t.Context(), "shop", 1, newest)
+	must(t, err)
+
+	if ctl.ranges[1] != newest+" 3000000 0" {
+		t.Errorf("newest: %q", ctl.ranges)
+	}
+
+	if _, err := m.Output(t.Context(), "shop", 1, "44444444444444444444444444444444"); !errors.Is(err, ErrUnknownRun) {
+		t.Errorf("unknown run: %v", err)
+	}
+
+	if _, err := m.Output(t.Context(), "shop", 2, middle); !errors.Is(err, ErrUnknownJob) {
+		t.Errorf("unknown job: %v", err)
+	}
+
+	// Runs: the newest run is running only while systemd says so.
+	ctl.props = map[string]map[string]string{"hostashi-cron-shop-1.service": {"ActiveState": "activating", "InvocationID": newest}}
+
+	runs, err := m.Runs(t.Context(), "shop", 1)
+	must(t, err)
+
+	if len(runs.Runs) != 3 || !runs.Runs[0].Running {
+		t.Errorf("running: %+v", runs)
+	}
+
+	// A reboot cut the newest run off: no end, but not running either.
+	ctl.props["hostashi-cron-shop-1.service"] = map[string]string{"ActiveState": "inactive", "InvocationID": ""}
+
+	runs, err = m.Runs(t.Context(), "shop", 1)
+	must(t, err)
+
+	if runs.Runs[0].Running {
+		t.Errorf("cut off: %+v", runs)
+	}
+
+	ctl.runs = nil
+
+	runs, err = m.Runs(t.Context(), "shop", 1)
+	must(t, err)
+
+	if runs.Runs == nil || len(runs.Runs) != 0 {
+		t.Errorf("none: %+v", runs)
+	}
+
+	if _, err := m.Runs(t.Context(), "blog", 1); !errors.Is(err, ErrUnknownJob) {
+		t.Errorf("other site: %v", err)
 	}
 }
 
