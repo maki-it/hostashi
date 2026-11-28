@@ -2665,6 +2665,163 @@
         },
         "type": "object"
       },
+      "DnsAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "checkedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "label",
+          "provider",
+          "settings",
+          "state",
+          "updatedAt",
+          "zones"
+        ],
+        "type": "object"
+      },
+      "DnsAccountAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credentials": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "DnsAccountList": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/DnsAccount"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "DnsAccountUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credentials": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "DnsProviderList": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/Provider"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "type": "object"
+      },
       "Doctor": {
         "additionalProperties": false,
         "properties": {
@@ -3023,6 +3180,30 @@
         "required": [
           "address",
           "jails"
+        ],
+        "type": "object"
+      },
+      "Field": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "name",
+          "optional",
+          "secret"
         ],
         "type": "object"
       },
@@ -6134,6 +6315,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "Provider": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hint": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fields",
+          "hint",
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "Proxy": {
@@ -12471,6 +12682,354 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "databases:list"
+      }
+    },
+    "/api/v1/dns-accounts": {
+      "get": {
+        "operationId": "listDNSAccounts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsAccountList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:read"
+            ]
+          }
+        ],
+        "summary": "List the DNS accounts",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:read"
+      },
+      "post": {
+        "operationId": "addDNSAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DnsAccountAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsAccount"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:write"
+            ]
+          }
+        ],
+        "summary": "Add a DNS account and check its access",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:write"
+      }
+    },
+    "/api/v1/dns-accounts/{id}": {
+      "delete": {
+        "operationId": "deleteDNSAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:write"
+            ]
+          }
+        ],
+        "summary": "Remove a DNS account",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:write"
+      },
+      "get": {
+        "operationId": "getDNSAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsAccount"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:read"
+            ]
+          }
+        ],
+        "summary": "Read a DNS account",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:read"
+      },
+      "put": {
+        "operationId": "updateDNSAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DnsAccountUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsAccount"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:write"
+            ]
+          }
+        ],
+        "summary": "Change a DNS account; new credentials are checked at once",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:write"
+      }
+    },
+    "/api/v1/dns-accounts/{id}/check": {
+      "post": {
+        "operationId": "checkDNSAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsAccount"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:write"
+            ]
+          }
+        ],
+        "summary": "Check that a DNS account may write its zones",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:write"
+      }
+    },
+    "/api/v1/dns-providers": {
+      "get": {
+        "operationId": "listDNSProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DnsProviderList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "dns_accounts:read"
+            ]
+          }
+        ],
+        "summary": "List the DNS providers and their credential fields",
+        "tags": [
+          "dns-accounts"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "dns_accounts:read"
       }
     },
     "/api/v1/doctor": {

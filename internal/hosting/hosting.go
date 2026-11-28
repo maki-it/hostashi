@@ -188,6 +188,7 @@ type Service struct {
 	deployAgainMu sync.Mutex
 	deployAgain   map[string]bool
 	dbs           DBServers // nil: only the local database server (ADR-0041)
+	dns           DNSAPI    // nil: no DNS accounts (ADR-0076)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache

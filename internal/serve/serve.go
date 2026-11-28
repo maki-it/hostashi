@@ -258,6 +258,7 @@ func handler(cfg Config, deps Deps) (http.Handler, *routeMux) {
 			registerCerts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDatabases(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerDBServers(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
+			registerDNSAccounts(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPages(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
 			registerPagePreview(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, newPreviews(cfg.PagesDir), log)
 			registerParked(mux, authn{svc: deps.Auth, fail: newFail(log)}, deps.Sites, log)
@@ -613,6 +614,7 @@ func Run(ctx context.Context, cfg Config) error {
 	deps.Sites.EnableSSH(hosting.RPCAgent{C: client})
 	deps.Sites.EnableDBServers(hosting.RemoteDBServers{Box: box}, filepath.Dir(copyPath))
 	deps.Sites.EnablePGClient(RPCPGClient{C: client})
+	deps.Sites.EnableDNSAccounts(hosting.DNSProviders{Box: box})
 
 	if err := deps.Sites.WriteDBManifest(ctx); err != nil {
 		cfg.Log.ErrorContext(ctx, "write the external database list for the backup", "err", err)

@@ -223,6 +223,13 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/db-servers/{server}":                    "db_servers:write",
 	"GET /api/v1/db-servers/postgresql-client":              "db_servers:write",
 	"POST /api/v1/db-servers/postgresql-client":             "db_servers:write",
+	"GET /api/v1/dns-providers":                             "dns_accounts:read",
+	"GET /api/v1/dns-accounts":                              "dns_accounts:read",
+	"POST /api/v1/dns-accounts":                             "dns_accounts:write",
+	"GET /api/v1/dns-accounts/{id}":                         "dns_accounts:read",
+	"PUT /api/v1/dns-accounts/{id}":                         "dns_accounts:write",
+	"DELETE /api/v1/dns-accounts/{id}":                      "dns_accounts:write",
+	"POST /api/v1/dns-accounts/{id}/check":                  "dns_accounts:write",
 
 	"GET /api/v1/status-pages":                "pages:read",
 	"GET /api/v1/status-pages/{id}":           "pages:read",
