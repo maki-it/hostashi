@@ -617,3 +617,87 @@ func TestScanSelection(t *testing.T) {
 		t.Fatalf("started %+v", f.started)
 	}
 }
+
+// A queued run only waits for another site when another site's run is
+// running or queued ahead of it; alone it is about to start.
+func TestScanWaitingForOther(t *testing.T) {
+	s, f := scanService(t)
+	ctx := t.Context()
+
+	if _, err := s.SetScanEngine(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	waiting := func(site string) bool {
+		t.Helper()
+
+		v, err := s.SiteScan(ctx, site)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return v.WaitingForOther
+	}
+
+	if waiting("blog") {
+		t.Fatal("no run waits")
+	}
+
+	blog, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Alone in the queue: it starts on the next poll.
+	if waiting("blog") {
+		t.Fatal("a lone queued run waits for another site")
+	}
+
+	if _, err := s.StartScan(ctx, 1, "shop", store.ScanSourcePanel, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Queued behind blog, which is queued too.
+	if !waiting("shop") || waiting("blog") {
+		t.Fatalf("queued: shop %v, blog %v", waiting("shop"), waiting("blog"))
+	}
+
+	s.pollScans(ctx)
+
+	// blog runs: shop still waits, blog has no queued run.
+	if !waiting("shop") || waiting("blog") {
+		t.Fatalf("running: shop %v, blog %v", waiting("shop"), waiting("blog"))
+	}
+
+	f.finish(blog.ID, agentapi.ScanStatus{State: agentapi.ScanSucceeded})
+	s.pollScans(ctx)
+
+	if waiting("shop") {
+		t.Fatal("shop waits after blog finished")
+	}
+}
+
+func TestWaitsForOther(t *testing.T) {
+	q := func(id, site int64) store.ScanRun { return store.ScanRun{ID: id, SiteID: site, State: store.ScanQueued} }
+	r := func(id, site int64) store.ScanRun { return store.ScanRun{ID: id, SiteID: site, State: store.ScanRunning} }
+
+	cases := []struct {
+		name   string
+		active []store.ScanRun
+		want   bool
+	}{
+		{"nothing", nil, false},
+		{"own run only", []store.ScanRun{q(1, 1)}, false},
+		{"own run is running", []store.ScanRun{r(1, 1)}, false},
+		{"other running", []store.ScanRun{r(1, 2), q(2, 1)}, true},
+		{"other queued ahead", []store.ScanRun{q(1, 2), q(2, 1)}, true},
+		{"other queued behind", []store.ScanRun{q(1, 1), q(2, 2)}, false},
+		{"no own queued run, other running", []store.ScanRun{r(1, 2)}, false},
+	}
+
+	for _, c := range cases {
+		if got := waitsForOther(c.active, 1); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}

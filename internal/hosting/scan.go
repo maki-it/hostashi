@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -188,6 +189,10 @@ type SiteScan struct {
 	NextScheduled time.Time
 	// Progress is how far the running runs are, by run id.
 	Progress map[int64]agentapi.ScanProgress
+	// WaitingForOther reports that the site's queued run waits for the
+	// scan of another site; a queued run without it starts on the next
+	// poll.
+	WaitingForOther bool
 }
 
 func (s *Service) scanSite(ctx context.Context, name string) (store.Site, error) {
@@ -242,7 +247,31 @@ func (s *Service) SiteScan(ctx context.Context, name string) (SiteScan, error) {
 		out.NextScheduled = nextScanSlot(site.Name, sched, s.now())
 	}
 
+	if slices.ContainsFunc(runs, func(r store.ScanRun) bool { return r.State == store.ScanQueued }) {
+		active, err := s.st.ActiveScanRuns(ctx)
+		if err != nil {
+			return SiteScan{}, err
+		}
+
+		out.WaitingForOther = waitsForOther(active, site.ID)
+	}
+
 	return out, nil
+}
+
+// waitsForOther reports whether the queued run of a site waits for
+// another site: a run of another site is running, or queued ahead of it.
+// active is ActiveScanRuns, oldest first, the order pollScans starts
+// them in.
+func waitsForOther(active []store.ScanRun, siteID int64) bool {
+	own := slices.IndexFunc(active, func(r store.ScanRun) bool { return r.SiteID == siteID && r.State == store.ScanQueued })
+	if own < 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(active, func(r store.ScanRun) bool {
+		return r.SiteID != siteID && (r.State == store.ScanRunning || r.ID < active[own].ID)
+	})
 }
 
 // SetScanSchedule changes the schedule of a site.
