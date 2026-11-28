@@ -7403,6 +7403,15 @@
               "null"
             ]
           },
+          "servedElsewhere": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "state": {
             "type": "string"
           },
@@ -7421,6 +7430,15 @@
           },
           "web": {
             "$ref": "#/components/schemas/Web"
+          },
+          "wildcardsWithoutDns": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "www": {
             "$ref": "#/components/schemas/Www"
@@ -17796,7 +17814,7 @@
             ]
           }
         ],
-        "summary": "Create a site (static, PHP, Node.js, app, Python, reverse proxy or redirect)",
+        "summary": "Create a site (static, PHP, Node.js, app, Python, reverse proxy or redirect); reverse proxy and redirect sites also take *.\u003cdomain\u003e after the primary domain",
         "tags": [
           "sites"
         ],
@@ -19870,7 +19888,7 @@
             ]
           }
         ],
-        "summary": "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068)",
+        "summary": "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068). Redirect and reverse proxy sites also take *.\u003cdomain\u003e after the primary domain (ADR-0075)",
         "tags": [
           "sites"
         ],

@@ -35,9 +35,10 @@ func (s *Service) SetDomains(ctx context.Context, actor int64, name string, in [
 	return site, err
 }
 
-// normalizeDomainSet checks the served and redirect domains together.
-func normalizeDomainSet(domains, redirect []string) (store.DomainSet, error) {
-	d, err := NormalizeDomains(domains)
+// normalizeDomainSet checks the served and redirect domains of a site of
+// type typ together. Redirect domains are exact names.
+func normalizeDomainSet(domains, redirect []string, typ string) (store.DomainSet, error) {
+	d, err := normalizeSiteDomains(domains, typ)
 	if err != nil {
 		return store.DomainSet{}, err
 	}
@@ -94,7 +95,7 @@ func (s *Service) ChangeDomains(ctx context.Context, actor int64, name string, r
 		}
 	}
 
-	set, err := normalizeDomainSet(req.Domains, redirect)
+	set, err := normalizeDomainSet(req.Domains, redirect, site.Type)
 	if err != nil {
 		return store.Site{}, nil, err
 	}
@@ -117,6 +118,10 @@ func (s *Service) ChangeDomains(ctx context.Context, actor int64, name string, r
 		return store.Site{}, nil, err
 	}
 
+	if err := checkWildcardTLS(site.TLS, site.TLSSource, site.TLSChallenge, all); err != nil {
+		return store.Site{}, nil, err
+	}
+
 	// DNS-01 needs an account for every new name (ADR-0076).
 	if site.TLSChallenge == store.ChallengeDNS {
 		if _, err := s.dnsAccountsFor(ctx, all); err != nil {
@@ -128,6 +133,10 @@ func (s *Service) ChangeDomains(ctx context.Context, actor int64, name string, r
 	// (ADR-0054).
 	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
 		if _, err := checkRedirect(*r, all); err != nil {
+			return store.Site{}, nil, err
+		}
+
+		if err := s.checkRedirectLoop(ctx, name, *r, all); err != nil {
 			return store.Site{}, nil, err
 		}
 	}

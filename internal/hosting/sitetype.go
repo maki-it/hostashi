@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"strconv"
+	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -42,6 +43,10 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 
 	if req.Type == site.Type {
 		return c, fmt.Errorf("%w: the site already has type %s", ErrInvalid, req.Type)
+	}
+
+	if w := wildcardsOf(site.AllDomains()); len(w) > 0 && !wildcardType(req.Type) {
+		return c, fmt.Errorf("%w: only redirect and reverse proxy sites can have a wildcard domain; remove %s first", ErrInvalid, strings.Join(w, ", "))
 	}
 
 	wrong := func(field string, set bool) error {
@@ -87,6 +92,10 @@ func (s *Service) checkType(ctx context.Context, site store.Site, req TypeReques
 
 		r, err := checkRedirect(*req.Redirect, site.AllDomains())
 		if err != nil {
+			return c, err
+		}
+
+		if err := s.checkRedirectLoop(ctx, site.Name, r, site.AllDomains()); err != nil {
 			return c, err
 		}
 
