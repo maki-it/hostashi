@@ -270,6 +270,7 @@ const siteScan = {
   engine: "on",
   schedule: "weekly",
   nextScheduled: "2026-11-27T02:37:00Z",
+  waitingForOther: false,
   runs: [
     { id: 9, source: "schedule", state: "succeeded", error: "", found: 3, newFound: 1, dropped: 0, createdAt: at(0, 1, 37), startedAt: at(0, 1, 37), finishedAt: at(0, 1, 44) },
     { id: 8, source: "panel", state: "succeeded", error: "", found: 2, newFound: 2, dropped: 0, createdAt: at(2, 14, 3), startedAt: at(2, 14, 3), finishedAt: at(2, 14, 9) },

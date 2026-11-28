@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -188,6 +189,10 @@ type SiteScan struct {
 	NextScheduled time.Time
 	// Progress is how far the running runs are, by run id.
 	Progress map[int64]agentapi.ScanProgress
+	// WaitingForOther reports that the site's queued run waits for the
+	// scan of another site; a queued run without it starts on the next
+	// poll.
+	WaitingForOther bool
 }
 
 func (s *Service) scanSite(ctx context.Context, name string) (store.Site, error) {
@@ -233,16 +238,65 @@ func (s *Service) SiteScan(ctx context.Context, name string) (SiteScan, error) {
 			continue
 		}
 
-		p, _ := s.scanProgress.Load(r.ID)
-		sp, _ := p.(agentapi.ScanProgress)
-		out.Progress[r.ID] = sp
+		out.Progress[r.ID] = s.liveScanProgress(ctx, site.Name, r.ID)
 	}
 
 	if sched != store.ScanScheduleOff {
 		out.NextScheduled = nextScanSlot(site.Name, sched, s.now())
 	}
 
+	if slices.ContainsFunc(runs, func(r store.ScanRun) bool { return r.State == store.ScanQueued }) {
+		active, err := s.st.ActiveScanRuns(ctx)
+		if err != nil {
+			return SiteScan{}, err
+		}
+
+		out.WaitingForOther = waitsForOther(active, site.ID)
+	}
+
 	return out, nil
+}
+
+// waitsForOther reports whether the queued run of a site waits for
+// another site: a run of another site is running, or queued ahead of it.
+// active is ActiveScanRuns, oldest first, the order pollScans starts
+// them in.
+func waitsForOther(active []store.ScanRun, siteID int64) bool {
+	own := slices.IndexFunc(active, func(r store.ScanRun) bool { return r.SiteID == siteID && r.State == store.ScanQueued })
+	if own < 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(active, func(r store.ScanRun) bool {
+		return r.SiteID != siteID && (r.State == store.ScanRunning || r.ID < active[own].ID)
+	})
+}
+
+// scanProgressWait bounds how long SiteScan asks the agent for the
+// progress of a running scan before it falls back to the last poll.
+const scanProgressWait = 2 * time.Second
+
+// liveScanProgress asks the agent how far a running run is, so the page
+// moves between the polls of RunScans. When the agent does not answer in
+// time, or the run is no longer running there (RunScans stores its end),
+// it is the progress of the last poll.
+func (s *Service) liveScanProgress(ctx context.Context, site string, id int64) agentapi.ScanProgress {
+	if s.scans != nil {
+		actx, cancel := context.WithTimeout(ctx, scanProgressWait)
+		defer cancel()
+
+		// Not stored: only RunScans keeps scanProgress, which it clears
+		// when the run ends.
+		if st, err := s.scans.ScanStatus(actx, agentapi.ScanStatusRequest{Site: site, ID: id}); err == nil &&
+			st.State == agentapi.ScanRunning && st.Progress != nil {
+			return *st.Progress
+		}
+	}
+
+	p, _ := s.scanProgress.Load(id)
+	sp, _ := p.(agentapi.ScanProgress)
+
+	return sp
 }
 
 // SetScanSchedule changes the schedule of a site.
