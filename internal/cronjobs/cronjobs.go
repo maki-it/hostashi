@@ -41,6 +41,7 @@ var (
 	ErrUnknownJob = errors.New("cronjobs: no such job")
 	ErrDisabled   = errors.New("cronjobs: the site is disabled")
 	ErrRootSite   = errors.New("cronjobs: refusing a site user with uid or gid 0")
+	ErrUnknownRun = errors.New("cronjobs: no such run among the last runs")
 )
 
 // Controller drives systemd (phpctl.CronController on a server).
@@ -66,6 +67,13 @@ type Controller interface {
 	// ExecMainStartTimestampMonotonic: lines that journald stored without
 	// an invocation id count from then on.
 	Journal(ctx context.Context, service, invocation string, start uint64) (lines []string, cut bool, err error)
+	// JournalRange returns the messages of one run that journald received
+	// from since up to before until (Unix microseconds, until 0 for no
+	// end), with the run's invocation id or none (ADR-0028 Addendum 2).
+	JournalRange(ctx context.Context, service, invocation string, since, until int64) (lines []string, cut bool, err error)
+	// Runs returns the last runs of a service as systemd logged them,
+	// newest first.
+	Runs(ctx context.Context, service string) ([]agentapi.CronRunEntry, error)
 }
 
 // Site is what Apply needs to know of a site.
@@ -458,18 +466,16 @@ func (m *Manager) Status(ctx context.Context, site string) (agentapi.CronSiteSta
 	return out, nil
 }
 
-// Output reads what the last run of a job wrote (ADR-0028 Addendum 1).
-func (m *Manager) Output(ctx context.Context, site string, id int64) (agentapi.CronJobOutput, error) {
-	m.mu.Lock()
-	st, err := m.load()
-	m.mu.Unlock()
-
-	if err != nil {
+// Output reads what one run of a job wrote: the last run when invocation
+// is empty (ADR-0028 Addendum 1), otherwise one of the last runs that Runs
+// lists (Addendum 2).
+func (m *Manager) Output(ctx context.Context, site string, id int64, invocation string) (agentapi.CronJobOutput, error) {
+	if err := m.checkJob(site, id); err != nil {
 		return agentapi.CronJobOutput{}, err
 	}
 
-	if !slices.ContainsFunc(st.Sites[site].Jobs, func(j agentapi.CronJob) bool { return j.ID == id }) {
-		return agentapi.CronJobOutput{}, ErrUnknownJob
+	if invocation != "" {
+		return m.runOutput(ctx, unitName(site, id)+".service", invocation)
 	}
 
 	svc := unitName(site, id) + ".service"
@@ -502,6 +508,85 @@ func (m *Manager) Output(ctx context.Context, site string, id int64) (agentapi.C
 	out.Truncated = out.Truncated || cut
 
 	return out, nil
+}
+
+// checkJob returns ErrUnknownJob unless the site has the job.
+func (m *Manager) checkJob(site string, id int64) error {
+	m.mu.Lock()
+	st, err := m.load()
+	m.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+
+	if !slices.ContainsFunc(st.Sites[site].Jobs, func(j agentapi.CronJob) bool { return j.ID == id }) {
+		return ErrUnknownJob
+	}
+
+	return nil
+}
+
+// runOutput reads the output of one of the last runs: from its start up to
+// the start of the next one.
+func (m *Manager) runOutput(ctx context.Context, svc, invocation string) (agentapi.CronJobOutput, error) {
+	runs, err := m.Ctl.Runs(ctx, svc)
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	i := slices.IndexFunc(runs, func(r agentapi.CronRunEntry) bool { return r.Invocation == invocation })
+	if i < 0 {
+		return agentapi.CronJobOutput{}, ErrUnknownRun
+	}
+
+	var until int64
+	if i > 0 {
+		until = runs[i-1].Start // runs are newest first
+	}
+
+	lines, cut, err := m.Ctl.JournalRange(ctx, svc, invocation, runs[i].Start, until)
+	if err != nil {
+		return agentapi.CronJobOutput{}, err
+	}
+
+	out := agentapi.CronJobOutput{Ran: true}
+	out.Lines, out.Truncated = limitOutput(lines)
+	out.Truncated = out.Truncated || cut
+
+	return out, nil
+}
+
+// Runs lists the last runs of a job, newest first (ADR-0028 Addendum 2).
+// The newest run counts as running only while systemd says so: a run that
+// a reboot cut off has no end in the journal either.
+func (m *Manager) Runs(ctx context.Context, site string, id int64) (agentapi.CronJobRuns, error) {
+	if err := m.checkJob(site, id); err != nil {
+		return agentapi.CronJobRuns{}, err
+	}
+
+	svc := unitName(site, id) + ".service"
+
+	runs, err := m.Ctl.Runs(ctx, svc)
+	if err != nil {
+		return agentapi.CronJobRuns{}, err
+	}
+
+	if runs == nil {
+		runs = []agentapi.CronRunEntry{}
+	}
+
+	if len(runs) > 0 && runs[0].Running {
+		props, err := m.Ctl.Show(ctx, svc, "ActiveState", "InvocationID")
+		if err != nil {
+			return agentapi.CronJobRuns{}, err
+		}
+
+		a := props["ActiveState"]
+		runs[0].Running = (a == "active" || a == "activating") && props["InvocationID"] == runs[0].Invocation
+	}
+
+	return agentapi.CronJobRuns{Runs: runs}, nil
 }
 
 // limitOutput keeps the last lines within the limits of cron.output and

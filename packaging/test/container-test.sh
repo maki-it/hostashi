@@ -1630,6 +1630,20 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 x grep -q "\"ran\":true,\"lines\":\[\"cron-late\",\"cron-date-[0-9]\{4\}\"\]" /tmp/api.out || fail "cron job output without invocation ids: $(x cat /tmp/api.out)"
+# The last runs come from systemd's own journal entries (ADR-0028
+# Addendum 2), newest first; the output of an earlier run is that run's.
+[ "$(api GET "/api/v1/sites/wp/cron/$cid/runs")" = 200 ] || fail "cron job runs: $(x cat /tmp/api.out)"
+x grep -q '"runs":\[{"id":"[0-9a-f]\{32\}","start":[1-9][0-9]\{9\},"end":[1-9][0-9]\{9\},"running":false,"result":"success","exitStatus":0},{' /tmp/api.out ||
+  fail "cron job runs: $(x cat /tmp/api.out)"
+# The run that printed cron-stdout is an earlier one; the timer may have
+# added a run in between, so every listed run is looked at.
+cfound=
+for crun in $(x cat /tmp/api.out | grep -o '"id":"[0-9a-f]\{32\}"' | cut -d'"' -f4); do
+  [ "$(api GET "/api/v1/sites/wp/cron/$cid/output?run=$crun")" = 200 ] || fail "output of cron run $crun: $(x cat /tmp/api.out)"
+  if x grep -q "\"ran\":true,\"lines\":\[\"cron-stdout\",\"cron-stderr\"\]" /tmp/api.out; then cfound=1; break; fi
+done
+[ -n "$cfound" ] || fail "no earlier cron run with its own output"
+[ "$(api GET "/api/v1/sites/wp/cron/$cid/output?run=ffffffffffffffffffffffffffffffff")" = 404 ] || fail "output of an unknown cron run: $(x cat /tmp/api.out)"
 # Pause, then a disabled site keeps the timer stopped until it is enabled.
 [ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"

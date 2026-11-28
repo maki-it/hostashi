@@ -45,6 +45,14 @@ func (c *cronCtl) Journal(context.Context, string, string, uint64) ([]string, bo
 	return nil, false, nil
 }
 
+func (c *cronCtl) JournalRange(context.Context, string, string, int64, int64) ([]string, bool, error) {
+	return nil, false, nil
+}
+
+func (c *cronCtl) Runs(context.Context, string) ([]agentapi.CronRunEntry, error) {
+	return nil, nil
+}
+
 func (c *cronCtl) has(s string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

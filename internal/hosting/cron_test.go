@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
+	"github.com/maki-it/hostashi/internal/agentrpc"
 	"github.com/maki-it/hostashi/internal/cron"
 )
 
@@ -38,10 +39,20 @@ func (f *fakeCron) CronStatus(_ context.Context, site string) (agentapi.CronSite
 	return agentapi.CronSiteStatus{Site: site, Jobs: []agentapi.CronJobStatus{}}, f.fail
 }
 
-func (f *fakeCron) CronOutput(_ context.Context, site string, _ int64) (agentapi.CronJobOutput, error) {
-	f.outputs = append(f.outputs, site)
+func (f *fakeCron) CronOutput(_ context.Context, site string, _ int64, inv string) (agentapi.CronJobOutput, error) {
+	f.outputs = append(f.outputs, site+" "+inv)
+
+	if inv == "ffffffffffffffffffffffffffffffff" {
+		return agentapi.CronJobOutput{}, &agentrpc.Error{Code: agentrpc.CodeNotFound, Message: "no such run"}
+	}
 
 	return agentapi.CronJobOutput{Ran: true, Lines: []string{"ok"}}, f.fail
+}
+
+func (f *fakeCron) CronRuns(_ context.Context, site string, _ int64) (agentapi.CronJobRuns, error) {
+	f.outputs = append(f.outputs, "runs "+site)
+
+	return agentapi.CronJobRuns{Runs: []agentapi.CronRunEntry{}}, f.fail
 }
 
 func TestCronJobs(t *testing.T) {
@@ -122,16 +133,34 @@ func TestCronJobs(t *testing.T) {
 		t.Fatalf("run %v %v", ag.runs, err)
 	}
 
-	if out, err := s.CronOutput(ctx, "shop", j.ID); err != nil || !out.Ran || len(ag.outputs) != 1 {
+	if out, err := s.CronOutput(ctx, "shop", j.ID, ""); err != nil || !out.Ran || len(ag.outputs) != 1 {
 		t.Fatalf("output %+v %v", out, err)
 	}
 
-	if _, err := s.CronOutput(ctx, "shop", j.ID+99); !errors.Is(err, ErrCronNotFound) || len(ag.outputs) != 1 {
+	if _, err := s.CronOutput(ctx, "shop", j.ID+99, ""); !errors.Is(err, ErrCronNotFound) || len(ag.outputs) != 1 {
 		t.Fatalf("output of unknown job: %v", err)
 	}
 
-	if _, err := s.CronOutput(ctx, "nope", j.ID); err == nil {
+	if _, err := s.CronOutput(ctx, "nope", j.ID, ""); err == nil {
 		t.Fatal("output of unknown site")
+	}
+
+	// A malformed run id does not reach the agent; one the agent does not
+	// know is ErrCronRunNotFound.
+	if _, err := s.CronOutput(ctx, "shop", j.ID, "../x"); !errors.Is(err, ErrCronRunNotFound) || len(ag.outputs) != 1 {
+		t.Fatalf("malformed run: %v %v", err, ag.outputs)
+	}
+
+	if _, err := s.CronOutput(ctx, "shop", j.ID, "ffffffffffffffffffffffffffffffff"); !errors.Is(err, ErrCronRunNotFound) {
+		t.Fatalf("unknown run: %v", err)
+	}
+
+	if runs, err := s.CronRuns(ctx, "shop", j.ID); err != nil || runs.Runs == nil {
+		t.Fatalf("runs %+v %v", runs, err)
+	}
+
+	if _, err := s.CronRuns(ctx, "shop", j.ID+99); !errors.Is(err, ErrCronNotFound) {
+		t.Fatalf("runs of unknown job: %v", err)
 	}
 
 	if err := s.DeleteCronJob(ctx, 1, "shop", j.ID); err != nil || len(ag.applied["shop"]) != 0 {

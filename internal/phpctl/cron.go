@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -21,9 +22,8 @@ import (
 // cronUnitRe. The command a job runs never passes through here; it is in a
 // script file that the unit names.
 var (
-	invocationRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	cronUnitRe   = regexp.MustCompile(`^hostashi-cron-[a-z][a-z0-9_-]{1,31}-[1-9][0-9]{0,18}\.(?:service|timer)$`)
-	cronPropRe   = regexp.MustCompile(`^[A-Za-z]{1,64}$`)
+	cronUnitRe = regexp.MustCompile(`^hostashi-cron-[a-z][a-z0-9_-]{1,31}-[1-9][0-9]{0,18}\.(?:service|timer)$`)
+	cronPropRe = regexp.MustCompile(`^[A-Za-z]{1,64}$`)
 )
 
 // CronController implements cronjobs.Controller.
@@ -161,7 +161,7 @@ func (CronController) Journal(ctx context.Context, service, invocation string, s
 		return nil, false, fmt.Errorf("phpctl: refusing unit name %q", service)
 	}
 
-	if !invocationRe.MatchString(invocation) {
+	if !agentapi.ValidInvocation(invocation) {
 		return nil, false, fmt.Errorf("phpctl: refusing invocation id %q", invocation)
 	}
 
@@ -177,6 +177,178 @@ func (CronController) Journal(ctx context.Context, service, invocation string, s
 	lines, cut := parseJournal(out, full, invocation, start)
 
 	return lines, cut, nil
+}
+
+// JournalRange returns the messages of one earlier run of a cron service
+// (ADR-0028 Addendum 2): lines journald received from since up to before
+// until (Unix microseconds; until 0 means no end) with the run's
+// invocation id or with none. Runs of one service never overlap, so the
+// time range between this run's start and the next run's start holds no
+// id-less line of another run.
+func (CronController) JournalRange(ctx context.Context, service, invocation string, since, until int64) ([]string, bool, error) {
+	if !cronUnitRe.MatchString(service) || !strings.HasSuffix(service, ".service") {
+		return nil, false, fmt.Errorf("phpctl: refusing unit name %q", service)
+	}
+
+	if !agentapi.ValidInvocation(invocation) {
+		return nil, false, fmt.Errorf("phpctl: refusing invocation id %q", invocation)
+	}
+
+	if since <= 0 || (until != 0 && until <= since) {
+		return nil, false, fmt.Errorf("phpctl: refusing time range %d to %d", since, until)
+	}
+
+	args := []string{
+		"--no-pager", "--quiet", "--output=json",
+		"--output-fields=MESSAGE,_SYSTEMD_INVOCATION_ID",
+		"--lines=" + strconv.Itoa(agentapi.CronOutputMaxLines),
+		"--since=" + journalTime(since),
+	}
+
+	if until != 0 {
+		// --until is inclusive; the next run's own lines come after its
+		// start entry, so one microsecond less leaves them out.
+		args = append(args, "--until="+journalTime(until-1))
+	}
+
+	out, full, err := outputMax(ctx, journalMax, Journalctl, append(args, "_SYSTEMD_UNIT="+service)...)
+	if err != nil {
+		return nil, false, err
+	}
+
+	lines, cut := parseJournal(out, full, invocation, 0)
+
+	return lines, cut, nil
+}
+
+// journalTime formats Unix microseconds for journalctl --since/--until.
+func journalTime(us int64) string {
+	return fmt.Sprintf("@%d.%06d", us/1_000_000, us%1_000_000)
+}
+
+// Runs returns the last runs of a cron service, newest first, at most
+// agentapi.CronMaxRuns (ADR-0028 Addendum 2). They come from the entries
+// systemd itself writes about the unit; matching _PID=1 and _UID=0, which
+// journald sets and a sender cannot, keeps a job from adding entries that
+// look like runs.
+func (CronController) Runs(ctx context.Context, service string) ([]agentapi.CronRunEntry, error) {
+	if !cronUnitRe.MatchString(service) || !strings.HasSuffix(service, ".service") {
+		return nil, fmt.Errorf("phpctl: refusing unit name %q", service)
+	}
+
+	out, _, err := outputMax(ctx, journalMax, Journalctl,
+		"--no-pager", "--quiet", "--output=json",
+		"--output-fields=INVOCATION_ID,MESSAGE_ID,JOB_RESULT,UNIT_RESULT,EXIT_CODE,EXIT_STATUS",
+		"--lines="+strconv.Itoa(runEntries),
+		"_PID=1", "_UID=0", "UNIT="+service)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseRuns(out), nil
+}
+
+// runEntries is how many of systemd's entries about a unit are read: a
+// run takes three to five of them.
+const runEntries = 8 * agentapi.CronMaxRuns
+
+// Message ids of systemd's entries about a unit, from systemd's catalog.
+const (
+	msgUnitStarting = "7d4958e842da4a758f6c1cdc7b36dcc5"
+	msgProcessExit  = "98e322203f7a4ed290d09fe03c09fe15"
+	msgUnitStarted  = "39f53479d3a045ac8e11786248231fbf"
+	msgUnitFailed   = "be02cf6855d2428ba40df7e9d022f03d"
+)
+
+// parseRuns reads journalctl --output=json of systemd's entries about one
+// unit, oldest first, and returns the runs newest first. A run counts only
+// when its "Starting" entry was read; one without an end is running when
+// it is the newest, otherwise its end is unknown.
+func parseRuns(out string) []agentapi.CronRunEntry {
+	var runs []agentapi.CronRunEntry
+
+	index := map[string]int{}
+
+	for r := range strings.SplitSeq(out, "\n") {
+		var e struct {
+			Invocation string `json:"INVOCATION_ID"`
+			MessageID  string `json:"MESSAGE_ID"`
+			JobResult  string `json:"JOB_RESULT"`
+			UnitResult string `json:"UNIT_RESULT"`
+			ExitCode   string `json:"EXIT_CODE"`
+			ExitStatus string `json:"EXIT_STATUS"`
+			Realtime   string `json:"__REALTIME_TIMESTAMP"`
+		}
+
+		if strings.TrimSpace(r) == "" || json.Unmarshal([]byte(r), &e) != nil || !agentapi.ValidInvocation(e.Invocation) {
+			continue
+		}
+
+		t, err := strconv.ParseInt(e.Realtime, 10, 64)
+		if err != nil || t <= 0 {
+			continue
+		}
+
+		i, seen := index[e.Invocation]
+
+		if e.MessageID == msgUnitStarting {
+			if !seen {
+				index[e.Invocation] = len(runs)
+				runs = append(runs, agentapi.CronRunEntry{Invocation: e.Invocation, Start: t})
+			}
+
+			continue
+		}
+
+		if !seen {
+			continue // the start is older than what was read
+		}
+
+		run := &runs[i]
+
+		switch e.MessageID {
+		case msgProcessExit:
+			if e.ExitCode == "exited" {
+				if n, err := strconv.Atoi(e.ExitStatus); err == nil {
+					run.ExitStatus = &n
+				}
+			}
+		case msgUnitStarted, msgUnitFailed:
+			run.End = t
+
+			switch {
+			case e.JobResult == "done":
+				run.Result = "success"
+				zero := 0
+
+				if run.ExitStatus == nil {
+					run.ExitStatus = &zero
+				}
+			case run.Result == "":
+				run.Result = "failed"
+			}
+		}
+
+		if e.UnitResult != "" && e.UnitResult != "success" {
+			run.Result = e.UnitResult
+		}
+	}
+
+	slices.Reverse(runs)
+
+	if len(runs) > agentapi.CronMaxRuns {
+		runs = runs[:agentapi.CronMaxRuns]
+	}
+
+	if len(runs) > 0 && runs[0].End == 0 {
+		runs[0].Running = true
+	}
+
+	if runs == nil {
+		runs = []agentapi.CronRunEntry{}
+	}
+
+	return runs
 }
 
 // parseJournal reads journalctl --output=json: one object per line. It

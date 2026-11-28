@@ -1803,6 +1803,56 @@
         ],
         "type": "object"
       },
+      "CronRun": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "type": "integer"
+          },
+          "exitStatus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "start": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "running",
+          "start"
+        ],
+        "type": "object"
+      },
+      "CronRuns": {
+        "additionalProperties": false,
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CronRun"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "type": "object"
+      },
       "CronStatus": {
         "additionalProperties": false,
         "properties": {
@@ -19318,6 +19368,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "id of one of the last runs, from the runs list; absent for the last run",
+            "in": "query",
+            "name": "run",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -19352,7 +19411,7 @@
             ]
           }
         ],
-        "summary": "What the last run of a cron job wrote",
+        "summary": "What a run of a cron job wrote, by default the last one",
         "tags": [
           "cron"
         ],
@@ -19412,6 +19471,67 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "cron:write"
+      }
+    },
+    "/api/v1/sites/{name}/cron/{id}/runs": {
+      "get": {
+        "operationId": "listCronJobRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronRuns"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "cron:read"
+            ]
+          }
+        ],
+        "summary": "The last runs of a cron job, newest first",
+        "tags": [
+          "cron"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "cron:read"
       }
     },
     "/api/v1/sites/{name}/databases": {
