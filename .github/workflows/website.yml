@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Publishes hostashi.com (ADR-0079). Builds website/ with Zensical and
+# force-pushes the output as a single commit to the orphan branch
+# "website". A static Hostashi site on the maintainer's server deploys that
+# branch with Git deploy (ADR-0062), started by a repository webhook. This
+# workflow knows nothing about that server: it only writes the branch.
+
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: website
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish to the website branch
+    runs-on: ubuntu-latest
+    permissions:
+      # Pushes the branch "website" only.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Zensical (hash-pinned)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --require-hashes --no-deps -r website/requirements.txt
+      - name: Build
+        working-directory: website
+        run: '"$RUNNER_TEMP/venv/bin/zensical" build --strict'
+      - name: Check the output
+        working-directory: website
+        run: |
+          set -euo pipefail
+          [ -f site/index.html ] && [ -f site/docs/Install/index.html ] || { echo "::error::pages missing in the build"; exit 1; }
+          if [ -n "$(find site -type l -print -quit)" ]; then echo "::error::links in the build"; exit 1; fi
+          if grep -rlE 'fonts\.(googleapis|gstatic)\.com' site >/dev/null; then echo "::error::the build loads Google Fonts"; exit 1; fi
+      - name: Push to the website branch
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd website/site
+          git init -q -b website
+          git add -A
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Build of $REPO@$SHA"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c http.extraheader="$auth" push -q --force "https://github.com/$REPO.git" website:website
+          echo "published $SHA to the branch website" | tee -a "$GITHUB_STEP_SUMMARY"
