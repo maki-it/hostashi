@@ -4,12 +4,14 @@ package cpmigrate
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/agentapi"
@@ -299,7 +301,7 @@ func (s *Service) lookup(ctx context.Context, domains []string, server []netip.A
 
 	for _, d := range domains {
 		lctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-		addrs, ttl, err := s.cutover.resolver.Lookup(lctx, d)
+		addrs, ttl, err := s.cutover.resolver.Lookup(lctx, lookupName(d))
 
 		cancel()
 
@@ -330,6 +332,18 @@ func (s *Service) lookup(ctx context.Context, domains []string, server []netip.A
 	}
 
 	return out
+}
+
+// lookupName is the name to resolve for a site domain: for a wildcard
+// "*.example.com" a random label below example.com, so the answer shows
+// where a wildcard record points (ADR-0075).
+func lookupName(domain string) string {
+	rest, ok := strings.CutPrefix(domain, agentapi.WildcardPrefix)
+	if !ok {
+		return domain
+	}
+
+	return "hostashi-check-" + strings.ToLower(rand.Text()[:10]) + "." + rest
 }
 
 // lookupError gives a short reason without the resolver's address.

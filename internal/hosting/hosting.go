@@ -329,8 +329,17 @@ func checkPHP(v string) error {
 }
 
 // NormalizeDomains lower-cases and trims the list and checks it. The order
-// is kept: the first domain is the primary one.
-func NormalizeDomains(in []string) ([]string, error) {
+// is kept: the first domain is the primary one. Wildcards are refused.
+func NormalizeDomains(in []string) ([]string, error) { return normalizeDomains(in, false) }
+
+// normalizeSiteDomains is NormalizeDomains for the served domains of a
+// site of type typ: redirect and reverse proxy sites also take "*.<domain>"
+// after the primary domain (ADR-0075).
+func normalizeSiteDomains(in []string, typ string) ([]string, error) {
+	return normalizeDomains(in, wildcardType(typ))
+}
+
+func normalizeDomains(in []string, wildcard bool) ([]string, error) {
 	if len(in) == 0 || len(in) > agentapi.MaxDomainsPerSite {
 		return nil, fmt.Errorf("%w: between 1 and %d domains required", ErrInvalid, agentapi.MaxDomainsPerSite)
 	}
@@ -338,10 +347,22 @@ func NormalizeDomains(in []string) ([]string, error) {
 	seen := make(map[string]bool, len(in))
 	out := make([]string, 0, len(in))
 
-	for _, d := range in {
+	for i, d := range in {
 		d = strings.ToLower(strings.TrimSpace(d))
-		if err := agentapi.ValidateDomain(d); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+
+		switch {
+		case !agentapi.IsWildcard(d):
+			if err := agentapi.ValidateDomain(d); err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+			}
+		case !wildcard:
+			return nil, fmt.Errorf("%w: wildcard domain %s: only redirect and reverse proxy sites can have one", ErrInvalid, d)
+		case i == 0:
+			return nil, fmt.Errorf("%w: wildcard domain %s cannot be the primary domain; put an exact name first", ErrInvalid, d)
+		default:
+			if err := agentapi.ValidateDomainPattern(d); err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+			}
 		}
 
 		if seen[d] {
@@ -436,8 +457,20 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 		return store.Site{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 
-	domains, err := NormalizeDomains(req.Domains)
+	kind := store.SiteTypeStatic
+	if req.Redirect != nil {
+		kind = store.SiteTypeRedirect
+	} else if req.Proxy != nil {
+		kind = store.SiteTypeProxy
+	}
+
+	domains, err := normalizeSiteDomains(req.Domains, kind)
 	if err != nil {
+		return store.Site{}, err
+	}
+
+	// A new site gets Let's Encrypt over HTTP-01 (ADR-0075).
+	if err := checkWildcardTLS(req.TLS, store.TLSLetsEncrypt, store.ChallengeHTTP, domains); err != nil {
 		return store.Site{}, err
 	}
 
@@ -492,6 +525,10 @@ func (s *Service) Create(ctx context.Context, actor int64, req CreateRequest) (s
 	if req.Redirect != nil {
 		r, err := checkRedirect(*req.Redirect, domains)
 		if err != nil {
+			return store.Site{}, err
+		}
+
+		if err := s.checkRedirectLoop(ctx, req.Name, r, domains); err != nil {
 			return store.Site{}, err
 		}
 

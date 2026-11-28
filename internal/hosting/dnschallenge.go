@@ -14,6 +14,7 @@ import (
 	"github.com/go-acme/lego/v5/challenge"
 	"github.com/go-acme/lego/v5/challenge/dns01"
 
+	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/dnsprov"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -49,6 +50,12 @@ func lookupChallengeName(ctx context.Context, domain string) string {
 	return strings.ToLower(strings.TrimSuffix(fqdn, "."))
 }
 
+// challengeNameOf is challengeName for a site domain: the record of
+// "*.example.com" is the one of example.com, as a CA asks for it.
+func (s *Service) challengeNameOf(ctx context.Context, domain string) string {
+	return s.challengeName(ctx, strings.TrimPrefix(domain, agentapi.WildcardPrefix))
+}
+
 // accountFor returns the account whose longest zone covers name.
 func accountFor(accounts []store.DNSAccount, name string) (store.DNSAccount, bool) {
 	var (
@@ -82,7 +89,7 @@ func (s *Service) dnsAccountsFor(ctx context.Context, domains []string) (map[str
 	var missing []string
 
 	for _, d := range domains {
-		name := s.challengeName(ctx, d)
+		name := s.challengeNameOf(ctx, d)
 
 		a, ok := accountFor(accounts, name)
 		if !ok {
@@ -185,6 +192,12 @@ func (r *dnsRouter) Timeout() (timeout, interval time.Duration) {
 // accounts of domains when challenge is store.ChallengeDNS.
 func (s *Service) obtainChain(ctx context.Context, csr []byte, domains []string, challengeType string) ([]byte, error) {
 	if challengeType != store.ChallengeDNS {
+		// A CA checks a wildcard only over DNS-01; asking would only use
+		// up a failed validation (ADR-0075).
+		if w := wildcardsOf(domains); len(w) > 0 {
+			return nil, errWildcardHTTP01(w)
+		}
+
 		return s.issuer.Obtain(ctx, csr)
 	}
 
@@ -219,7 +232,7 @@ func (s *Service) dnsLosers(ctx context.Context, change func([]store.DNSAccount)
 
 	loses := func(domains []string) bool {
 		for _, d := range domains {
-			if _, ok := accountFor(after, s.challengeName(ctx, d)); !ok {
+			if _, ok := accountFor(after, s.challengeNameOf(ctx, d)); !ok {
 				return true
 			}
 		}
@@ -305,6 +318,10 @@ func (s *Service) SetTLSChallenge(ctx context.Context, actor int64, name, challe
 		if err := s.checkDNSChallenge(ctx, site.AllDomains()); err != nil {
 			return store.Site{}, err
 		}
+	}
+
+	if err := checkWildcardTLS(site.TLS, site.TLSSource, challengeType, site.AllDomains()); err != nil {
+		return store.Site{}, err
 	}
 
 	old, err := s.st.SetSiteTLSChallenge(ctx, name, challengeType, s.now())
