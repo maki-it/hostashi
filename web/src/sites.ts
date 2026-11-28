@@ -26,6 +26,8 @@ export type SiteTLS = {
   trusted?: boolean;
   renewAt?: string;
   renewPending?: boolean;
+  // How Let's Encrypt checks the domains (ADR-0076).
+  challenge?: "http" | "dns";
 };
 
 // SiteWWW is the www redirect of a site (ADR-0065). It acts on pairs only:
@@ -73,6 +75,14 @@ export type Site = {
   // A domain change that waits for its certificate, null for none
   // (ADR-0068). Older answers lack it.
   pendingDomains?: PendingDomains | null;
+  // servedElsewhere: names below the site's wildcard domains that other
+  // sites, parked domains or the panel serve instead (ADR-0075). Only the
+  // answer for one site has it.
+  servedElsewhere?: string[];
+  // wildcardsWithoutDns: wildcard domains that no DNS account serves, so
+  // Let's Encrypt cannot issue them (ADR-0075). Only the answer for one
+  // site has it.
+  wildcardsWithoutDns?: string[];
   // The redirect between example.com and www.example.com (ADR-0065).
   // Older answers lack it.
   www?: SiteWWW;
@@ -476,12 +486,32 @@ export const parseDomains = (text: string) =>
     .map((d) => d.trim().toLowerCase())
     .filter((d) => d !== "");
 
-export function domainsProblem(domains: string[]): string {
+/** A wildcard domain pattern ("*.example.com", ADR-0075). */
+export const isWildcard = (d: string) => d.startsWith("*.");
+
+/** Redirect and reverse proxy sites can have a wildcard domain (ADR-0075). */
+export const wildcardKind = (kind: string) => kind === "redirect" || kind === "proxy";
+
+// wildcardProblem checks one wildcard of a site's domain list; first says
+// it would be the primary domain.
+function wildcardProblem(d: string, allowed: boolean, first: boolean): string {
+  if (!allowed) return i18n.t("sites.check.wildcardType", { domain: d });
+  if (first) return i18n.t("sites.check.wildcardPrimary", { domain: d, example: d.slice(2) });
+  if (domainProblem(d.slice(2)) !== "") return i18n.t("sites.check.wildcardForm", { domain: d });
+  return "";
+}
+
+/**
+ * domainsProblem checks the served domains of a site. With wildcard, a
+ * redirect or reverse proxy site, "*.<domain>" may follow the primary
+ * domain.
+ */
+export function domainsProblem(domains: string[], wildcard = false): string {
   if (domains.length === 0) return i18n.t("sites.check.domainsEmpty");
   if (domains.length > maxDomainsPerSite) return i18n.t("sites.check.domainsMax", { count: maxDomainsPerSite });
   const seen = new Set<string>();
-  for (const d of domains) {
-    const p = domainProblem(d);
+  for (const [i, d] of domains.entries()) {
+    const p = d.includes("*") ? (isWildcard(d) ? wildcardProblem(d, wildcard, i === 0) : i18n.t("sites.check.wildcardForm", { domain: d })) : domainProblem(d);
     if (p) return p;
     if (seen.has(d)) return i18n.t("sites.check.domainTwice", { domain: d });
     seen.add(d);

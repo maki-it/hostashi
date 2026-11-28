@@ -13,7 +13,8 @@
     "thePrimary": "the primary domain",
     "save": "Save domains",
     "both": "“{{domain}}” is a served domain and a redirect domain.",
-    "tooMany": "A site can have at most {{max}} domains, redirect domains included."
+    "tooMany": "A site can have at most {{max}} domains, redirect domains included.",
+    "domainsHintWildcard": "One per line. The first one is the primary domain. After it, *.example.com matches every subdomain of example.com that no other site serves."
   },
   "pending": {
     "title": "Domain change waiting for its certificate",
@@ -123,5 +124,12 @@
     "multicastBroadcast": "Multicast and broadcast addresses are not allowed.",
     "linkLocal": "Link-local addresses are not allowed.",
     "multicast": "Multicast addresses are not allowed."
+  },
+  "wildcard": {
+    "depth": "{{wildcard}} matches {{one}} and also deeper names such as {{deep}}, but not {{parent}} itself. A wildcard certificate covers only one level: {{deep}} gets a certificate error over HTTPS.",
+    "elsewhere_one": "This name is served by another site, a parked domain or the panel:",
+    "elsewhere_other": "These {{count}} names are served by other sites, parked domains or the panel:",
+    "noZoneText": "Let's Encrypt cannot issue the certificate until the zone of {{record}}, or of the name its CNAME points to, is in one of the <a>DNS accounts</a>.",
+    "noZone": "No DNS account has a zone for {{domain}}."
   }
 }

@@ -68,7 +68,8 @@ describe("domainsProblem", () => {
     [["xn--mnchen-3ya.de", "www.example.com"], ""],
     [[], "at least one"],
     [["localhost"], "two parts"],
-    [["*.example.com"], "not a domain"],
+    [["*.example.com"], "only redirect and reverse proxy"],
+    [["example.com", "a*.example.com"], "not a wildcard domain"],
     [["-a.example.com"], "not a domain"],
     [["a-.example.com"], "not a domain"],
     [["exa_mple.com"], "not a domain"],
@@ -80,6 +81,20 @@ describe("domainsProblem", () => {
     [Array.from({ length: 51 }, (_, i) => `s${i}.example.com`), "at most 50"],
   ] as const)("%j", (v, want) => {
     const got = domainsProblem([...v]);
+    if (want === "") expect(got).toBe("");
+    else expect(got).toContain(want);
+  });
+
+  it.each([
+    [["example.com", "*.example.com"], ""],
+    [["shop.example.com", "*.shop.example.com", "*.example.com"], ""],
+    [["*.example.com", "example.com"], "cannot be the primary domain. Put an exact name such as example.com first"],
+    [["example.com", "*.com"], "not a wildcard domain"],
+    [["example.com", "a.*.example.com"], "not a wildcard domain"],
+    [["example.com", "**.example.com"], "not a wildcard domain"],
+    [["example.com", "*.example.com", "*.example.com"], "listed twice"],
+  ] as const)("wildcard on a redirect or proxy site: %j", (v, want) => {
+    const got = domainsProblem([...v], true);
     if (want === "") expect(got).toBe("");
     else expect(got).toContain(want);
   });
@@ -541,6 +556,26 @@ describe("redirect sites", () => {
       type: "redirect",
       redirect: { target: "https://new.example.com", status: 308, keepPath: true },
     });
+  });
+
+  it("creates a redirect site with a wildcard, without HTTPS", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      ...php,
+      "GET /api/v1/sites": { body: { sites: [] } },
+      "POST /api/v1/sites": { status: 201, body: { ...blog, name: "fwd", php: "", type: "redirect", account: false, tls: noTLS } },
+    });
+    render(<ListHarness initial="new=1" />);
+    await user.type(screen.getByLabelText(/^Name/), "fwd");
+    await user.type(screen.getByLabelText(/^Domains/), "example.com{enter}*.example.com");
+    await user.click(screen.getByLabelText(/^Redirect/));
+    expect(screen.getByLabelText("HTTPS with a Let's Encrypt certificate")).toBeDisabled();
+    expect(screen.getByText(/HTTPS for \*\.example\.com needs Let's Encrypt over DNS/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Redirect to/), "https://www.example.org");
+    await user.click(screen.getByRole("button", { name: "Create site" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/sites/fwd"));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ domains: ["example.com", "*.example.com"], tls: false, hsts: false });
   });
 
   it("creates an app site with its program and arguments", async () => {

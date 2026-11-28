@@ -23,6 +23,21 @@ A domain can belong to one site or parked domain only, and never be the panel's 
 
 ![The Domains tab of a site](images/site-domains.png)
 
+### Wildcard domains
+
+[Reverse proxy and redirect sites](Site-types.md) can also answer for every subdomain: add `*.example.com` after the primary domain. A request for any name below `example.com` that no other site serves then reaches this site. Typical uses are an app that serves its customers under their own subdomain, or a redirect of every old subdomain to the main site.
+
+- Names of other sites, [parked domains](Parked-domains.md) and the panel's address always win. With `*.example.com` on one site and `www.example.com` on another, `www.example.com` goes to its own site. The **Domains** tab lists such names.
+- `*.example.com` does not cover `example.com` itself; list both if the site should answer for both.
+- The wildcard also matches deeper names such as `a.b.example.com`, but a wildcard certificate covers only one level, so those get a certificate error over HTTPS.
+- The wildcard cannot be the primary domain or a redirect domain, and other site types cannot have one. To change the type of such a site, remove the wildcard first.
+- A redirect site may send `*.example.com` to `https://www.example.com` when another site serves `www.example.com`. A target the site would answer itself is refused, as it would loop.
+- DNS: create a wildcard record such as `A *.example.com` that points to the server.
+
+Let's Encrypt checks a wildcard only over DNS. Create the site without HTTPS, then either choose **DNS** as the check on the **HTTPS** tab (admins, with a [DNS account](DNS-accounts.md) for the zone) and turn HTTPS on, or upload an own wildcard certificate. Both tabs warn when no DNS account has a zone for the wildcard.
+
+![A wildcard domain on a reverse proxy site](images/site-domains-wildcard.png)
+
 ### When the change takes effect
 
 - **Site on HTTPS with Let's Encrypt, new names:** the change waits until a certificate for all new names is there, usually less than a minute. Until then the site stays on HTTPS with its current domains. If a new name has no working DNS record yet, nothing changes: the tab shows the error, and the panel tries again within the hour. You can **Try again now**, **Change now without HTTPS** (the site is served over HTTP until the certificate is there; with HSTS on, browsers that know the site refuse that) or **Cancel change**. The new names are reserved for this site while the change waits.

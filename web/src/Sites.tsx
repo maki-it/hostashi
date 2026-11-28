@@ -15,6 +15,8 @@ import {
   compareVersions,
   createSite,
   domainsProblem,
+  isWildcard,
+  wildcardKind,
   httpsLabel,
   httpsTone,
   defaultPool,
@@ -567,12 +569,15 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
     </Field>
   );
 
+  // A wildcard gets no certificate over HTTP-01 (ADR-0075).
+  const wildcard = wildcardKind(kind) ? parseDomains(domains).find(isWildcard) : undefined;
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     const list = parseDomains(domains);
     const problem =
       siteNameProblem(name) ||
-      domainsProblem(list) ||
+      domainsProblem(list, wildcardKind(kind)) ||
       (kind === "redirect" ? redirectProblem(redirect.target, list) : "") ||
       (kind === "proxy" ? proxyProblem(proxy.target, list) : "") ||
       (kind === "node" ? nodeProblem(nodeValue) : "") ||
@@ -601,8 +606,8 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         ...(choosePool && !webOnly(kind) && { pool }),
         php: kind === "php" ? phpValue : "",
         domains: list,
-        tls,
-        hsts: tls && hsts,
+        tls: tls && !wildcard,
+        hsts: tls && !wildcard && hsts,
         ...((kind === "php" || kind === "static") && profileValue !== defaultProfile && { profile: profileValue }),
         ...(kind === "redirect" && { type: "redirect" as const, redirect }),
         ...(kind === "proxy" && { type: "proxy" as const, proxy: { ...proxy, insecure: proxy.target.startsWith("https://") && proxy.insecure } }),
@@ -633,7 +638,7 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         <Field label={t("sites.create.displayName")} hint={t("sites.create.displayNameHint")}>
           <input className="ui-input" value={title} onChange={(e) => setTitleText(e.target.value)} maxLength={maxTitleLength} autoComplete="off" />
         </Field>
-        <Field label={t("sites.create.domains")} hint={t("sites.create.domainsHint")}>
+        <Field label={t("sites.create.domains")} hint={wildcardKind(kind) ? t("sites.create.domainsHintWildcard") : t("sites.create.domainsHint")}>
           <textarea
             className="ui-input ui-textarea"
             value={domains}
@@ -684,16 +689,17 @@ function CreateForm({ php, onChange, parked = "", parkedTls = true }: CreateProp
         {kind === "proxy" && <ProxyFields value={proxy} onChange={setProxyValue} disabled={busy} />}
         {kind === "redirect" && <RedirectFields value={redirect} onChange={setRedirectValue} disabled={busy} />}
         <label className="ui-check">
-          <input type="checkbox" checked={tls} onChange={(e) => setTls(e.target.checked)} />
+          <input type="checkbox" checked={tls && !wildcard} disabled={!!wildcard} onChange={(e) => setTls(e.target.checked)} />
           {t("sites.create.tls")}
         </label>
-        {tls && (
+        {wildcard && <p className="ui-hint ui-flush">{t("sites.create.tlsWildcard", { domain: wildcard })}</p>}
+        {tls && !wildcard && (
           <label className="ui-check">
             <input type="checkbox" checked={hsts} onChange={(e) => setHsts(e.target.checked)} />
             {t("sites.create.hsts")}
           </label>
         )}
-        {tls && <p className="ui-hint ui-flush">{t("sites.create.tlsHint")}</p>}
+        {tls && !wildcard && <p className="ui-hint ui-flush">{t("sites.create.tlsHint")}</p>}
         {error && <Notice tone="err" title={error} />}
         <div className="ui-row">
           <Button type="submit" variant="primary" disabled={busy}>

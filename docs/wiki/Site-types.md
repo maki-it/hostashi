@@ -85,6 +85,8 @@ A reverse proxy site passes every request to another web server, for example an 
 
 The other server gets the visitor's address in `X-Forwarded-For` and `X-Real-IP`. WebSockets work.
 
+Reverse proxy and redirect sites can take a wildcard domain such as `*.example.com` next to their primary domain, see [Wildcard domains](Domains-and-HTTPS.md#wildcard-domains). The other server sees the visitor's subdomain as `Host`.
+
 ## Redirect
 
 A redirect site sends every address to another one, for example an old domain to the new one. It has no Linux user and no files.
@@ -93,7 +95,7 @@ A redirect site sends every address to another one, for example an old domain to
 - **Status code:** 301 for a move that stays. Browsers remember 301 and 308; use 302 or 307 while you test.
 - **Keep the path:** on, `/shop/cart?id=1` goes to the same path on the target; off, every address goes to the target as it is.
 
-A redirect to one of the site's own domains is refused, as it would loop.
+A redirect to one of the site's own domains is refused, as it would loop. With a wildcard domain, a target below it is refused unless another site serves that name.
 
 ## Change the type
 

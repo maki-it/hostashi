@@ -251,6 +251,21 @@ const shots = [
   { name: "python-versions", hash: "#/python", ready: "table" },
   { name: "site-proxy", hash: "#/sites/intranet/web", ready: "text=Pass requests to" },
   {
+    name: "site-new-wildcard",
+    hash: "#/sites?new=1",
+    ready: "form",
+    act: async (page) => {
+      await page.getByLabel(/^Name/).fill("tenants");
+      await page.getByLabel(/^Domains/).fill("apps.example.net\n*.apps.example.net");
+      await page.getByLabel(/^Reverse proxy/).check();
+      await page.getByLabel(/^Pass requests to/).fill("http://10.0.0.7:8080");
+      await page.getByLabel(/^Pass requests to/).blur();
+      await page.getByText("Pass requests to", { exact: true }).evaluate((h) => h.scrollIntoView({ block: "start" }));
+    },
+  },
+  { name: "site-domains-wildcard", hash: "#/sites/tenants/domains", ready: "text=also deeper names", full: true },
+  { name: "site-https-wildcard", hash: "#/sites/tenants/https", ready: "text=Check by Let's Encrypt", full: true },
+  {
     name: "site-type-change",
     hash: "#/sites/docs/web",
     ready: "text=Change type",
