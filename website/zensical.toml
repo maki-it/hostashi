@@ -14,7 +14,7 @@ _Footer.md
 """
 # No repo_url: the theme would fetch stars and forks from api.github.com in
 # every visitor's browser. The footer links to GitHub instead.
-copyright = "Text licensed under CC-BY-4.0 · © 2026 Maki IT"
+copyright = 'Hostashi is a product of <a href="https://maki-it.de/">Maki IT</a> · Text licensed under CC-BY-4.0 · © 2026 Maki IT'
 extra_css = ["stylesheets/hostashi.css"]
 nav = [
   { "Home" = "index.md" },

@@ -88,6 +88,8 @@ code, kbd, pre { font-family: var(--md-code-font-family); }
   color: var(--md-default-fg-color--light);
   margin: 0 0 0.8rem;
 }
+.md-typeset .hs-eyebrow a { color: inherit; text-decoration: underline; text-underline-offset: 0.2em; }
+.md-typeset .hs-maker { color: var(--md-default-fg-color--light); font-size: 0.8rem; }
 .md-typeset .hs-eyebrow::before {
   content: "";
   display: inline-block;

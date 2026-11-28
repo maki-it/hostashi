@@ -12,7 +12,7 @@ description: Host PHP, Node.js, Python and static sites on your own Debian or Ub
 
 <div class="hs-hero__text" markdown>
 
-<p class="hs-eyebrow">Open source · AGPL-3.0 · Debian and Ubuntu</p>
+<p class="hs-eyebrow">A product of <a href="https://maki-it.de/">Maki IT</a> · Open source · AGPL-3.0</p>
 
 # Your server, your sites, one calm panel
 
@@ -164,6 +164,8 @@ The firewall rolls back changes you do not confirm, so you cannot lock yourself 
 ## Try it on a fresh server
 
 One script installs everything, and the panel greets you with a setup page.
+
+<p class="hs-maker">Hostashi is built and maintained by <a href="https://maki-it.de/">Maki IT</a>, which uses it on its own servers.</p>
 
 <p class="hs-actions">
   <a class="md-button md-button--primary" href="docs/Install/">Install Hostashi</a>

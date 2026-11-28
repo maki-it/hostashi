@@ -52,6 +52,7 @@ header nav a { color: var(--muted); text-decoration: none; }
 header nav a:hover { color: var(--fg); }
 main.wrap { padding-top: 3.5rem; padding-bottom: 2rem; }
 .eyebrow { font: 400 0.75rem "IBM Plex Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.8rem; }
+.eyebrow a { color: inherit; }
 .eyebrow::before { content: ""; display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 0.15rem; background: var(--brand); margin-right: 0.5rem; vertical-align: -0.03rem; }
 h1, h2 { font-family: "Sora", system-ui, sans-serif; letter-spacing: -0.04em; line-height: 1.1; }
 h1 { font-size: clamp(2rem, 1.4rem + 2.4vw, 2.9rem); margin: 0 0 1rem; }
@@ -103,7 +104,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-conte
 </header>
 
 <main class="wrap">
-  <p class="eyebrow">get.hostashi.com</p>
+  <p class="eyebrow">get.hostashi.com · a product of <a href="https://maki-it.de/">Maki IT</a></p>
   <h1>Install Hostashi</h1>
   <p class="lead">On a fresh Debian 13 or Ubuntu 26.04 server, amd64 or arm64. Read the script first, look at the plan, then install.</p>
 
@@ -143,7 +144,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-conte
 
 <footer>
   <div class="wrap">
-    <span>Hostashi is free software under the AGPL-3.0 · © 2026 Maki IT</span>
+    <span>Hostashi is a product of <a href="https://maki-it.de/">Maki IT</a> · free software under the AGPL-3.0 · © 2026 Maki IT</span>
     <a href="https://hostashi.com/">hostashi.com</a>
   </div>
 </footer>
