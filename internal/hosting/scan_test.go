@@ -750,7 +750,7 @@ func TestSiteScanLiveProgress(t *testing.T) {
 	}
 
 	// Asking does not replace what RunScans stored.
-	if p, _ := s.scanProgress.Load(r.ID); p.(agentapi.ScanProgress).Scanned != 10 {
+	if p, _ := s.scanProgress.Load(r.ID); p != (agentapi.ScanProgress{Scanned: 10, Total: 100}) {
 		t.Fatalf("stored %+v", p)
 	}
 
