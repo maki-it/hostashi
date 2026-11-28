@@ -61,9 +61,10 @@
     "close": "Close",
     "loading": "Loading the output…",
     "notRan": "No output known: the job has not run since the server started or since it was last changed.",
-    "empty": "The last run wrote nothing.",
+    "empty": "This run wrote nothing.",
     "cut": "Earlier lines are not shown.",
-    "footer": "Standard output and errors of the job, at most the last 200 lines, as long as the system journal keeps them."
+    "footer": "Standard output and errors of the job, at most the last 200 lines per run, as long as the system journal keeps them.",
+    "titleRun": "Output of the run from {{when}}"
   },
   "duration": {
     "s": "{{s}} s",
@@ -126,7 +127,8 @@
     "unknownCode": "unknown",
     "timeout": "Stopped {{when}}: it ran longer than its time limit",
     "killed": "Killed {{when}}",
-    "other": "Failed {{when}} ({{result}})"
+    "other": "Failed {{when}} ({{result}})",
+    "unknown": "Started {{when}}, end unknown"
   },
   "errors": {
     "cron_unavailable": "Cron jobs are not available on this panel.",
@@ -134,6 +136,23 @@
     "agent_precondition": "The site is disabled. Enable it to run its cron jobs.",
     "site_busy": "The site is not active right now. Reload the page in a moment.",
     "forbidden": "Only administrators can manage cron jobs.",
-    "gone": "This cron job does not exist any more. Reload the page."
+    "gone": "This cron job does not exist any more. Reload the page.",
+    "run_not_found": "This run is no longer among the last runs. Choose another one."
+  },
+  "runs": {
+    "title": "Last runs",
+    "aria": "Last runs of cron job {{id}}",
+    "loading": "Loading the runs…",
+    "none": "The system journal has no runs of this job.",
+    "latest": "latest",
+    "result": {
+      "running": "running",
+      "success": "succeeded",
+      "exitCode": "exit code {{code}}",
+      "timeout": "time limit",
+      "killed": "killed",
+      "other": "{{result}}",
+      "unknown": "end unknown"
+    }
   }
 }

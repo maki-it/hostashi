@@ -9,6 +9,7 @@ import {
   createCron,
   cronMessage,
   cronOutput,
+  cronRuns,
   defaultNice,
   defaultTimeoutMin,
   deleteCron,
@@ -22,6 +23,9 @@ import {
   maxTimeoutMin,
   niceProblem,
   runCron,
+  runLabel,
+  runResult,
+  runStatus,
   scheduleProblem,
   timeoutProblem,
   updateCron,
@@ -29,6 +33,7 @@ import {
   type CronJob,
   type CronList,
   type CronOutput,
+  type CronRun,
 } from "./cron";
 import type { Site } from "./sites";
 import { Badge, Button, Card, CopyButton, Field, Menu, Notice, RowActions, type MenuItem } from "./ui";
@@ -310,25 +315,29 @@ function JobRow({ site, job, onChange }: { site: Site; job: CronJob; onChange: (
   );
 }
 
-// JobOutput shows what the last run of a job wrote, as the journal kept
-// it, below the job's row: how the run went, then the lines with numbers,
-// scrolled to the end where errors usually are. It loads again when a new
-// run has ended.
+// JobOutput shows what a run of a job wrote, as the journal kept it, below
+// the job's row: the last runs to choose from (ADR-0028 Addendum 2), how
+// the chosen run went, then its lines with numbers, scrolled to the end
+// where errors usually are. Without a choice it follows the last run and
+// loads again when a new run has ended.
 function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: () => void }) {
   const { t } = useTranslation();
   const [out, setOut] = useState<CronOutput | null>(null);
   const [error, setError] = useState("");
+  const [runs, setRuns] = useState<CronRun[] | null>(null);
+  const [runsError, setRunsError] = useState("");
+  // chosen is the id of an earlier run; "" follows the last run.
+  const [chosen, setChosen] = useState("");
   const [wrap, setWrap] = useState(true);
-  const st = job.status;
-  const runKey = `${st?.lastStart ?? 0}-${st?.running ? 1 : 0}`;
+  const runKey = `${job.status?.lastStart ?? 0}-${job.status?.running ? 1 : 0}`;
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let live = true;
-    setError("");
-    cronOutput(site.name, job.id).then(
-      (o) => live && setOut(o),
-      (err: unknown) => live && setError(cronMessage(err)),
+    setRunsError("");
+    cronRuns(site.name, job.id).then(
+      (r) => live && setRuns(r.runs),
+      (err: unknown) => live && setRunsError(cronMessage(err)),
     );
     return () => {
       live = false;
@@ -336,24 +345,40 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
   }, [site.name, job.id, runKey]);
 
   useEffect(() => {
+    let live = true;
+    setError("");
+    setOut(null);
+    cronOutput(site.name, job.id, chosen || undefined).then(
+      (o) => live && setOut(o),
+      (err: unknown) => live && setError(cronMessage(err)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [site.name, job.id, runKey, chosen]);
+
+  useEffect(() => {
     const el = box.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [out]);
 
+  const run = chosen ? runs?.find((r) => r.id === chosen) : undefined;
+  const st = run ? runStatus(run) : job.status;
   const lines = out?.lines ?? [];
   const text = lines.join("\n");
   const label = t("cron.output.aria", { id: job.id });
   const tone = lastRunTone(st);
   const took = st?.lastStart && st.lastEnd && st.lastEnd >= st.lastStart ? runDuration(st.lastEnd - st.lastStart) : "";
+  const shown = chosen || runs?.[0]?.id || "";
 
   return (
     <section className={"ui-cron-output ui-cron-output-" + tone} aria-label={label}>
       <header className="ui-cron-output-head">
         <div className="ui-stack-tight">
-          <strong>{t("cron.output.title")}</strong>
+          <strong>{run ? t("cron.output.titleRun", { when: formatTime(run.start) }) : t("cron.output.title")}</strong>
           <span className="ui-hint">
             {[
-              st?.running ? t("cron.last.running") : lastRun(st),
+              run ? runLabel(run) : st?.running ? t("cron.last.running") : lastRun(st),
               took && t("cron.output.took", { time: took }),
               out?.ran && lines.length > 0 && (out.truncated ? t("cron.output.linesCut", { count: lines.length }) : t("cron.output.lines", { count: lines.length })),
             ]
@@ -373,28 +398,66 @@ function JobOutput({ site, job, onClose }: { site: Site; job: CronJob; onClose: 
           </Button>
         </span>
       </header>
-      {error ? (
-        <Notice tone="err" title={error} />
-      ) : !out ? (
-        <p aria-busy="true" className="ui-cron-output-empty">
-          {t("cron.output.loading")}
-        </p>
-      ) : !out.ran ? (
-        <p className="ui-cron-output-empty">{t("cron.output.notRan")}</p>
-      ) : lines.length === 0 ? (
-        <p className="ui-cron-output-empty">{t("cron.output.empty")}</p>
-      ) : (
-        <div ref={box} className={"ui-cron-output-lines" + (wrap ? "" : " ui-cron-output-nowrap")} role="log" aria-label={label} tabIndex={0}>
-          {out.truncated && <div className="ui-cron-output-cut">{t("cron.output.cut")}</div>}
-          <ol>
-            {lines.map((l, i) => (
-              <li key={i} className={lineClass(l)}>
-                {l || "\u00a0"}
-              </li>
-            ))}
-          </ol>
+      <div className="ui-cron-output-body">
+        <nav className="ui-cron-runs" aria-label={t("cron.runs.aria", { id: job.id })}>
+          <strong className="ui-cron-runs-title">{t("cron.runs.title")}</strong>
+          {runsError ? (
+            <p className="ui-hint ui-flush">{runsError}</p>
+          ) : !runs ? (
+            <p aria-busy="true" className="ui-hint ui-flush">
+              {t("cron.runs.loading")}
+            </p>
+          ) : runs.length === 0 ? (
+            <p className="ui-hint ui-flush">{t("cron.runs.none")}</p>
+          ) : (
+            <ol>
+              {runs.map((r, i) => {
+                const d = r.end && r.end >= r.start ? runDuration(r.end - r.start) : "";
+                const dot = r.result || r.running ? lastRunTone(runStatus(r)) : "off";
+                return (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      className="ui-cron-run"
+                      aria-current={r.id === shown ? "true" : undefined}
+                      title={runLabel(r)}
+                      onClick={() => setChosen(i === 0 ? "" : r.id)}
+                    >
+                      <span className={"ui-cron-run-dot ui-cron-run-dot-" + dot} aria-hidden="true" />
+                      <span className="ui-cron-run-when">{formatTime(r.start)}</span>
+                      <span className="ui-cron-run-meta">{[i === 0 && t("cron.runs.latest"), runResult(r), d].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </nav>
+        <div className="ui-cron-output-main">
+          {error ? (
+            <Notice tone="err" title={error} />
+          ) : !out ? (
+            <p aria-busy="true" className="ui-cron-output-empty">
+              {t("cron.output.loading")}
+            </p>
+          ) : !out.ran ? (
+            <p className="ui-cron-output-empty">{t("cron.output.notRan")}</p>
+          ) : lines.length === 0 ? (
+            <p className="ui-cron-output-empty">{t("cron.output.empty")}</p>
+          ) : (
+            <div ref={box} className={"ui-cron-output-lines" + (wrap ? "" : " ui-cron-output-nowrap")} role="log" aria-label={label} tabIndex={0}>
+              {out.truncated && <div className="ui-cron-output-cut">{t("cron.output.cut")}</div>}
+              <ol>
+                {lines.map((l, i) => (
+                  <li key={i} className={lineClass(l)}>
+                    {l || "\u00a0"}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
-      )}
+      </div>
       <p className="ui-hint ui-flush">{t("cron.output.footer")}</p>
     </section>
   );

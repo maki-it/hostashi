@@ -314,6 +314,74 @@ describe("CronSettings", () => {
     expect(await screen.findByRole("region", { name: "Output of cron job 1" })).toBeInTheDocument();
   });
 
+  it("lists the last runs and shows the output of an earlier one", async () => {
+    const user = userEvent.setup();
+    const older = "0a2d3aa75594430b9dfe6ea1a1b255f7";
+    const calls = mockFetch({
+      ["GET " + base]: { body: { jobs: [wpCron], statusKnown: true } },
+      ["GET " + base + "/1/runs"]: {
+        body: {
+          runs: [
+            { id: "1e68564f9432460e8f472682fd9ae514", start: 1795600000, end: 1795600002, running: false, result: "success", exitStatus: 0 },
+            { id: older, start: 1795599700, end: 1795599761, running: false, result: "exit-code", exitStatus: 3 },
+            { id: "3c2d3aa75594430b9dfe6ea1a1b255f7", start: 1795599400, running: false },
+          ],
+        },
+      },
+      ["GET " + base + "/1/output"]: { body: { ran: true, lines: ["Hi!", "Sat Nov 28"], truncated: false } },
+      ["GET " + base + "/1/output?run=" + older]: { body: { ran: true, lines: ["Fatal error: y"], truncated: false } },
+    });
+    render(<CronSettings site={site} />);
+    await user.click(await screen.findByRole("button", { name: /^Succeeded/ }));
+
+    const out = await screen.findByRole("region", { name: "Output of cron job 1" });
+    const nav = within(out).getByRole("navigation", { name: "Last runs of cron job 1" });
+    const runs = await within(nav).findAllByRole("button");
+    expect(runs).toHaveLength(3);
+    expect(runs[0]).toHaveAttribute("aria-current", "true");
+    expect(runs[0]).toHaveTextContent("latest");
+    expect(runs[0]).toHaveTextContent("latest · succeeded · 2 s");
+    expect(runs[1]).toHaveTextContent("exit code 3 · 1 min 1 s");
+    expect(runs[2]).toHaveTextContent("end unknown");
+    expect(await within(out).findByText("Sat Nov 28")).toBeInTheDocument();
+
+    await user.click(runs[1]!);
+    expect(await within(out).findByText("Fatal error: y")).toBeInTheDocument();
+    expect(runs[1]).toHaveAttribute("aria-current", "true");
+    expect(within(out).getByText(/^Output of the run from/)).toBeInTheDocument();
+    expect(out).toHaveClass("ui-cron-output-err");
+    expect(calls.some((c) => c.path === base + "/1/output?run=" + older)).toBe(true);
+
+    // Back to the last run.
+    await user.click(runs[0]!);
+    expect(await within(out).findByText("Sat Nov 28")).toBeInTheDocument();
+    expect(within(out).getByText("Output of the last run")).toBeInTheDocument();
+  });
+
+  it("says when a run is gone", async () => {
+    const user = userEvent.setup();
+    const older = "0a2d3aa75594430b9dfe6ea1a1b255f7";
+    mockFetch({
+      ["GET " + base]: { body: { jobs: [wpCron], statusKnown: true } },
+      ["GET " + base + "/1/runs"]: {
+        body: {
+          runs: [
+            { id: "1e68564f9432460e8f472682fd9ae514", start: 1795600000, end: 1795600002, running: false, result: "success" },
+            { id: older, start: 1795599700, end: 1795599761, running: false, result: "success" },
+          ],
+        },
+      },
+      ["GET " + base + "/1/output"]: { body: { ran: true, lines: ["Hi!"], truncated: false } },
+      ["GET " + base + "/1/output?run=" + older]: err(404, "run_not_found", "no such run among the last runs of the cron job"),
+    });
+    render(<CronSettings site={site} />);
+    await user.click(await screen.findByRole("button", { name: /^Succeeded/ }));
+    const out = await screen.findByRole("region", { name: "Output of cron job 1" });
+    const runs = await within(within(out).getByRole("navigation")).findAllByRole("button");
+    await user.click(runs[1]!);
+    expect(await within(out).findByText(/no longer among the last runs/)).toBeInTheDocument();
+  });
+
   it("says when there is no output", async () => {
     const user = userEvent.setup();
     mockFetch({
@@ -325,7 +393,7 @@ describe("CronSettings", () => {
 
     const [one, two] = await screen.findAllByRole("button", { name: /^Succeeded/ });
     await user.click(one!);
-    expect(await screen.findByText("The last run wrote nothing.")).toBeInTheDocument();
+    expect(await screen.findByText("This run wrote nothing.")).toBeInTheDocument();
     await user.click(two!);
     expect(await screen.findByText(/No output known/)).toBeInTheDocument();
   });

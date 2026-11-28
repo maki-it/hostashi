@@ -61,9 +61,10 @@
     "close": "Schließen",
     "loading": "Ausgabe wird geladen…",
     "notRan": "Keine Ausgabe bekannt: Der Job ist seit dem Start des Servers oder seit seiner letzten Änderung nicht gelaufen.",
-    "empty": "Der letzte Lauf hat nichts ausgegeben.",
+    "empty": "Dieser Lauf hat nichts ausgegeben.",
     "cut": "Frühere Zeilen werden nicht angezeigt.",
-    "footer": "Standardausgabe und Fehler des Jobs, höchstens die letzten 200 Zeilen, solange das Systemjournal sie aufbewahrt."
+    "footer": "Standardausgabe und Fehler des Jobs, höchstens die letzten 200 Zeilen pro Lauf, solange das Systemjournal sie aufbewahrt.",
+    "titleRun": "Ausgabe des Laufs vom {{when}}"
   },
   "duration": {
     "s": "{{s}} s",
@@ -126,7 +127,8 @@
     "unknownCode": "unbekannt",
     "timeout": "Abbruch: {{when}}, Zeitlimit überschritten",
     "killed": "Beendet: {{when}} (Signal)",
-    "other": "Fehler: {{when}} ({{result}})"
+    "other": "Fehler: {{when}} ({{result}})",
+    "unknown": "Gestartet: {{when}}, Ende unbekannt"
   },
   "errors": {
     "cron_unavailable": "Cron-Jobs sind auf diesem Panel nicht verfügbar.",
@@ -134,6 +136,23 @@
     "agent_precondition": "Die Site ist deaktiviert. Aktiviere sie, damit ihre Cron-Jobs laufen.",
     "site_busy": "Die Site ist gerade nicht aktiv. Lade die Seite gleich neu.",
     "forbidden": "Nur Admins können Cron-Jobs verwalten.",
-    "gone": "Diesen Cron-Job gibt es nicht mehr. Lade die Seite neu."
+    "gone": "Diesen Cron-Job gibt es nicht mehr. Lade die Seite neu.",
+    "run_not_found": "Dieser Lauf gehört nicht mehr zu den letzten Läufen. Wähle einen anderen."
+  },
+  "runs": {
+    "title": "Letzte Läufe",
+    "aria": "Letzte Läufe von Cron-Job {{id}}",
+    "loading": "Läufe werden geladen…",
+    "none": "Das Systemjournal kennt keine Läufe dieses Jobs.",
+    "latest": "neuester",
+    "result": {
+      "running": "läuft",
+      "success": "Erfolg",
+      "exitCode": "Exit-Code {{code}}",
+      "timeout": "Zeitlimit",
+      "killed": "beendet",
+      "other": "{{result}}",
+      "unknown": "Ende unbekannt"
+    }
   }
 }
