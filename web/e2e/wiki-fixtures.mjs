@@ -37,7 +37,7 @@ export const sites = [
     www: { mode: "to-non-www", pairs: [{ bare: "blog.example.com", www: "www.blog.example.com" }], missing: [] },
     tls: tls(["blog.example.com", "www.blog.example.com", "blog.example.net"]),
   }),
-  site("shop", { title: "Müller Online-Shop", type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"]) }),
+  site("shop", { title: "Müller Online-Shop", type: "php", php: "8.3", domains: ["shop.example.com"], www: { mode: "off", pairs: [], missing: ["www.shop.example.com"] }, tls: tls(["shop.example.com"], { challenge: "dns" }) }),
   site("docs", { type: "static", domains: ["docs.example.com"], web: { dir: "public", spa: false, cache: true }, tls: tls(["docs.example.com"]) }),
   site("app", {
     type: "node",
@@ -534,8 +534,30 @@ const cronOutputs = {
   },
 };
 
+// DNS accounts for DNS-01 certificates (ADR-0076).
+const dnsProviders = [
+  { id: "cloudflare", name: "Cloudflare", fields: [{ name: "apiToken", label: "API token", secret: true, optional: false }], hint: "An API token with Zone: Read and DNS: Edit on the needed zones only, never the global API key." },
+  { id: "hetzner", name: "Hetzner", fields: [{ name: "apiToken", label: "API token (Hetzner Cloud)", secret: true, optional: false }], hint: "A read/write token of a separate Hetzner Cloud project that holds only DNS zones: a token of a project with servers can delete them." },
+  {
+    id: "inwx",
+    name: "INWX",
+    fields: [
+      { name: "username", label: "Username", secret: false, optional: false },
+      { name: "password", label: "Password", secret: true, optional: false },
+      { name: "sharedSecret", label: "Two-factor shared secret", secret: true, optional: true },
+    ],
+    hint: "A sub-user with DNS rights only, if your account offers one.",
+  },
+];
+const dnsAccounts = [
+  { id: 1, label: "INWX main", provider: "inwx", zones: ["example.com", "acme.example.net"], settings: { username: "hostashi-dns" }, state: "ok", checkedAt: day(0), createdAt: day(5), updatedAt: day(0) },
+  { id: 2, label: "Customer Cloudflare", provider: "cloudflare", zones: ["mueller-shop.example"], settings: {}, state: "error", lastError: "mueller-shop.example: 403 Forbidden: the token lacks Zone:DNS:Edit", checkedAt: day(1), createdAt: day(2), updatedAt: day(1) },
+  { id: 3, label: "Hetzner", provider: "hetzner", zones: ["example.org"], settings: {}, state: "unchecked", createdAt: day(0), updatedAt: day(0) },
+];
+
 const routes = [
   ["GET", /^\/sites\/blog\/cron$/, () => ({ jobs: cronJobs, statusKnown: true })],
+  ["GET", /^\/sites\/[^/]+\/cron$/, () => ({ jobs: [], statusKnown: true })],
   ["GET", /^\/sites\/blog\/cron\/(\d+)\/output$/, (m) => cronOutputs[m[1]]],
   ["GET", /^\/sites\/([^/]+)\/object-cache$/, (m) => ({
     enabled: true,
@@ -637,6 +659,8 @@ const routes = [
     updatedAt: day(1),
   })],
   ["POST", /^\/sites\/[^/]+\/access\/users$/, () => ({ name: "agency", password: "Vq7mR2xK9pLt4Wz8Bn3sHc6J" })],
+  ["GET", /^\/dns-providers$/, () => ({ providers: dnsProviders })],
+  ["GET", /^\/dns-accounts$/, () => ({ accounts: dnsAccounts })],
   ["GET", /^\/panel\/tls$/, () => ({ ...tls(["panel.example.com"]), domain: "panel.example.com" })],
   ["GET", /^\/panel\/tls\/certificate$/, () => ({
     certificate: { domains: ["panel.example.com"], issuer: "Let's Encrypt (E7)", notBefore: "2026-11-16T03:12:00Z", notAfter: "2027-02-14T00:00:00Z", fingerprint: "9d2e7b1a".repeat(8), trusted: true },

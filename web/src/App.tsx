@@ -17,6 +17,7 @@ import { Presets } from "./Limits";
 import { Profiles } from "./Profiles";
 import { Login } from "./Login";
 import { Mail } from "./Mail";
+import { DNSAccounts } from "./DNSAccounts";
 import { Migrate } from "./Migrate";
 import { Pages } from "./Pages";
 import { Overview } from "./Overview";
@@ -181,6 +182,7 @@ export function App() {
         {show("pages") && <Pages query={route.query} onQuery={replaceQuery} />}
         {show("users") && <Users me={user.username} query={route.query} onQuery={replaceQuery} />}
         {show("mail") && <Mail />}
+        {show("dns") && <DNSAccounts query={route.query} />}
         {show("import") && <Migrate query={route.query} onQuery={replaceQuery} />}
         {show("audit") && <Audit query={route.query} onQuery={replaceQuery} />}
         {show("account") && <Account user={user} onScheme={onScheme} onLanguage={onLanguage} />}

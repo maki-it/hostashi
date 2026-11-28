@@ -29,6 +29,7 @@ export const pages = [
   "profiles",
   "users",
   "mail",
+  "dns",
   "import",
   "audit",
   "account",

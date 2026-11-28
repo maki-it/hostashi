@@ -47,7 +47,11 @@ export type CertState = {
   source?: CertSource;
   certSource?: "" | CertSource;
   renewPending?: boolean;
+  /** How Let's Encrypt checks the domains (ADR-0076). */
+  challenge?: CertChallenge;
 };
+
+export type CertChallenge = "http" | "dns";
 
 const pemRe = (type: string) => new RegExp(`-----BEGIN ${type}-----[\\s\\S]+?-----END ${type}-----`);
 
@@ -78,5 +82,8 @@ export const fingerprintText = (hex: string) => (hex.toUpperCase().match(/.{1,2}
 
 // PanelTLS is the HTTPS state of the panel's own address (ADR-0023).
 export type PanelTLS = CertState & { domain: string; domains: string[]; notAfter: string | null; error?: string };
+
+// setCertChallenge chooses HTTP-01 or DNS-01 (ADR-0076).
+export const setCertChallenge = (base: string, challenge: CertChallenge) => request<unknown>("PUT", `${base}/challenge`, { challenge });
 
 export const panelTLS = () => request<PanelTLS>("GET", panelCertBase);

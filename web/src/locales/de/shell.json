@@ -23,6 +23,7 @@
       "firewall": "Firewall",
       "users": "Benutzer",
       "mail": "E-Mail",
+      "dns": "DNS-Konten",
       "import": "CloudPanel-Import",
       "audit": "Audit-Log"
     }

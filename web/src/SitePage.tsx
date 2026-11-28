@@ -158,7 +158,7 @@ export function SitePage({ name, tab, onTab, role = "user", path = "", onPath = 
           <DomainsTab site={site} onChange={load} />
         </ReadOnly>
       )}
-      {active === "https" && <HTTPSTab site={site} onChange={load} staff={staff} />}
+      {active === "https" && <HTTPSTab site={site} onChange={load} staff={staff} admin={role === "admin"} />}
       {active === "headers" && <SecurityHeadersCard site={site} />}
       {active === "hardening" && <HardeningCard site={site} />}
       {active === "realip" && <RealIPCard site={site} admin={role === "admin"} />}
@@ -710,7 +710,7 @@ function DomainsTab({ site, onChange }: TabProps) {
   );
 }
 
-function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
+function HTTPSTab({ site, onChange, staff, admin }: TabProps & { staff: boolean; admin: boolean }) {
   const { t } = useTranslation();
   const h = useAction(onChange);
   // Turning HTTPS off and HSTS on are asked again: the first serves the
@@ -781,7 +781,7 @@ function HTTPSTab({ site, onChange, staff }: TabProps & { staff: boolean }) {
         </div>
       </Card>
       <ReadOnly when={!staff}>
-        <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} onChange={onChange} />
+        <CertificateCard base={siteCertBase(site.name)} name={site.name} tls={site.tls} challenge={{ editable: admin }} onChange={onChange} />
       </ReadOnly>
     </>
   );

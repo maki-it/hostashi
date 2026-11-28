@@ -11,7 +11,7 @@ Before you add a domain to a site, create DNS records at your DNS provider:
 | `A` | `example.com` and `www.example.com` | the server's IPv4 address |
 | `AAAA` | the same names | the server's IPv6 address, if it has one |
 
-Hostashi does not run DNS. Let's Encrypt checks each name over HTTP on port 80, so the records must resolve to this server and port 80 must be open.
+Hostashi does not run DNS. Let's Encrypt checks each name over HTTP on port 80, so the records must resolve to this server and port 80 must be open. With a [DNS account](DNS-accounts.md), admins can switch a site to a check over DNS instead.
 
 ## Change the domains of a site
 
