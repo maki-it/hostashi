@@ -33,6 +33,10 @@ func (s *Service) SetRedirect(ctx context.Context, actor int64, name string, r s
 		return store.Site{}, err
 	}
 
+	if err := s.checkRedirectLoop(ctx, name, r, site.AllDomains()); err != nil {
+		return store.Site{}, err
+	}
+
 	old, err := s.st.SetSiteRedirect(ctx, name, r, s.now())
 	if err != nil {
 		return store.Site{}, err

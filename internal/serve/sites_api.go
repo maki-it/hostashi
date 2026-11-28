@@ -56,7 +56,15 @@ type siteJSON struct {
 	// PendingDomains is a domain change waiting for its certificate, null
 	// for none (ADR-0068).
 	PendingDomains *pendingDomainsJSON `json:"pendingDomains"`
-	TLS            tlsJSON             `json:"tls"`
+	// ServedElsewhere are names below the site's wildcard domains that
+	// other sites, parked domains or the panel serve instead (ADR-0075).
+	// Only GET /api/v1/sites/{name} fills it.
+	ServedElsewhere []string `json:"servedElsewhere,omitempty"`
+	// WildcardsWithoutDNS are wildcard domains of the site that no DNS
+	// account serves, so Let's Encrypt cannot issue them (ADR-0075). Only
+	// GET /api/v1/sites/{name} fills it.
+	WildcardsWithoutDNS []string `json:"wildcardsWithoutDns,omitempty"`
+	TLS                 tlsJSON  `json:"tls"`
 	// WWW is the www redirect between d and www.d (ADR-0065).
 	WWW wwwJSON `json:"www"`
 	// PHPPrograms: the site's PHP may start programs (ADR-0033).
@@ -496,11 +504,25 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 			return
 		}
 
-		writeJSON(w, http.StatusOK, toSiteJSON(svc, s))
+		out := toSiteJSON(svc, s)
+
+		if out.ServedElsewhere, err = svc.ServedElsewhere(r.Context(), s); err != nil {
+			siteFail(log, w, err, "get site")
+
+			return
+		}
+
+		if out.WildcardsWithoutDNS, err = svc.WildcardsWithoutDNS(r.Context(), s); err != nil {
+			siteFail(log, w, err, "get site")
+
+			return
+		}
+
+		writeJSON(w, http.StatusOK, out)
 	}))
 
 	mux.Op("POST /api/v1/sites", openapi.Operation{
-		ID: "createSite", Tag: "sites", Summary: "Create a site (static, PHP, Node.js, app, Python, reverse proxy or redirect)", In: siteCreateRequest{}, Out: siteJSON{}, Status: http.StatusCreated,
+		ID: "createSite", Tag: "sites", Summary: "Create a site (static, PHP, Node.js, app, Python, reverse proxy or redirect); reverse proxy and redirect sites also take *.<domain> after the primary domain", In: siteCreateRequest{}, Out: siteJSON{}, Status: http.StatusCreated,
 	}, a.allow("sites:create", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in siteCreateRequest
 		if !decodeJSON(w, r, &in) {
@@ -648,7 +670,7 @@ func registerSites(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 
 	mux.Op("PUT /api/v1/sites/{name}/domains", openapi.Operation{
 		ID: "setSiteDomains", Tag: "sites",
-		Summary: "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068)",
+		Summary: "Set the site's served and redirect domains; 202 when the change waits for its certificate (ADR-0068). Redirect and reverse proxy sites also take *.<domain> after the primary domain (ADR-0075)",
 		In:      siteDomainsRequest{}, Out: siteJSON{}, AlsoStatus: []int{http.StatusAccepted},
 	}, a.allow("sites.domains:write", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		var in siteDomainsRequest

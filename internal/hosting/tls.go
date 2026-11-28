@@ -80,6 +80,10 @@ func (s *Service) SetTLS(ctx context.Context, actor int64, name string, on bool)
 		return store.Site{}, ErrState
 	}
 
+	if err := checkWildcardTLS(on, site.TLSSource, site.TLSChallenge, site.AllDomains()); err != nil {
+		return store.Site{}, err
+	}
+
 	old, err := s.st.SetSiteTLS(ctx, name, on, s.now())
 	if err != nil {
 		return store.Site{}, err

@@ -87,3 +87,19 @@ Kim chose A on 2026-11-26 (decision card in the project thread).
 3. ~~Build for 1.0 or 1.1?~~ Decided (Kim, 2026-11-26): 1.1, right after ADR-0076.
 
 The ADR as a whole was accepted by Kim on 2026-11-26.
+
+## Addendum 1 (2026-11-28): redirect target below the own wildcard
+
+**Status:** Accepted (Kim, 2026-11-28, decision card in the project thread).
+
+The recommendation above refuses every redirect target that the site's own wildcard covers. That also refuses the most common case: `*.example.com` redirects to `https://www.example.com`, and `www.example.com` is an exact name of another site. nginx sends such a request to the other site's block, so there is no loop.
+
+- The panel refuses a redirect target only when this site would answer it itself, in nginx's order: an exact name of the site, then, when no other site, parked domain or the panel address has the exact name, the longest leading wildcard that matches it (at any depth, as nginx matches) [V: `internal/hosting/wildcard.go`].
+- The check runs when a redirect site is created, gets a new target, gets new domains, or a site becomes a redirect site. It does not run when another site later drops the name; the redirect then loops in the browser until the target or the domains change [A: a visible mistake of the owner, not a security issue].
+- The agent keeps its own check against the site's exact names only, since it checks one site at a time.
+
+Further details of the implementation:
+
+- A new site is created without a certificate when it has a wildcard and asks for HTTPS: a new site always starts with HTTP-01, so the request is refused with a pointer to DNS accounts. Choose DNS, then turn HTTPS on.
+- The DNS account of `*.example.com` is the one of `_acme-challenge.example.com`, as a CA asks for it.
+- A wildcard is refused as the primary domain and as a redirect domain (ADR-0068), as in the recommendation.
