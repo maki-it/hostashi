@@ -45,7 +45,7 @@ A token that can edit your real zones can also change your MX or A records. You 
 1. Create a zone, for example `acme.example.net`, at a provider Hostashi supports, and add a DNS account for only that zone.
 2. Once per domain, add a CNAME at the domain's own DNS, wherever it is:
 
-   ```
+   ```text
    _acme-challenge.example.com.  CNAME  example.com.acme.example.net.
    ```
 
@@ -77,7 +77,7 @@ A domain without an account answers `422 no_dns_account`; removing an account in
 
 On the [command line](Command-line.md), for example:
 
-```
+```sh
 hostashi api dns-accounts add label="INWX main" provider=inwx zones=example.com,acme.example.net 'credentials:={"username":"dns-user","password":"…"}'
 hostashi api sites set-tls-challenge shop challenge=dns
 ```
