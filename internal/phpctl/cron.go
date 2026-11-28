@@ -145,9 +145,18 @@ const journalMax = 1 << 20
 // Journal returns the messages that the processes of a cron service wrote
 // in one invocation, the last agentapi.CronOutputMaxLines of them. Only
 // journalctl with fixed arguments runs; the unit and the invocation id
-// are checked against narrow patterns. Matching _SYSTEMD_UNIT and
-// _SYSTEMD_INVOCATION_ID leaves out systemd's own lines about the unit.
-func (CronController) Journal(ctx context.Context, service, invocation string) ([]string, bool, error) {
+// are checked against narrow patterns. Matching _SYSTEMD_UNIT leaves out
+// systemd's own lines about the unit.
+//
+// The invocation is not matched by journalctl: journald looks up
+// _SYSTEMD_INVOCATION_ID in the cgroup of the process that wrote a line,
+// and when that process has already exited (a short command such as date)
+// the line has the unit, from the stream, but no invocation id. Such
+// lines belong to the run that started at start (CLOCK_MONOTONIC
+// microseconds of this boot, ExecMainStartTimestampMonotonic), because
+// runs of one service never overlap; lines of other invocations are left
+// out.
+func (CronController) Journal(ctx context.Context, service, invocation string, start uint64) ([]string, bool, error) {
 	if !cronUnitRe.MatchString(service) || !strings.HasSuffix(service, ".service") {
 		return nil, false, fmt.Errorf("phpctl: refusing unit name %q", service)
 	}
@@ -157,23 +166,26 @@ func (CronController) Journal(ctx context.Context, service, invocation string) (
 	}
 
 	out, full, err := outputMax(ctx, journalMax, Journalctl,
-		"--no-pager", "--quiet", "--output=json", "--output-fields=MESSAGE",
+		"--no-pager", "--quiet", "--boot", "--output=json",
+		"--output-fields=MESSAGE,_SYSTEMD_INVOCATION_ID",
 		"--lines="+strconv.Itoa(agentapi.CronOutputMaxLines),
-		"_SYSTEMD_UNIT="+service, "_SYSTEMD_INVOCATION_ID="+invocation)
+		"_SYSTEMD_UNIT="+service)
 	if err != nil {
 		return nil, false, err
 	}
 
-	lines, cut := parseJournal(out, full)
+	lines, cut := parseJournal(out, full, invocation, start)
 
 	return lines, cut, nil
 }
 
-// parseJournal reads journalctl --output=json: one object per line. A
+// parseJournal reads journalctl --output=json: one object per line. It
+// keeps the messages of one invocation: those with its id, and those
+// without an id that journald received at or after the run's start. A
 // MESSAGE that is not UTF-8 comes as an array of bytes; one too large for
 // journalctl's JSON comes as null and is left out. When the output was
 // cut (full), the last, partial line is dropped.
-func parseJournal(out string, full bool) ([]string, bool) {
+func parseJournal(out string, full bool, invocation string, start uint64) ([]string, bool) {
 	rows := strings.Split(out, "\n")
 	cut := false
 
@@ -189,12 +201,18 @@ func parseJournal(out string, full bool) ([]string, bool) {
 		}
 
 		var e struct {
-			Message json.RawMessage `json:"MESSAGE"`
+			Message    json.RawMessage `json:"MESSAGE"`
+			Invocation string          `json:"_SYSTEMD_INVOCATION_ID"`
+			Monotonic  string          `json:"__MONOTONIC_TIMESTAMP"`
 		}
 
 		if json.Unmarshal([]byte(r), &e) != nil {
 			cut = true
 
+			continue
+		}
+
+		if !ofInvocation(e.Invocation, e.Monotonic, invocation, start) {
 			continue
 		}
 
@@ -218,6 +236,19 @@ func parseJournal(out string, full bool) ([]string, bool) {
 	}
 
 	return lines, cut
+}
+
+// ofInvocation tells whether a journal entry belongs to the invocation
+// that started at start. An entry without an invocation id counts when
+// journald received it at or after the start.
+func ofInvocation(id, monotonic, invocation string, start uint64) bool {
+	if id != "" {
+		return id == invocation
+	}
+
+	m, err := strconv.ParseUint(monotonic, 10, 64)
+
+	return err == nil && m >= start
 }
 
 func cronctl(ctx context.Context, unit, suffix string, args ...string) error {

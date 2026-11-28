@@ -3,6 +3,7 @@
 package phpctl
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -90,37 +91,71 @@ func TestCronJournalRefusesOddInput(t *testing.T) {
 	inv := "0123456789abcdef0123456789abcdef"
 
 	for _, u := range []string{"hostashi-cron-shop-1.timer", "nginx.service", "", "hostashi-cron-shop-1.service _UID=0"} {
-		if _, _, err := c.Journal(t.Context(), u, inv); err == nil || !strings.Contains(err.Error(), "refusing") {
+		if _, _, err := c.Journal(t.Context(), u, inv, 1); err == nil || !strings.Contains(err.Error(), "refusing") {
 			t.Errorf("unit %q: %v", u, err)
 		}
 	}
 
 	for _, i := range []string{"", "0123456789ABCDEF0123456789ABCDEF", inv + "0", inv[:31], "0123456789abcdef0123456789abcde_", inv + " _UID=0"} {
-		if _, _, err := c.Journal(t.Context(), "hostashi-cron-shop-1.service", i); err == nil || !strings.Contains(err.Error(), "refusing") {
+		if _, _, err := c.Journal(t.Context(), "hostashi-cron-shop-1.service", i, 1); err == nil || !strings.Contains(err.Error(), "refusing") {
 			t.Errorf("invocation %q: %v", i, err)
 		}
 	}
 }
 
 func TestParseJournal(t *testing.T) {
-	out := `{"__CURSOR":"s=1","MESSAGE":"Hi!","_BOOT_ID":"x"}` + "\n" +
-		`{"MESSAGE":[111,107,255]}` + "\n" +
-		`{"MESSAGE":null}` + "\n" +
-		`{"MESSAGE":"trailing newline\n"}` + "\n" +
+	out := `{"__CURSOR":"s=1","MESSAGE":"Hi!","_BOOT_ID":"x","__MONOTONIC_TIMESTAMP":"1"}` + "\n" +
+		`{"MESSAGE":[111,107,255],"__MONOTONIC_TIMESTAMP":"1"}` + "\n" +
+		`{"MESSAGE":null,"__MONOTONIC_TIMESTAMP":"1"}` + "\n" +
+		`{"MESSAGE":"trailing newline\n","__MONOTONIC_TIMESTAMP":"1"}` + "\n" +
 		"\n"
 
-	lines, cut := parseJournal(out, false)
+	lines, cut := parseJournal(out, false, "", 0)
 	if cut || len(lines) != 3 || lines[0] != "Hi!" || lines[1] != "ok\xff" || lines[2] != "trailing newline" {
 		t.Errorf("%q %v", lines, cut)
 	}
 
 	// Output cut at the limit: the partial last object is dropped.
-	lines, cut = parseJournal(`{"MESSAGE":"a"}`+"\n"+`{"MESSAGE":"b`, true)
+	lines, cut = parseJournal(`{"MESSAGE":"a","__MONOTONIC_TIMESTAMP":"1"}`+"\n"+`{"MESSAGE":"b`, true, "", 0)
 	if !cut || len(lines) != 1 || lines[0] != "a" {
 		t.Errorf("cut: %q %v", lines, cut)
 	}
 
-	if lines, cut := parseJournal("", false); cut || lines == nil || len(lines) != 0 {
+	if lines, cut := parseJournal("", false, "", 0); cut || lines == nil || len(lines) != 0 {
 		t.Errorf("empty: %q %v", lines, cut)
+	}
+}
+
+// TestParseJournalInvocation uses journalctl's output for a job
+// `echo "Hi!"; date` that ran twice (systemd 257, Debian 13). In the
+// second run journald stored the date line without
+// _SYSTEMD_INVOCATION_ID because date had exited before journald looked
+// up its cgroup; matching the id in journalctl dropped that line.
+func TestParseJournalInvocation(t *testing.T) {
+	const (
+		old = "4fff7b89e1724ae6965e9f87255de970"
+		inv = "17259c2c029745bdb4cae71b40f9532e"
+	)
+
+	out := `{"__CURSOR":"s=a","__REALTIME_TIMESTAMP":"1795880550902000","__MONOTONIC_TIMESTAMP":"120000100","_BOOT_ID":"b","MESSAGE":"Hi!","_SYSTEMD_INVOCATION_ID":"` + old + `"}` + "\n" +
+		`{"__CURSOR":"s=b","__REALTIME_TIMESTAMP":"1795880550902473","__MONOTONIC_TIMESTAMP":"120000573","_BOOT_ID":"b","MESSAGE":"Sat Nov 28 15:42:30 UTC 2026"}` + "\n" +
+		`{"__CURSOR":"s=c","__REALTIME_TIMESTAMP":"1795880604915000","__MONOTONIC_TIMESTAMP":"133925000","_BOOT_ID":"b","MESSAGE":"Hi!","_SYSTEMD_INVOCATION_ID":"` + inv + `"}` + "\n" +
+		`{"__CURSOR":"s=d","__REALTIME_TIMESTAMP":"1795880604915400","__MONOTONIC_TIMESTAMP":"133925400","_BOOT_ID":"b","MESSAGE":"Sat Nov 28 15:43:24 UTC 2026"}` + "\n"
+
+	lines, cut := parseJournal(out, false, inv, 133924909)
+	if cut || len(lines) != 2 || lines[0] != "Hi!" || lines[1] != "Sat Nov 28 15:43:24 UTC 2026" {
+		t.Errorf("last run: %q %v", lines, cut)
+	}
+
+	// Without a known start only lines with the id count.
+	lines, _ = parseJournal(out, false, inv, math.MaxUint64)
+	if len(lines) != 1 || lines[0] != "Hi!" {
+		t.Errorf("no start: %q", lines)
+	}
+
+	// A broken timestamp on an id-less line leaves it out.
+	lines, _ = parseJournal(`{"MESSAGE":"x","__MONOTONIC_TIMESTAMP":"x"}`, false, inv, 1)
+	if len(lines) != 0 {
+		t.Errorf("bad timestamp: %q", lines)
 	}
 }

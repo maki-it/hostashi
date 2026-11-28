@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -61,8 +62,10 @@ type Controller interface {
 	// Journal returns the last messages (at most
 	// agentapi.CronOutputMaxLines) that the processes of a service wrote
 	// in one invocation, oldest first; cut is true when journalctl gave
-	// more than could be read.
-	Journal(ctx context.Context, service, invocation string) (lines []string, cut bool, err error)
+	// more than could be read. start is the invocation's
+	// ExecMainStartTimestampMonotonic: lines that journald stored without
+	// an invocation id count from then on.
+	Journal(ctx context.Context, service, invocation string, start uint64) (lines []string, cut bool, err error)
 }
 
 // Site is what Apply needs to know of a site.
@@ -471,7 +474,7 @@ func (m *Manager) Output(ctx context.Context, site string, id int64) (agentapi.C
 
 	svc := unitName(site, id) + ".service"
 
-	props, err := m.Ctl.Show(ctx, svc, "InvocationID")
+	props, err := m.Ctl.Show(ctx, svc, "InvocationID", "ExecMainStartTimestampMonotonic")
 	if err != nil {
 		return agentapi.CronJobOutput{}, err
 	}
@@ -483,7 +486,13 @@ func (m *Manager) Output(ctx context.Context, site string, id int64) (agentapi.C
 		return out, nil // not run since the units were written or since boot
 	}
 
-	lines, cut, err := m.Ctl.Journal(ctx, svc, inv)
+	// Without a start, only lines that carry the invocation id count.
+	start, err := strconv.ParseUint(props["ExecMainStartTimestampMonotonic"], 10, 64)
+	if err != nil || start == 0 {
+		start = math.MaxUint64
+	}
+
+	lines, cut, err := m.Ctl.Journal(ctx, svc, inv, start)
 	if err != nil {
 		return agentapi.CronJobOutput{}, err
 	}
