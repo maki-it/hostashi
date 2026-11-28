@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Mirrors docs/wiki/ to the repository's GitHub wiki (ADR-0043). The wiki is
+# Mirrors website/docs/docs/ to the repository's GitHub wiki (ADR-0043) until
+# hostashi.com serves the documentation (ADR-0079). The wiki is
 # a copy: every run replaces its content, so edits made in the wiki's web
 # editor do not survive. Links between pages are written as Page.md so the
 # link checker can follow them in the repository; the copy drops ".md",
@@ -12,7 +13,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/wiki/**"
+      - "website/docs/docs/**"
       - ".github/workflows/wiki.yml"
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ concurrency:
 
 jobs:
   sync:
-    name: Mirror docs/wiki to the wiki
+    name: Mirror website/docs/docs to the wiki
     runs-on: ubuntu-latest
     permissions:
       # The wiki is pushed with the job token; it needs write access.
@@ -45,7 +46,7 @@ jobs:
           git -c http.extraheader="$auth" clone --depth 1 "https://github.com/$REPO.wiki.git" "$RUNNER_TEMP/wiki"
           wiki="$RUNNER_TEMP/wiki"
           find "$wiki" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -R docs/wiki/. "$wiki/"
+          cp -R website/docs/docs/. "$wiki/"
           # [text](Page.md) and [text](Page.md#part) -> [text](Page) and [text](Page#part)
           find "$wiki" -name '*.md' -not -path "$wiki/.git/*" \
             -exec sed -i -E 's/\]\(([A-Za-z0-9_-]+)\.md(#[^)]*)?\)/](\1\2)/g' {} +

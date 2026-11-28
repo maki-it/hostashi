@@ -1,1 +1,0 @@
-Generated from [`docs/wiki/`](https://github.com/maki-it/hostashi/tree/main/docs/wiki). Edit there through a pull request; changes made in the wiki are overwritten. Licensed under [CC-BY-4.0](https://github.com/maki-it/hostashi/blob/main/LICENSES/CC-BY-4.0.txt).

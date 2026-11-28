@@ -19,7 +19,7 @@ The changelog is the release notes that GitHub generates from the merged pull re
     --json number,title,labels --jq '.[] | select([.labels[].name | select(startswith("Kind/") or . == "skip-release-notes")] | length == 0) | "\(.number) \(.title)"'
   ```
 
-- [ ] Docs match the release: the README's status line and feature list, wiki pages for new features (`docs/wiki/`), `SECURITY.md` "Supported versions", and the status line of section 3.0 in [03-features](03-features.md).
+- [ ] Docs match the release: the README's status line and feature list, wiki pages for new features (`website/docs/docs/`), `SECURITY.md` "Supported versions", and the status line of section 3.0 in [03-features](03-features.md).
 - [ ] The apt signing key does not expire within a year, or the renewal pull request from the last release is merged (checked by `packaging/test/key-test.sh` in CI and the monthly workflow "apt key").
 
 ## 2. Tag (maintainer)

@@ -1,0 +1,57 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/*
+ * The panel's look (web/src/ui/tokens.css) for hostashi.com. Fonts are
+ * served from this site, nothing is loaded from Google Fonts or another
+ * third party.
+ */
+
+@font-face { font-family: "Sora"; font-weight: 600; font-display: swap; src: url("../assets/fonts/sora-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Sora"; font-weight: 700; font-display: swap; src: url("../assets/fonts/sora-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("../assets/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-style: italic; font-display: swap; src: url("../assets/fonts/ibm-plex-sans-latin-400-italic.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap; src: url("../assets/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("../assets/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url("../assets/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-display: swap; src: url("../assets/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+
+:root {
+  --md-text-font-family: "IBM Plex Sans", system-ui, sans-serif;
+  --md-code-font-family: "IBM Plex Mono", ui-monospace, monospace;
+  --hs-brand: #ff6f61;
+}
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #fcfcfa;
+  --md-default-fg-color: #0d1f1a;
+  --md-typeset-color: #0d1f1a;
+  --md-primary-fg-color: #1f6b55;
+  --md-primary-fg-color--dark: #17513f;
+  --md-accent-fg-color: #1f6b55;
+  --md-typeset-a-color: #1f6b55;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0d1f1a;
+  --md-default-fg-color: #fdfcfa;
+  --md-typeset-color: #fdfcfa;
+  --md-code-bg-color: #1a2c22;
+  --md-primary-fg-color: #5cbc9d;
+  --md-accent-fg-color: #5cbc9d;
+  --md-typeset-a-color: #5cbc9d;
+}
+
+body { font-family: var(--md-text-font-family); }
+code, kbd, pre { font-family: var(--md-code-font-family); }
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-header__title {
+  font-family: "Sora", system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h1 { font-weight: 700; }
+.md-typeset h2,
+.md-typeset h3 { font-weight: 600; }

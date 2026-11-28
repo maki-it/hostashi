@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Zensical project for hostashi.com (ADR-0079): the start page at / and the
+# user documentation below /docs/. Build with "zensical build --strict" in
+# this folder; the output goes to site/.
+
+[project]
+site_name = "Hostashi"
+site_description = "Open-source control panel for a single Linux server"
+site_url = "https://hostashi.com/"
+exclude_docs = """
+_Sidebar.md
+_Footer.md
+"""
+# No repo_url: the theme would fetch stars and forks from api.github.com in
+# every visitor's browser. The footer links to GitHub instead.
+copyright = "Text licensed under CC-BY-4.0 · © 2026 Maki IT"
+extra_css = ["stylesheets/hostashi.css"]
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    { "Home" = "docs/Home.md" },
+    { "Install" = "docs/Install.md" },
+    { "First steps" = "docs/First-steps.md" },
+  ] },
+  { "Sites" = [
+    { "Sites" = "docs/Sites.md" },
+    { "Site types" = "docs/Site-types.md" },
+    { "Domains and HTTPS" = "docs/Domains-and-HTTPS.md" },
+    { "DNS accounts" = "docs/DNS-accounts.md" },
+    { "SSH and SFTP" = "docs/SSH-and-SFTP.md" },
+    { "Cron jobs" = "docs/Cron-jobs.md" },
+    { "Git deploy" = "docs/Git-deploy.md" },
+    { "Virus scan" = "docs/Virus-scan.md" },
+    { "Limits" = "docs/Limits.md" },
+    { "Parked domains" = "docs/Parked-domains.md" },
+    { "PHP settings" = "docs/PHP-settings.md" },
+    { "Object cache" = "docs/Object-cache.md" },
+    { "Application profiles" = "docs/Application-profiles.md" },
+    { "Security headers" = "docs/Security-headers.md" },
+    { "Real visitor address" = "docs/Real-visitor-address.md" },
+    { "Access protection" = "docs/Access-protection.md" },
+    { "File manager" = "docs/File-manager.md" },
+    { "Reset file permissions" = "docs/Reset-file-permissions.md" },
+    { "Staging and copies" = "docs/Staging-and-copies.md" },
+    { "Site logs" = "docs/Site-logs.md" },
+  ] },
+  { "Databases" = [
+    { "Databases" = "docs/Databases.md" },
+    { "Database limits" = "docs/Database-limits.md" },
+  ] },
+  { "Server" = [
+    { "Users and roles" = "docs/Users-and-roles.md" },
+    { "API tokens" = "docs/API-tokens.md" },
+    { "Backups" = "docs/Backups.md" },
+    { "Firewall" = "docs/Firewall.md" },
+    { "Moving from CloudPanel" = "docs/CloudPanel-import.md" },
+    { "Services and dashboard" = "docs/Services-and-dashboard.md" },
+    { "Site usage" = "docs/Site-usage.md" },
+    { "System settings" = "docs/System-settings.md" },
+    { "Email notifications" = "docs/Email-notifications.md" },
+    { "Audit log" = "docs/Audit-log.md" },
+  ] },
+  { "Reference" = [
+    { "Command line" = "docs/Command-line.md" },
+    { "Ports and files" = "docs/Ports-and-files.md" },
+  ] },
+  { "Troubleshooting" = [
+    { "Recovery" = "docs/Recovery.md" },
+  ] },
+  { "Maintainers" = [
+    { "Releases" = "docs/Releases.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+# No Google Fonts: the fonts come from stylesheets/hostashi.css.
+font = false
+logo = "assets/hostashi-mark.svg"
+favicon = "assets/favicon.svg"
+features = [
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+def_list = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight = {}
+pymdownx.inlinehilite = {}
+pymdownx.superfences = {}
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/maki-it/hostashi"
+name = "Source on GitHub"
