@@ -744,6 +744,9 @@ done
 # shellcheck disable=SC2016 # a dpkg-query format, not a shell expansion
 ! x dpkg-query -W -f='${Status}' clamav-daemon 2>/dev/null | grep 'install ok installed' >/dev/null || fail "clamav-daemon still installed"
 x test ! -e /etc/systemd/system/clamav-clamonacc.service.d/50-hostashi.conf || fail "clamonacc drop-in left"
+for u in clamav-clamonacc.service clamav-daemon.service; do
+  ! x systemctl is-failed --quiet "$u" || fail "$u left in the failed state"
+done
 x rm -rf /etc/systemd/system/clamav-freshclam.service.d
 x systemctl daemon-reload
 

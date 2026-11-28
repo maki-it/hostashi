@@ -233,6 +233,9 @@ do_realtime_off() {
   remove_dropins
   remove_apparmor
   rm -f "$RT_CONF"
+  # A unit killed while stopping stays "failed" after its package is
+  # gone, and monitoring reports it until the state is cleared.
+  systemctl reset-failed "$ONACC" "$CLAMD" clamav-daemon.socket 2>/dev/null
   record_rt off || return 1
   say "done: real-time mode removed"
 }
