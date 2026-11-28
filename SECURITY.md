@@ -13,7 +13,7 @@ Report privately by one of these routes:
 1. GitHub private vulnerability reporting: the **Security** tab of this repository, then **Report a vulnerability**.
 2. Email: `kontakt@maki-it.de`
 
-Please include affected version or commit, steps to reproduce, impact, and any proof of concept. If you want to encrypt your report, ask for a PGP key in a first, content-free mail. <!-- TODO(maintainer): publish PGP key or Signal contact -->
+Please include affected version or commit, steps to reproduce, impact, and any proof of concept. If you want to encrypt your report, ask for a PGP key in a first, content-free mail.
 
 ## What to expect
 

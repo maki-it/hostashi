@@ -127,6 +127,8 @@ So about 90 % of the custom findings fall into fewer than ten recurring patterns
 
 Real findings for Kim from this run: on 21 of 21 sites the private key has mode `0644` **and** its directory lets others in, so every local user, including every site's PHP code, can read every site's TLS key [V from the report, not checked on the server]. The other real findings from the first run still hold.
 
+**Status (2026-11-18):** the maintainer fixed these findings on `web2` the same day (key and directory modes, the include file's owner). They were never a Hostashi issue: Hostashi itself creates site keys as root with mode `0600`.
+
 ## Findings
 
 1. **The real question is still open, and it is cheap to answer.** The scanner is ready to run read-only against real data. One run on `web2` (22 real sites) would answer the abort criterion directly. This needs Kim's explicit go-ahead, because it means running a binary on a production server, even if it only reads [A: Kim's rules, "changing servers" only after approval]. Alternative: a fresh CloudPanel test VM with a few hand-made sites, which checks the layout but not the real mix of hand edits.
