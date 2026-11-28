@@ -43,7 +43,7 @@ Requirements, options and the first login: [Install](https://github.com/maki-it/
 
 ## Documentation
 
-- **Using Hostashi:** the [wiki](https://github.com/maki-it/hostashi/wiki). It is written in [`docs/wiki/`](docs/wiki/) and mirrored after each merge ([ADR-0043](docs/adr/0043-user-documentation.md)).
+- **Using Hostashi:** the [wiki](https://github.com/maki-it/hostashi/wiki). It is written in [`website/docs/docs/`](website/docs/docs/) and mirrored after each merge ([ADR-0043](docs/adr/0043-user-documentation.md)).
 - **How it is built:** the planning documents below and the architecture decision records in [`docs/adr/`](docs/adr/).
 
 | # | Document | Content |

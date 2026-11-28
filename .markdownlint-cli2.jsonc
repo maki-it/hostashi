@@ -1,6 +1,6 @@
 {
   // Lint the planning docs and repository-level Markdown files.
-  "globs": ["*.md", "docs/**/*.md", ".github/**/*.md"],
+  "globs": ["*.md", "docs/**/*.md", ".github/**/*.md", "website/**/*.md"],
   "ignores": ["node_modules/**"],
   "config": {
     "default": true,

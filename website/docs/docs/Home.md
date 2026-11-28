@@ -2,7 +2,7 @@
 
 Hostashi is an open-source control panel for a single Linux server. It runs PHP, Node.js, Python, static, reverse proxy and redirect sites with nginx and Let's Encrypt certificates, manages MariaDB databases (also on external MariaDB, MySQL or PostgreSQL servers), takes backups with restic, and can move sites over from CloudPanel.
 
-> This wiki is generated from [`docs/wiki/`](https://github.com/maki-it/hostashi/tree/main/docs/wiki) in the repository. Changes go through a pull request; edits made here are overwritten.
+> This wiki is generated from [`website/docs/docs/`](https://github.com/maki-it/hostashi/tree/main/website/docs/docs) in the repository. Changes go through a pull request; edits made here are overwritten.
 
 ## Who this is for
 
