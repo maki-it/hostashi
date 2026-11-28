@@ -43,13 +43,13 @@ func TestTLSUploadValidate(t *testing.T) {
 	}
 
 	for name, r := range map[string]TLSUploadRequest{
-		"bad user":   {User: "../x", Chain: "x", Domains: ok.Domains},
-		"no chain":   {User: "blog", Domains: ok.Domains},
-		"big chain":  {User: "blog", Chain: strings.Repeat("x", MaxCertChain+1), Domains: ok.Domains},
-		"big key":    {User: "blog", Chain: "x", Key: strings.Repeat("x", MaxCertKey+1), Domains: ok.Domains},
-		"no domains": {User: "blog", Chain: "x"},
-		"twice":      {User: "blog", Chain: "x", Domains: []string{"a.example.com", "a.example.com"}},
-		"wildcard":   {User: "blog", Chain: "x", Domains: []string{"*.example.com"}},
+		"bad user":    {User: "../x", Chain: "x", Domains: ok.Domains},
+		"no chain":    {User: "blog", Domains: ok.Domains},
+		"big chain":   {User: "blog", Chain: strings.Repeat("x", MaxCertChain+1), Domains: ok.Domains},
+		"big key":     {User: "blog", Chain: "x", Key: strings.Repeat("x", MaxCertKey+1), Domains: ok.Domains},
+		"no domains":  {User: "blog", Chain: "x"},
+		"twice":       {User: "blog", Chain: "x", Domains: []string{"a.example.com", "a.example.com"}},
+		"bad pattern": {User: "blog", Chain: "x", Domains: []string{"*.com"}},
 	} {
 		if r.Validate() == nil {
 			t.Errorf("%s accepted", name)

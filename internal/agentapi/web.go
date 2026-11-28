@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/maki-it/hostashi/internal/agentrpc"
@@ -37,6 +38,34 @@ func ValidateDomain(d string) error {
 	// The last label of a host name is never all digits (rules out IPv4).
 	if strings.Trim(labels[len(labels)-1], "0123456789") == "" {
 		return fmt.Errorf("invalid domain %q: numeric top-level label", d)
+	}
+
+	return nil
+}
+
+// WildcardPrefix starts a wildcard domain pattern (ADR-0075).
+const WildcardPrefix = "*."
+
+// IsWildcard reports whether d is a wildcard pattern ("*.example.com").
+func IsWildcard(d string) bool { return strings.HasPrefix(d, WildcardPrefix) }
+
+// ValidateDomainPattern accepts an exact domain (ValidateDomain) or "*."
+// followed by an exact domain (ADR-0075). The wildcard is the whole first
+// label only: "*", "*.com", "a.*.example.com", "*example.com" and
+// "**.example.com" are refused. nginx matches "*.example.com" against any
+// depth of names below example.com, never example.com itself.
+func ValidateDomainPattern(d string) error {
+	rest, ok := strings.CutPrefix(d, WildcardPrefix)
+	if !ok {
+		return ValidateDomain(d)
+	}
+
+	if len(d) > 253 {
+		return fmt.Errorf("invalid domain %q: length", d)
+	}
+
+	if err := ValidateDomain(rest); err != nil {
+		return fmt.Errorf("invalid wildcard domain %q: use *. and a domain of at least two labels, such as *.example.com", d)
 	}
 
 	return nil
@@ -144,6 +173,32 @@ type WebSite struct {
 	// (Node.js, ADR-0054). The site has an account and files but no PHP
 	// and no static-site options.
 	App *WebApp `json:"app,omitempty"`
+}
+
+// validateSiteDomains checks the names of a site: exact domains, and
+// wildcard patterns only on redirect and reverse proxy sites, never as the
+// primary domain or a redirect domain (ADR-0075).
+func validateSiteDomains(s WebSite) error {
+	for i, d := range s.Domains {
+		if err := ValidateDomainPattern(d); err != nil {
+			return err
+		}
+
+		if !IsWildcard(d) {
+			continue
+		}
+
+		switch {
+		case !s.accountless():
+			return fmt.Errorf("wildcard domain %s: only redirect and reverse proxy sites can have one", d)
+		case i == 0:
+			return fmt.Errorf("wildcard domain %s cannot be the primary domain", d)
+		case slices.Contains(s.RedirectDomains, d):
+			return fmt.Errorf("wildcard domain %s cannot be a redirect domain", d)
+		}
+	}
+
+	return nil
 }
 
 // accountless reports whether the site is a redirect or reverse proxy,
@@ -552,10 +607,11 @@ func (r WebApplyRequest) Validate() error {
 			return fmt.Errorf("site %q: between 1 and %d domains required", s.User, MaxDomainsPerSite)
 		}
 
+		if err := validateSiteDomains(s); err != nil {
+			return fmt.Errorf("site %q: %w", s.User, err)
+		}
+
 		for _, d := range s.Domains {
-			if err := ValidateDomain(d); err != nil {
-				return err
-			}
 
 			if domains[d] {
 				return errors.New("domain " + d + " is used twice")

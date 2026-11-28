@@ -85,3 +85,30 @@ func TestRedirectServed(t *testing.T) {
 		t.Errorf("plain: %d %q", code, body)
 	}
 }
+
+// A wildcard domain goes into server_name as it is (ADR-0075); an exact
+// name of another site gets its own block, which nginx prefers.
+func TestWildcardRender(t *testing.T) {
+	n := &Nginx{Ctl: &testCtl{}, Listen: []string{"80"}, ControlSocket: "/run/x.sock", PIDFile: "/run/x.pid", ErrorLog: "/var/log/x", MimeTypes: "/etc/x"}
+
+	f, err := n.Render(Desired{Sites: []Site{
+		{User: "fwd", Domains: []string{"example.com", "*.example.com"}, Redirect: &agentapi.WebRedirect{Target: "https://www.example.com", Status: 301}},
+		{User: "www", Domains: []string{"www.example.com"}, Root: "/srv/www/htdocs"},
+	}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if fwd := string(f.Content["sites/fwd.conf"]); !strings.Contains(fwd, "server_name example.com *.example.com;") {
+		t.Errorf("fwd.conf:\n%s", fwd)
+	}
+
+	if www := string(f.Content["sites/www.conf"]); !strings.Contains(www, "server_name www.example.com;") {
+		t.Errorf("www.conf:\n%s", www)
+	}
+
+	// Only redirect and reverse proxy sites take a wildcard.
+	if err := (Desired{Sites: []Site{{User: "blog", Domains: []string{"blog.example.com", "*.blog.example.com"}, Root: "/srv/blog/htdocs"}}}).Validate(); err == nil {
+		t.Error("wildcard on a static site accepted")
+	}
+}

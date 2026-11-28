@@ -72,7 +72,7 @@ func (r TLSCSRRequest) Validate() error {
 	seen := map[string]bool{}
 
 	for _, d := range r.Domains {
-		if err := ValidateDomain(d); err != nil {
+		if err := ValidateDomainPattern(d); err != nil {
 			return err
 		}
 

@@ -228,7 +228,10 @@ var rootRe = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 func (d Desired) Validate() error {
 	req := agentapi.WebApplyRequest{Sites: make([]agentapi.WebSite, 0, len(d.Sites))}
 	for _, s := range d.Sites {
-		req.Sites = append(req.Sites, agentapi.WebSite{User: s.User, Domains: s.Domains})
+		req.Sites = append(req.Sites, agentapi.WebSite{
+			User: s.User, Domains: s.Domains, RedirectDomains: s.RedirectDomains,
+			Redirect: s.Redirect, Proxy: s.Proxy,
+		})
 
 		if err := agentapi.ValidateWWWRedirect(s.WWWRedirect); err != nil {
 			return fmt.Errorf("site %q: %w", s.User, err)
