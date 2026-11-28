@@ -38,3 +38,7 @@ Go to **Hosting → Sites → New site**. See [Sites](Sites.md).
 ## 6. Invite others
 
 Under **Administration → Users** you invite more people with the role `admin`, `manager` or `user`. Each gets a link to set their own password. See [Users and roles](Users-and-roles.md).
+
+## 7. Choose your language
+
+The panel speaks English and German. Under **Your account → Appearance → Language**, pick **English**, **Deutsch** or **Follow the browser**. The setting belongs to your account, so it applies in every browser you log in with. The login and setup pages follow the browser. Emails use the same setting; with *Follow the browser* they are in English. See [Email notifications](Email-notifications.md#language).

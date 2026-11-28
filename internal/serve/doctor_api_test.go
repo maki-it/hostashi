@@ -64,7 +64,13 @@ func TestDoctor(t *testing.T) {
 	e.doctor.rep.Checks = append(e.doctor.rep.Checks,
 		doctor.New(agentapi.DoctorWarn, "system.quota", "quota.off", "quota.off.hint", doctor.P{"path": "/srv"}))
 
-	for lang, want := range map[string]string{"": "/srv: no project quota, sites get no disk limit", "en": "/srv: no project quota, sites get no disk limit", "de": "/srv: kein Project Quota, Sites bekommen kein Speicherlimit"} {
+	// German first: a German answer must not change the next English one.
+	for _, tc := range []struct{ lang, want string }{
+		{"de", "/srv: kein Project Quota, Sites bekommen kein Speicherlimit"},
+		{"", "/srv: no project quota, sites get no disk limit"},
+		{"en", "/srv: no project quota, sites get no disk limit"},
+	} {
+		lang, want := tc.lang, tc.want
 		rec = e.do(t, reqOpts{method: "GET", path: "/api/v1/doctor?lang=" + lang, cookie: c})
 
 		var r doctorJSON

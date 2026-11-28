@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/maki-it/hostashi/internal/openapi"
@@ -72,8 +73,10 @@ func registerDoctor(mux *routeMux, a authn, run Doctor, panel PanelChecks, log *
 			rep.Checks = append(rep.Checks, more...)
 		}
 
+		// Copy the checks: the German texts below must not change a report
+		// that its source may hand out again.
 		out := doctorJSON{
-			Status: rep.Worst(), CheckedAt: time.Now().UTC().Truncate(time.Second), Checks: rep.Checks,
+			Status: rep.Worst(), CheckedAt: time.Now().UTC().Truncate(time.Second), Checks: slices.Clone(rep.Checks),
 			Counts: map[string]int{agentapi.DoctorOK: 0, agentapi.DoctorWarn: 0, agentapi.DoctorFail: 0},
 		}
 		if out.Checks == nil {
