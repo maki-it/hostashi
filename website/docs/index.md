@@ -14,7 +14,7 @@ description: Host PHP, Node.js, Python and static sites on your own Debian or Ub
 
 <p class="hs-eyebrow">Open source · AGPL-3.0 · Debian and Ubuntu</p>
 
-# Your server, your sites, one calm panel.
+# Your server, your sites, one calm panel
 
 Hostashi is a hosting control panel for a single Linux server. It runs PHP, Node.js, Python and static sites on nginx, with HTTPS, databases, backups and Git deploy, and it never needs root in the web process.
 
