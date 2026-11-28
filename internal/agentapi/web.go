@@ -612,7 +612,6 @@ func (r WebApplyRequest) Validate() error {
 		}
 
 		for _, d := range s.Domains {
-
 			if domains[d] {
 				return errors.New("domain " + d + " is used twice")
 			}
