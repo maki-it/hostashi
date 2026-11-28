@@ -117,6 +117,13 @@ func (s *Service) ChangeDomains(ctx context.Context, actor int64, name string, r
 		return store.Site{}, nil, err
 	}
 
+	// DNS-01 needs an account for every new name (ADR-0076).
+	if site.TLSChallenge == store.ChallengeDNS {
+		if _, err := s.dnsAccountsFor(ctx, all); err != nil {
+			return store.Site{}, nil, err
+		}
+	}
+
 	// A redirect or proxy must not point to one of the new domains
 	// (ADR-0054).
 	if r := site.Redirect; r != nil && site.Type == store.SiteTypeRedirect {
@@ -349,7 +356,7 @@ func (s *Service) finishDomainChange(ctx context.Context, c store.DomainChange) 
 		return err
 	}
 
-	ictx, cancel := context.WithTimeout(ctx, issueTimeout)
+	ictx, cancel := context.WithTimeout(ctx, issueTimeoutFor(site.TLSChallenge))
 	defer cancel()
 
 	// The key and the chain first; the live certificate is replaced only
@@ -360,7 +367,7 @@ func (s *Service) finishDomainChange(ctx context.Context, c store.DomainChange) 
 		return err
 	}
 
-	chain, err := s.issuer.Obtain(ictx, []byte(csr))
+	chain, err := s.obtainChain(ictx, []byte(csr), c.All(), site.TLSChallenge)
 	if err != nil {
 		return err
 	}

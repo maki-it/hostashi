@@ -5,7 +5,8 @@
 // web process and never sees a site's private key: it signs nothing but the
 // ACME account requests, and turns a CSR from the agent into a certificate
 // chain. HTTP-01 challenges are files in a directory that nginx serves on
-// port 80 for every site.
+// port 80 for every site; DNS-01 challenges (ADR-0076) are TXT records a
+// DNS provider's API publishes.
 package acme
 
 import (
@@ -32,6 +33,7 @@ import (
 
 	"github.com/go-acme/lego/v5/acme"
 	"github.com/go-acme/lego/v5/certificate"
+	"github.com/go-acme/lego/v5/challenge"
 	"github.com/go-acme/lego/v5/lego"
 	legolog "github.com/go-acme/lego/v5/log"
 	"github.com/go-acme/lego/v5/registration"
@@ -172,6 +174,20 @@ func (c *Client) client(ctx context.Context) (*lego.Client, error) {
 // Obtain turns a PEM certificate signing request into a certificate chain
 // (leaf first). The CA validates every name in the CSR over HTTP-01.
 func (c *Client) Obtain(ctx context.Context, csrPEM []byte) ([]byte, error) {
+	return c.obtain(ctx, csrPEM, nil)
+}
+
+// ObtainDNS is Obtain with DNS-01 (ADR-0076): dns publishes the TXT
+// records, and HTTP-01 is not offered for this order.
+func (c *Client) ObtainDNS(ctx context.Context, csrPEM []byte, dns challenge.Provider) ([]byte, error) {
+	if dns == nil {
+		return nil, errors.New("acme: DNS-01 needs a provider")
+	}
+
+	return c.obtain(ctx, csrPEM, dns)
+}
+
+func (c *Client) obtain(ctx context.Context, csrPEM []byte, dns challenge.Provider) ([]byte, error) {
 	blk, _ := pem.Decode(csrPEM)
 	if blk == nil || blk.Type != "CERTIFICATE REQUEST" {
 		return nil, errors.New("acme: not a certificate request")
@@ -189,6 +205,28 @@ func (c *Client) Obtain(ctx context.Context, csrPEM []byte) ([]byte, error) {
 	cl, err := c.client(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// One solver per order: lego picks the first challenge type it has a
+	// solver for, so the other one is removed for the order and the
+	// client goes back to HTTP-01 after it.
+	if dns != nil {
+		cl.Challenge.Remove(challenge.HTTP01)
+
+		if err := cl.Challenge.SetDNS01Provider(dns); err != nil {
+			return nil, fmt.Errorf("acme: %w", err)
+		}
+
+		defer func() {
+			cl.Challenge.Remove(challenge.DNS01)
+
+			// A client that cannot go back is built again on next use.
+			if err := cl.Challenge.SetHTTP01Provider(&files{dir: c.ChallengeDir}); err != nil {
+				slog.Default().ErrorContext(ctx, "acme: restore HTTP-01", "err", err)
+
+				c.lego = nil
+			}
+		}()
 	}
 
 	res, err := cl.Certificate.ObtainForCSR(ctx, certificate.ObtainForCSRRequest{CSR: csr, Bundle: true})

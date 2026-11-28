@@ -210,7 +210,7 @@ func (s *Service) issueParked(ctx context.Context, p store.Parked) error {
 	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
 	defer cancel()
 
-	info, err := s.obtain(ctx, agentapi.ParkName(p.ID), []string{p.Domain})
+	info, err := s.obtain(ctx, agentapi.ParkName(p.ID), []string{p.Domain}, store.ChallengeHTTP)
 	if err != nil {
 		return err
 	}

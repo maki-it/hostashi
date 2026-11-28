@@ -135,10 +135,13 @@ func Validate(id string, creds map[string]string) error {
 // the TXT record to show at the zone's name servers; a provider whose
 // name servers take longer fails the order and the next run retries.
 const (
-	ttl                = 120
-	propagationTimeout = 5 * time.Minute
-	pollingInterval    = 5 * time.Second
-	httpTimeout        = 30 * time.Second
+	ttl         = 120
+	httpTimeout = 30 * time.Second
+
+	// PropagationTimeout and PollingInterval are how long and how often
+	// lego looks for the record at the zone's name servers.
+	PropagationTimeout = 5 * time.Minute
+	PollingInterval    = 5 * time.Second
 )
 
 // New builds lego's DNS-01 provider for id. Each call returns a fresh
@@ -156,14 +159,14 @@ func New(id string, creds map[string]string) (challenge.ProviderTimeout, error) 
 		cfg := cloudflare.NewDefaultConfig()
 		cfg.AuthEmail, cfg.AuthKey, cfg.ZoneToken = "", "", ""
 		cfg.AuthToken = creds["apiToken"]
-		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval, cfg.HTTPClient = ttl, propagationTimeout, pollingInterval, hc
+		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval, cfg.HTTPClient = ttl, PropagationTimeout, PollingInterval, hc
 
 		return cloudflare.NewDNSProviderConfig(cfg)
 	case Hetzner:
 		cfg := hetzner.NewDefaultConfig()
 		// APIToken wins over a legacy key from the environment.
 		cfg.APIToken = creds["apiToken"]
-		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval, cfg.HTTPClient = ttl, propagationTimeout, pollingInterval, hc
+		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval, cfg.HTTPClient = ttl, PropagationTimeout, PollingInterval, hc
 
 		return hetzner.NewDNSProviderConfig(cfg)
 	case INWX:
@@ -171,7 +174,7 @@ func New(id string, creds map[string]string) (challenge.ProviderTimeout, error) 
 		cfg.Sandbox = false
 		cfg.Username, cfg.Password, cfg.SharedSecret = creds["username"], creds["password"], creds["sharedSecret"]
 		// INWX's lowest TTL is 300.
-		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval = 300, propagationTimeout, pollingInterval
+		cfg.TTL, cfg.PropagationTimeout, cfg.PollingInterval = 300, PropagationTimeout, PollingInterval
 
 		return inwx.NewDNSProviderConfig(cfg)
 	default:

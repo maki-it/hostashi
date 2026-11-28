@@ -135,6 +135,9 @@ type tlsJSON struct {
 	// RenewAt is the last "renew now"; RenewPending while it runs.
 	RenewAt      *time.Time `json:"renewAt,omitempty"`
 	RenewPending bool       `json:"renewPending"`
+	// Challenge is how Let's Encrypt checks the domains: "http" or
+	// "dns" (ADR-0076).
+	Challenge string `json:"challenge"`
 }
 
 // panelTLSJSON is the HTTPS state of the panel's own address: whether
@@ -154,6 +157,7 @@ type panelTLSJSON struct {
 	Trusted      bool       `json:"trusted"`
 	RenewAt      *time.Time `json:"renewAt,omitempty"`
 	RenewPending bool       `json:"renewPending"`
+	Challenge    string     `json:"challenge"`
 }
 
 func toPanelTLSJSON(p hosting.PanelTLS) panelTLSJSON {
@@ -161,7 +165,7 @@ func toPanelTLSJSON(p hosting.PanelTLS) panelTLSJSON {
 		Enabled: p.Domain != "", Domain: p.Domain, Active: p.Live, Domains: p.Domains,
 		NotAfter: timeOrNil(p.NotAfter), Error: p.Error, FailedAt: timeOrNil(p.FailedAt),
 		Source: p.WantedSource(), CertSource: p.LiveSource(), Trusted: !p.Untrusted,
-		RenewAt: timeOrNil(p.RenewAt), RenewPending: p.RenewForced,
+		RenewAt: timeOrNil(p.RenewAt), RenewPending: p.RenewForced, Challenge: p.WantedChallenge(),
 	}
 }
 
@@ -358,7 +362,7 @@ func toSiteJSON(svc *hosting.Service, s store.Site) siteJSON {
 			Enabled: s.TLS, Active: svc.TLSActive(s), HSTS: s.HSTS, Domains: td, NotAfter: timeOrNil(s.TLSNotAfter),
 			Error: s.TLSError, FailedAt: timeOrNil(s.TLSFailedAt),
 			Source: s.TLSSource, CertSource: s.TLSCertSource, Trusted: s.TLSTrusted,
-			RenewAt: timeOrNil(s.TLSRenewAt), RenewPending: s.TLSRenewForced,
+			RenewAt: timeOrNil(s.TLSRenewAt), RenewPending: s.TLSRenewForced, Challenge: s.TLSChallenge,
 		},
 		PHPPrograms: s.PHPPrograms,
 		CreatedAt:   s.CreatedAt, UpdatedAt: s.UpdatedAt,
@@ -388,6 +392,12 @@ func siteFail(log *slog.Logger, w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusConflict, "domain_reserved", "this domain is the panel's own address")
 	case errors.Is(err, hosting.ErrNoTLS):
 		writeError(w, http.StatusConflict, "tls_unavailable", "certificates are not available on this panel")
+	case errors.Is(err, hosting.ErrNoDNSAccount):
+		writeError(w, http.StatusUnprocessableEntity, "no_dns_account", err.Error())
+	case errors.Is(err, hosting.ErrDNSAccountInUse):
+		writeError(w, http.StatusConflict, "dns_account_in_use", err.Error())
+	case errors.Is(err, hosting.ErrDNSAccountsOff):
+		writeError(w, http.StatusConflict, "dns_accounts_unavailable", "DNS accounts are not available on this panel")
 	case errors.Is(err, hosting.ErrNoPanel):
 		writeError(w, http.StatusConflict, "panel_address_missing", "the panel has no address of its own")
 	case errors.Is(err, hosting.ErrTooSoon):

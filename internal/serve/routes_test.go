@@ -223,6 +223,8 @@ var routeAccess = map[string]authz.Action{
 	"DELETE /api/v1/db-servers/{server}":                    "db_servers:write",
 	"GET /api/v1/db-servers/postgresql-client":              "db_servers:write",
 	"POST /api/v1/db-servers/postgresql-client":             "db_servers:write",
+	"PUT /api/v1/sites/{name}/tls/challenge":                "sites.tls.challenge:write",
+	"PUT /api/v1/panel/tls/challenge":                       "panel.tls:write",
 	"GET /api/v1/dns-providers":                             "dns_accounts:read",
 	"GET /api/v1/dns-accounts":                              "dns_accounts:read",
 	"POST /api/v1/dns-accounts":                             "dns_accounts:write",

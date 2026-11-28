@@ -1100,6 +1100,15 @@
         ],
         "type": "object"
       },
+      "CertChallengeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "challenge": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CertInfo": {
         "additionalProperties": false,
         "properties": {
@@ -5101,6 +5110,9 @@
           "certSource": {
             "type": "string"
           },
+          "challenge": {
+            "type": "string"
+          },
           "domain": {
             "type": "string"
           },
@@ -5153,6 +5165,7 @@
         "required": [
           "active",
           "certSource",
+          "challenge",
           "domain",
           "domains",
           "enabled",
@@ -8489,6 +8502,9 @@
           "certSource": {
             "type": "string"
           },
+          "challenge": {
+            "type": "string"
+          },
           "domains": {
             "items": {
               "type": "string"
@@ -8541,6 +8557,7 @@
         "required": [
           "active",
           "certSource",
+          "challenge",
           "domains",
           "enabled",
           "hsts",
@@ -15336,6 +15353,59 @@
           }
         ],
         "summary": "Upload an own certificate",
+        "tags": [
+          "panel"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "panel.tls:write"
+      }
+    },
+    "/api/v1/panel/tls/challenge": {
+      "put": {
+        "operationId": "setPanelTLSChallenge",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelTLS"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Choose HTTP-01 or DNS-01 for Let's Encrypt",
         "tags": [
           "panel"
         ],
@@ -24440,6 +24510,69 @@
         ],
         "x-hostashi-access": "action",
         "x-hostashi-action": "sites.tls:write"
+      }
+    },
+    "/api/v1/sites/{name}/tls/challenge": {
+      "put": {
+        "operationId": "setSiteTLSChallenge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "sites:write"
+            ]
+          }
+        ],
+        "summary": "Choose HTTP-01 or DNS-01 for Let's Encrypt",
+        "tags": [
+          "sites"
+        ],
+        "x-hostashi-access": "action",
+        "x-hostashi-action": "sites.tls.challenge:write"
       }
     },
     "/api/v1/sites/{name}/tls/csr": {

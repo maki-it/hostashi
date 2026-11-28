@@ -35,6 +35,20 @@ type PanelTLS struct {
 	Untrusted   bool      `json:"untrusted,omitempty"`
 	RenewAt     time.Time `json:"renewAt,omitzero"`
 	RenewForced bool      `json:"renewForced,omitempty"`
+	// Challenge is store.ChallengeHTTP or store.ChallengeDNS (ADR-0076);
+	// "" is HTTP for states saved before.
+	Challenge string `json:"challenge,omitempty"`
+}
+
+// WantedChallenge is how Let's Encrypt checks the panel address.
+func (p PanelTLS) WantedChallenge() string { return p.challenge() }
+
+func (p PanelTLS) challenge() string {
+	if p.Challenge == "" {
+		return store.ChallengeHTTP
+	}
+
+	return p.Challenge
 }
 
 // WantedSource is where the panel's certificate should come from.
@@ -196,15 +210,17 @@ func (s *Service) renewPanel(ctx context.Context) {
 	}
 
 	// HTTP-01 needs nginx to answer for the panel name on port 80 first.
-	s.mu.Lock()
-	if s.panelServed != s.panelDomain {
-		err = s.applyWeb(ctx)
+	if p.challenge() == store.ChallengeHTTP {
+		s.mu.Lock()
+		if s.panelServed != s.panelDomain {
+			err = s.applyWeb(ctx)
+		}
+		s.mu.Unlock()
 	}
-	s.mu.Unlock()
 
 	var info agentapi.TLSCertInfo
 	if err == nil {
-		info, err = s.obtain(ctx, agentapi.PanelCert, []string{s.panelDomain})
+		info, err = s.obtain(ctx, agentapi.PanelCert, []string{s.panelDomain}, p.challenge())
 	}
 
 	if err == nil {

@@ -18,8 +18,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-acme/lego/v5/challenge"
+
 	"github.com/maki-it/hostashi/internal/agentapi"
 	"github.com/maki-it/hostashi/internal/agentrpc"
+	"github.com/maki-it/hostashi/internal/dnsprov"
 	"github.com/maki-it/hostashi/internal/secrets"
 	"github.com/maki-it/hostashi/internal/store"
 )
@@ -189,6 +192,10 @@ type Service struct {
 	deployAgain   map[string]bool
 	dbs           DBServers // nil: only the local database server (ADR-0041)
 	dns           DNSAPI    // nil: no DNS accounts (ADR-0076)
+	// challengeName and dnsBuild are lookupChallengeName and dnsprov.New
+	// outside tests (DNS-01, ADR-0076).
+	challengeName func(ctx context.Context, domain string) string
+	dnsBuild      func(provider string, creds map[string]string) (challenge.ProviderTimeout, error)
 
 	dbSizer DBSizeAgent // nil: database sizes are not measured (ADR-0015)
 	dbSizes dbSizeCache
@@ -240,7 +247,10 @@ func New(st *store.Store, ag Agent, log *slog.Logger) *Service {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Service{st: st, ag: ag, log: log, now: time.Now, kick: make(chan struct{}, 1)}
+	return &Service{
+		st: st, ag: ag, log: log, now: time.Now, kick: make(chan struct{}, 1),
+		challengeName: lookupChallengeName, dnsBuild: dnsprov.New,
+	}
 }
 
 // ResolveDefaultPool sets how Create finds the default pool (ADR-0016

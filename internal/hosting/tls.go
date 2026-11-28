@@ -27,6 +27,15 @@ const (
 	issueTimeout = 5 * time.Minute
 )
 
+// issueTimeoutFor is issueTimeout, or dnsIssueTimeout for DNS-01.
+func issueTimeoutFor(challengeType string) time.Duration {
+	if challengeType == store.ChallengeDNS {
+		return dnsIssueTimeout
+	}
+
+	return issueTimeout
+}
+
 // certCovers reports whether the live certificate of site names all its
 // domains and is valid for at least margin.
 func (s *Service) certCovers(site store.Site, margin time.Duration) bool {
@@ -262,8 +271,8 @@ func (s *Service) SetDisabled(ctx context.Context, actor int64, name string, on 
 // obtain gets a certificate for a site or agentapi.PanelCert: a key and
 // CSR from the agent, the chain from the CA, the pair live through the
 // agent. The web server switch is the caller's.
-func (s *Service) obtain(ctx context.Context, name string, domains []string) (agentapi.TLSCertInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
+func (s *Service) obtain(ctx context.Context, name string, domains []string, challengeType string) (agentapi.TLSCertInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, issueTimeoutFor(challengeType))
 	defer cancel()
 
 	csr, err := s.ag.TLSCSR(ctx, name, domains)
@@ -271,7 +280,7 @@ func (s *Service) obtain(ctx context.Context, name string, domains []string) (ag
 		return agentapi.TLSCertInfo{}, err
 	}
 
-	chain, err := s.issuer.Obtain(ctx, []byte(csr))
+	chain, err := s.obtainChain(ctx, []byte(csr), domains, challengeType)
 	if err != nil {
 		return agentapi.TLSCertInfo{}, err
 	}
@@ -340,10 +349,10 @@ func (s *Service) RenewDue(ctx context.Context) {
 // issue gets one certificate: a key and CSR from the agent, the chain from
 // the CA, the pair live through the agent, then HTTPS for the site.
 func (s *Service) issue(ctx context.Context, site store.Site) error {
-	ctx, cancel := context.WithTimeout(ctx, issueTimeout)
+	ctx, cancel := context.WithTimeout(ctx, issueTimeoutFor(site.TLSChallenge))
 	defer cancel()
 
-	info, err := s.obtain(ctx, site.Name, site.AllDomains())
+	info, err := s.obtain(ctx, site.Name, site.AllDomains(), site.TLSChallenge)
 	if err != nil {
 		return err
 	}
