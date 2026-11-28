@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,21 +74,39 @@ func validDNSLabel(l string) error {
 	return nil
 }
 
+// zoneLabelRe is one label of a zone: letters, digits, inner hyphens and
+// underscores, since a delegated zone such as _acme-challenge.example.com
+// has one.
+var zoneLabelRe = regexp.MustCompile(`^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$`)
+
 // normalizeZones lower-cases the zones, drops a trailing dot and checks
-// them as host names.
+// them: at least two labels, no wildcard, no duplicate.
 func normalizeZones(in []string) ([]string, error) {
 	if len(in) == 0 || len(in) > MaxDNSZones {
 		return nil, fmt.Errorf("%w: between 1 and %d zones required", ErrInvalid, MaxDNSZones)
 	}
 
-	trimmed := make([]string, len(in))
-	for i, z := range in {
-		trimmed[i] = strings.TrimSuffix(strings.TrimSpace(z), ".")
-	}
+	out := make([]string, 0, len(in))
 
-	out, err := NormalizeDomains(trimmed)
-	if err != nil {
-		return nil, fmt.Errorf("%w: zones: %w", ErrInvalid, errors.Unwrap(err))
+	for _, z := range in {
+		z = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(z), "."))
+
+		labels := strings.Split(z, ".")
+		if len(z) > 253 || len(labels) < 2 {
+			return nil, fmt.Errorf("%w: zone %q needs at least two labels", ErrInvalid, z)
+		}
+
+		for _, l := range labels {
+			if !zoneLabelRe.MatchString(l) {
+				return nil, fmt.Errorf("%w: invalid zone %q", ErrInvalid, z)
+			}
+		}
+
+		if slices.Contains(out, z) {
+			return nil, fmt.Errorf("%w: zone %s is listed twice", ErrInvalid, z)
+		}
+
+		out = append(out, z)
 	}
 
 	return out, nil
@@ -253,6 +273,29 @@ func (s *Service) UpdateDNSAccount(ctx context.Context, actor, id int64, req New
 		return DNSAccountView{}, err
 	}
 
+	// A zone that a DNS-01 site still needs stays. The lock keeps a
+	// site from switching to DNS-01 meanwhile.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	losers, err := s.dnsLosers(ctx, func(all []store.DNSAccount) []store.DNSAccount {
+		out := slices.Clone(all)
+		for i := range out {
+			if out[i].ID == id {
+				out[i].Zones = zones
+			}
+		}
+
+		return out
+	})
+	if err != nil {
+		return DNSAccountView{}, err
+	}
+
+	if len(losers) > 0 {
+		return DNSAccountView{}, dnsInUse(losers)
+	}
+
 	u := store.DNSAccountUpdate{Label: req.Label, Zones: zones}
 
 	if req.Credentials != nil {
@@ -295,9 +338,23 @@ func (s *Service) UpdateDNSAccount(ctx context.Context, actor, id int64, req New
 
 // DeleteDNSAccount removes an account.
 func (s *Service) DeleteDNSAccount(ctx context.Context, actor, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	a, err := s.dnsAccount(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	losers, err := s.dnsLosers(ctx, func(all []store.DNSAccount) []store.DNSAccount {
+		return slices.DeleteFunc(slices.Clone(all), func(x store.DNSAccount) bool { return x.ID == id })
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(losers) > 0 {
+		return dnsInUse(losers)
 	}
 
 	if err := s.st.DeleteDNSAccount(ctx, id); err != nil {

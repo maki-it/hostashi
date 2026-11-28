@@ -115,3 +115,52 @@ func TestDNSAccountsOverHTTP(t *testing.T) {
 		t.Fatalf("after delete: %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestTLSChallengeOverHTTP(t *testing.T) {
+	e := newAPIWithAgent(t, &stubAgent{})
+
+	box, err := secrets.New(bytes.Repeat([]byte{3}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.sites.EnableDNSAccounts(&stubDNS{DNSProviders: hosting.DNSProviders{Box: box}})
+	e.sites.EnableTLS(stubIssuer{})
+	c := e.adminCookie(t)
+	manager, _ := matrixLogin(t, e, c, "mona", "manager")
+
+	if rec := e.do(t, reqOpts{method: "POST", path: "/api/v1/sites", cookie: c, body: `{"name":"blog","domains":["blog.example.com"]}`}); rec.Code != http.StatusCreated {
+		t.Fatalf("create site: %d %s", rec.Code, rec.Body)
+	}
+
+	path := "/api/v1/sites/blog/tls/challenge"
+
+	// DNS-01 uses the admins' accounts: a manager may not choose it.
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: manager, body: `{"challenge":"dns"}`}); rec.Code != http.StatusForbidden {
+		t.Fatalf("manager: %d %s", rec.Code, rec.Body)
+	}
+
+	// The HTTP-only stub issuer cannot use DNS-01.
+	rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{"challenge":"dns"}`})
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "tls_unavailable") {
+		t.Fatalf("http-only issuer: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{"challenge":"tls-alpn"}`}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown type: %d %s", rec.Code, rec.Body)
+	}
+
+	rec = e.do(t, reqOpts{method: "PUT", path: path, cookie: c, body: `{"challenge":"http"}`})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"challenge":"http"`) {
+		t.Fatalf("http: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/nope/tls/challenge", cookie: c, body: `{"challenge":"http"}`}); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing site: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.do(t, reqOpts{method: "PUT", path: "/api/v1/panel/tls/challenge", cookie: c, body: `{"challenge":"dns"}`}); rec.Code != http.StatusConflict ||
+		!strings.Contains(rec.Body.String(), "panel_address_missing") {
+		t.Fatalf("panel without address: %d %s", rec.Code, rec.Body)
+	}
+}

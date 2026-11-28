@@ -184,6 +184,9 @@ var table = map[Action]Rule{
 
 	// nginx runs for every site, so snippets stay with admins (ADR-0029).
 	"sites.snippets:write": admSite("sites.snippets:write"),
+	// DNS-01 gets certificates through the admins' DNS accounts, also for
+	// names that do not point to this server (ADR-0076).
+	"sites.tls.challenge:write": admSite("sites:write"),
 	// Own proxy ranges also go into fail2ban's server-wide never-ban list
 	// (ADR-0059); the real IP handler asks for this when a change adds one.
 	"sites.realip.ranges:write": admSite("sites:write"),

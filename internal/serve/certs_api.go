@@ -62,8 +62,12 @@ type certTarget struct {
 	csr     func(ctx context.Context, r *http.Request, actor int64) (string, error)
 	source  func(ctx context.Context, r *http.Request, actor int64, source string) (any, error)
 	renew   func(ctx context.Context, r *http.Request, actor int64) (any, error)
-	del     func(ctx context.Context, r *http.Request, actor int64) (any, error)
-	fail    func(log *slog.Logger, w http.ResponseWriter, err error, what string)
+	// challenge chooses HTTP-01 or DNS-01 (ADR-0076); nil for none.
+	challenge func(ctx context.Context, r *http.Request, actor int64, challenge string) (any, error)
+	// challengeAction may choose; DNS-01 uses the admins' DNS accounts.
+	challengeAction authz.Action
+	del             func(ctx context.Context, r *http.Request, actor int64) (any, error)
+	fail            func(log *slog.Logger, w http.ResponseWriter, err error, what string)
 	// tag, noun and out name the routes in the API document: noun goes
 	// into the operation ids (e.g. "Site" -> getSiteCertificate), out is
 	// a value of the JSON the change routes answer with.
@@ -84,6 +88,12 @@ type certUploadRequest struct {
 
 type certSourceRequest struct {
 	Source string `json:"source"`
+}
+
+type certChallengeRequest struct {
+	// Challenge is "http" (HTTP-01 on port 80) or "dns" (DNS-01 with a
+	// DNS account for every domain).
+	Challenge string `json:"challenge"`
 }
 
 // op is the operation record of a certificate route.
@@ -193,6 +203,28 @@ func registerCertRoutes(mux *routeMux, a authn, prefix string, readAction, write
 		writeJSON(w, http.StatusOK, out)
 	}))
 
+	if t.challenge != nil {
+		mux.Op("PUT "+prefix+"/challenge", t.op("set", "TLSChallenge", "Choose HTTP-01 or DNS-01 for Let's Encrypt", certChallengeRequest{}, t.out), a.allow(t.challengeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+			var in certChallengeRequest
+			if !decodeJSON(w, r, &in) {
+				return
+			}
+
+			// The check looks up a CNAME for each domain.
+			ctx, cancel := context.WithTimeout(r.Context(), agentTimeout)
+			defer cancel()
+
+			out, err := t.challenge(ctx, r, p.User.ID, in.Challenge)
+			if err != nil {
+				t.fail(log, w, err, "set certificate challenge")
+
+				return
+			}
+
+			writeJSON(w, http.StatusOK, out)
+		}))
+	}
+
 	// Asks for a new Let's Encrypt certificate now; it comes in the
 	// background like the first one.
 	mux.Op("POST "+prefix+"/renew", t.op("renew", "Certificate", "Ask for a new Let's Encrypt certificate now", nil, t.out), a.allow(writeAction, func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
@@ -235,6 +267,10 @@ func registerCerts(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		renew: func(ctx context.Context, r *http.Request, actor int64) (any, error) {
 			return siteOut(svc.RenewNow(ctx, actor, site(r)))
 		},
+		challenge: func(ctx context.Context, r *http.Request, actor int64, c string) (any, error) {
+			return siteOut(svc.SetTLSChallenge(ctx, actor, site(r), c))
+		},
+		challengeAction: "sites.tls.challenge:write",
 		del: func(ctx context.Context, r *http.Request, actor int64) (any, error) {
 			return siteOut(svc.DeleteCert(ctx, actor, site(r)))
 		},
@@ -298,6 +334,10 @@ func registerCerts(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		renew: func(ctx context.Context, _ *http.Request, actor int64) (any, error) {
 			return panelOut(svc.RenewPanelNow(ctx, actor))
 		},
-		fail: siteFail, tag: "panel", noun: "Panel", out: panelTLSJSON{},
+		challenge: func(ctx context.Context, _ *http.Request, actor int64, c string) (any, error) {
+			return panelOut(svc.SetPanelTLSChallenge(ctx, actor, c))
+		},
+		challengeAction: "panel.tls:write",
+		fail:            siteFail, tag: "panel", noun: "Panel", out: panelTLSJSON{},
 	}, log)
 }

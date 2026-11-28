@@ -107,14 +107,23 @@ type Site struct {
 	// loop for a new certificate regardless of the expiry.
 	TLSRenewAt     time.Time
 	TLSRenewForced bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// TLSChallenge is how Let's Encrypt checks the domains: ChallengeHTTP
+	// or ChallengeDNS (ADR-0076).
+	TLSChallenge string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // Certificate sources of a site (ADR-0039).
 const (
 	TLSLetsEncrypt = "letsencrypt"
 	TLSCustom      = "custom"
+)
+
+// Challenge types of Let's Encrypt certificates (ADR-0076).
+const (
+	ChallengeHTTP = "http"
+	ChallengeDNS  = "dns"
 )
 
 // Site types (ADR-0054). Until the other types arrive, a site is static or
@@ -702,7 +711,7 @@ func (s *Store) SiteByName(ctx context.Context, name string) (Site, error) {
 type scanner interface{ Scan(dest ...any) error }
 
 const siteColumns = `id, name, pool, state, type, php, web_dir, spa, asset_cache, asset_cache_seconds, asset_cache_exts, tls, hsts, www_redirect, php_programs, disabled, tls_live, tls_domains, tls_not_after, tls_error, tls_failed_at,
-	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced,
+	maintenance, coalesce(maintenance_page, 0), maintenance_allow, coalesce(disabled_page, 0), tls_source, tls_cert_source, tls_trusted, tls_renew_at, tls_renew_forced, tls_challenge,
 	account, redirect_target, redirect_status, redirect_keep_path, proxy_target, proxy_target_host, proxy_insecure,
 	node_version, python_version, app_workdir, app_start_kind, app_start, app_args, coalesce(app_port, 0), app_stopped, title, created_at, updated_at`
 
@@ -727,7 +736,7 @@ func scanSite(r scanner) (Site, error) {
 	)
 
 	err := r.Scan(&st.ID, &st.Name, &st.Pool, &st.State, &st.Type, &st.PHP, &st.WebDir, &spa, &assets, &st.AssetCacheSeconds, &exts, &tls, &hsts, &st.WWWRedirect, &progs, &disabled, &live, &tlsDomains, &notAfter, &st.TLSError, &failed,
-		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced,
+		&maint, &st.MaintenancePage, &allow, &st.DisabledPage, &st.TLSSource, &st.TLSCertSource, &trusted, &renewAt, &forced, &st.TLSChallenge,
 		&account, &redirect.Target, &redirect.Status, &keepPath, &proxy.Target, &proxyHost, &insecure,
 		&app.Node, &app.Python, &app.Workdir, &app.StartKind, &app.Start, &args, &app.Port, &appStopped, &st.Title, &cre, &upd)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1091,6 +1100,42 @@ func (s *Store) SetSiteTLSSource(ctx context.Context, name, source string, now t
 
 	if _, err := tx.ExecContext(ctx, `UPDATE sites SET tls_source = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
 		source, now.Unix(), name); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	return old, nil
+}
+
+// SetSiteTLSChallenge sets how Let's Encrypt checks the domains of a site
+// and returns the previous type. The last error goes: it was about the
+// other type.
+func (s *Store) SetSiteTLSChallenge(ctx context.Context, name, challenge string, now time.Time) (string, error) {
+	if challenge != ChallengeHTTP && challenge != ChallengeDNS {
+		return "", fmt.Errorf("store: unknown challenge type %q", challenge)
+	}
+
+	tx, err := s.w.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx, `SELECT tls_challenge FROM sites WHERE name = ?`, name).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+
+		return "", fmt.Errorf("store: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sites SET tls_challenge = ?, tls_error = '', tls_failed_at = 0, updated_at = ? WHERE name = ?`,
+		challenge, now.Unix(), name); err != nil {
 		return "", fmt.Errorf("store: %w", err)
 	}
 

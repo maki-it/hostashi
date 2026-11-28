@@ -408,7 +408,7 @@ func TestSiteTLSOverHTTP(t *testing.T) {
 	}
 
 	rec = e.do(t, reqOpts{method: "PUT", path: "/api/v1/sites/blog/tls", cookie: c, body: `{"enabled":true}`})
-	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`) {
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"tls":{"enabled":true,"active":false,"hsts":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false,"challenge":"http"}`) {
 		t.Fatalf("tls on: %d %s", rec.Code, rec.Body)
 	}
 
@@ -534,7 +534,7 @@ func TestPanelTLSOverHTTP(t *testing.T) {
 	c := e.adminCookie(t)
 
 	rec := e.do(t, reqOpts{method: "GET", path: "/api/v1/panel/tls", cookie: c})
-	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false}`+"\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"enabled":false,"domain":"","active":false,"domains":[],"notAfter":null,"source":"letsencrypt","certSource":"","trusted":true,"renewPending":false,"challenge":"http"}`+"\n" {
 		t.Fatalf("without a panel name: %d %s", rec.Code, rec.Body)
 	}
 
