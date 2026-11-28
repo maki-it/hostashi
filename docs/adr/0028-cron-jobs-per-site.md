@@ -1,6 +1,6 @@
 # ADR-0028 Cron jobs per site
 
-**Status:** Accepted (2026-11-19, by Kim: option A); Addendum 1 Accepted (Kim, 2026-11-27). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
+**Status:** Accepted (2026-11-19, by Kim: option A); Addendum 1 Accepted (Kim, 2026-11-27); Addendum 2 Accepted (Kim, 2026-11-28). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
@@ -107,3 +107,38 @@ No database change: nothing is stored by the panel.
 - Who may see a job may see its output. A job that prints secrets shows them there; the same people can already read the command and the site's files [A].
 - Output is available as long as journald keeps it. With volatile storage it is gone after a reboot; Debian 13 and Ubuntu 26.04 keep the journal on disk by default [A].
 - journald rate limiting (by default 10,000 messages in 30 s per service) can drop lines of a very chatty job [U: journald.conf defaults].
+
+## Addendum 2: history of the last runs
+
+**Status:** Accepted (Kim, 2026-11-28). **Decides:** Kim.
+
+### Context
+
+- The panel shows the output of the last run only (Addendum 1). Kim asked for more runs and chose the last 10 (decision card in the thread, 2026-11-28).
+- systemd logs every run of a service to the journal with structured fields: "Starting" (`MESSAGE_ID=7d4958e842da4a758f6c1cdc7b36dcc5`), the main process's exit (`MESSAGE_ID=98e322203f7a4ed290d09fe03c09fe15`, `EXIT_CODE`, `EXIT_STATUS`), and the end of the job (`JOB_RESULT=done|failed|timeout|…`), each with `UNIT=<unit>` and `INVOCATION_ID=<id>` [V: Debian 13, systemd 257, container check 2026-11-28].
+- These entries are written by PID 1. A job could write entries with the same user fields itself (`logger`, `systemd-cat`, the native journal socket); only the trusted fields `_PID=1` and `_UID=0` tell them apart [V: journald trusted fields, `systemd.journal-fields(7)`].
+- A run's output lines carry `_SYSTEMD_INVOCATION_ID`, except lines whose process had exited before journald read it (Addendum 1, correction of 2026-11-28).
+
+### Proposal
+
+1. Agent operation `cron.runs` (`site`, `id`): the last 10 runs, newest first, each with invocation id, start, end, result (`success`, `failed`, `timeout`, `running`) and exit status. Read with the existing `journalctl` exception, new fixed argument set: `--no-pager --quiet --output=json --output-fields=INVOCATION_ID,MESSAGE_ID,JOB_RESULT,EXIT_CODE,EXIT_STATUS --lines=80 _PID=1 _UID=0 UNIT=<unit>`. Not limited to the current boot: a daily job's history spans reboots.
+2. `cron.output` gets an optional `invocation` (32 lowercase hex digits; empty means the last run, as today). The agent first finds that run with the query from 1, then reads `--since=@<start> --until=@<next start or now>` (Unix time with microseconds, formatted by the agent) with `_SYSTEMD_UNIT=<unit>` and keeps lines with the run's id or without an id, as in the correction to Addendum 1. An id that is not among the last 10 runs is refused.
+3. API: `GET /api/v1/sites/{name}/cron/{id}/runs` (scope `cron:read`) and `GET …/output?run=<invocation>`. Not in the audit log, like `…/output`.
+4. UI: the output panel gets a list of the last runs (time, duration, result); choosing one shows its output. The last run stays the default.
+5. The 200-line, 2 KiB and 64 KiB limits of Addendum 1 apply per run.
+
+No database change.
+
+### Options considered
+
+| Option | Pro | Contra |
+|---|---|---|
+| **A. History from the journal, last 10 runs (recommended)** | No new storage, no migration; journald caps size; same exec exception | Only as far back as the journal keeps entries; a clock jump between runs can move id-less lines to the wrong run [A, rare] |
+| B. Store each run's result and output in the panel's SQLite | Independent of journal retention | Output (possibly secrets) duplicated into the panel database; needs a migration, cleanup and size limits |
+| C. Last run only (today) | Nothing to do | Kim wants more |
+
+### Consequences
+
+- The journalctl exception gets a second fixed argument set and `--since`/`--until` with numbers the agent formats itself; no user input reaches the arguments except the checked unit name and invocation id.
+- Matching `_PID=1 _UID=0` keeps a job from faking runs in the list.
+- With volatile journal storage the list starts empty after a reboot (see Addendum 1).
