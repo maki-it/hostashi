@@ -683,8 +683,12 @@ func TestScanWaitingForOther(t *testing.T) {
 }
 
 func TestWaitsForOther(t *testing.T) {
-	q := func(id, site int64) store.ScanRun { return store.ScanRun{ID: id, SiteID: site, State: store.ScanQueued} }
-	r := func(id, site int64) store.ScanRun { return store.ScanRun{ID: id, SiteID: site, State: store.ScanRunning} }
+	q := func(id, site int64) store.ScanRun {
+		return store.ScanRun{ID: id, SiteID: site, State: store.ScanQueued}
+	}
+	r := func(id, site int64) store.ScanRun {
+		return store.ScanRun{ID: id, SiteID: site, State: store.ScanRunning}
+	}
 
 	cases := []struct {
 		name   string
