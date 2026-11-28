@@ -144,7 +144,7 @@ func checkDomains(domains []string) error {
 	}
 
 	for _, d := range domains {
-		if err := agentapi.ValidateDomain(d); err != nil {
+		if err := agentapi.ValidateDomainPattern(d); err != nil {
 			return fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
