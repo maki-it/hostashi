@@ -5,6 +5,7 @@ package cronjobs
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,6 +25,8 @@ type fakeCtl struct {
 	// journal holds the lines per "unit invocation".
 	journal map[string][]string
 	cut     bool
+	// start is what the last Journal call got as the run's start.
+	start uint64
 }
 
 func (f *fakeCtl) DaemonReload(context.Context) error {
@@ -53,8 +56,9 @@ func (f *fakeCtl) Show(_ context.Context, u string, _ ...string) (map[string]str
 	return f.props[u], nil
 }
 
-func (f *fakeCtl) Journal(_ context.Context, u, inv string) ([]string, bool, error) {
+func (f *fakeCtl) Journal(_ context.Context, u, inv string, start uint64) ([]string, bool, error) {
 	f.calls = append(f.calls, "journal "+u+" "+inv)
+	f.start = start
 
 	return f.journal[u+" "+inv], f.cut, nil
 }
@@ -364,7 +368,7 @@ func TestOutput(t *testing.T) {
 	must(t, m.Apply(t.Context(), shop, []agentapi.CronJob{{ID: 1, Schedule: "@hourly", Command: "x"}, {ID: 2, Schedule: "@daily", Command: "y"}}))
 
 	inv := "0123456789abcdef0123456789abcdef"
-	ctl.props = map[string]map[string]string{"hostashi-cron-shop-1.service": {"InvocationID": inv}}
+	ctl.props = map[string]map[string]string{"hostashi-cron-shop-1.service": {"InvocationID": inv, "ExecMainStartTimestampMonotonic": "133924909"}}
 	ctl.journal = map[string][]string{"hostashi-cron-shop-1.service " + inv: {"Hi!", "Fri Nov 27 15:35:00 CET 2026"}}
 
 	out, err := m.Output(t.Context(), "shop", 1)
@@ -372,6 +376,20 @@ func TestOutput(t *testing.T) {
 
 	if !out.Ran || out.Truncated || !slices.Equal(out.Lines, []string{"Hi!", "Fri Nov 27 15:35:00 CET 2026"}) {
 		t.Errorf("%+v", out)
+	}
+
+	if ctl.start != 133924909 {
+		t.Errorf("start passed to Journal: %d", ctl.start)
+	}
+
+	// Without a start time only lines with the invocation id may count.
+	ctl.props["hostashi-cron-shop-1.service"]["ExecMainStartTimestampMonotonic"] = ""
+
+	_, err = m.Output(t.Context(), "shop", 1)
+	must(t, err)
+
+	if ctl.start != math.MaxUint64 {
+		t.Errorf("start without property: %d", ctl.start)
 	}
 
 	// Job 2 has no invocation: it has not run.

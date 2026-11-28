@@ -1601,6 +1601,27 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 x grep -q "\"ran\":true,\"lines\":\[\"cron-stdout\",\"cron-stderr\"\]" /tmp/api.out || fail "cron job output: $(x cat /tmp/api.out)"
+# journald stores a line without _SYSTEMD_INVOCATION_ID when the process
+# that wrote it has exited before journald looks it up (a short command
+# such as date). Such lines still belong to the run. Holding journald back
+# until the job is done makes every line of the run one of them.
+[ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"echo cron-late; date -u +cron-date-%Y"}')" = 200 ] || fail "change cron job: $(x cat /tmp/api.out)"
+cinv=$(x systemctl show -P InvocationID "$cunit.service")
+jpid=$(x pidof systemd-journald)
+[ -n "$jpid" ] || fail "no systemd-journald"
+x kill -STOP "$jpid"
+crun=$(api POST "/api/v1/sites/wp/cron/$cid/run")
+for _ in $(seq 1 30); do
+  [ "$(x systemctl show -P InvocationID "$cunit.service")" != "$cinv" ] && ! x systemctl is-active --quiet "$cunit.service" && break
+  sleep 1
+done
+x kill -CONT "$jpid"
+[ "$crun" = 202 ] || fail "run cron job a third time: $(x cat /tmp/api.out)"
+for _ in $(seq 1 30); do
+  [ "$(api GET "/api/v1/sites/wp/cron/$cid/output")" = 200 ] && x grep -q cron-date- /tmp/api.out && break
+  sleep 1
+done
+x grep -q "\"ran\":true,\"lines\":\[\"cron-late\",\"cron-date-[0-9]\{4\}\"\]" /tmp/api.out || fail "cron job output without invocation ids: $(x cat /tmp/api.out)"
 # Pause, then a disabled site keeps the timer stopped until it is enabled.
 [ "$(api PUT "/api/v1/sites/wp/cron/$cid" '{"schedule":"*/5 * * * *","command":"true","paused":true}')" = 200 ] || fail "pause: $(x cat /tmp/api.out)"
 ! x systemctl is-active --quiet "$cunit.timer" || fail "paused cron timer still running"
