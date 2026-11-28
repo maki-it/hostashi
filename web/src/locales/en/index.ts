@@ -10,6 +10,7 @@ import certificate from "./certificate.json";
 import common from "./common.json";
 import cron from "./cron.json";
 import databases from "./databases.json";
+import dnsAccounts from "./dnsAccounts.json";
 import errors from "./errors.json";
 import files from "./files.json";
 import git from "./git.json";
@@ -38,7 +39,7 @@ import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 
-const en = { account, audit, auth, backups, certificate, common, cron, databases, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, server, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
+const en = { account, audit, auth, backups, certificate, common, cron, databases, dnsAccounts, errors, files, git, hardening, limits, logs, mail, malware, migrate, overview, pages, parked, permissions, profiles, realIp, server, shell, siteAccess, siteApp, siteDomains, siteHeaders, sites, ssh, tokens, ui, usage, users };
 
 export type Catalog = typeof en;
 

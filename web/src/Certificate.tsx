@@ -2,7 +2,7 @@
 
 import { ArrowClockwise, Copy, DownloadSimple, FileText, Trash, UploadSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import {
   certInfo,
   panelCertBase,
@@ -13,13 +13,16 @@ import {
   deleteCert,
   fingerprintText,
   renewCert,
+  setCertChallenge,
   setCertSource,
   uploadCert,
+  type CertChallenge,
   uploadProblem,
   type CertInfo,
   type CertState,
   type CertUpload,
 } from "./certs";
+import { formatHash } from "./routes";
 import { siteMessage } from "./sites";
 import { Badge, Button, Card, CopyValue, Field, IconButton, Notice } from "./ui";
 
@@ -34,6 +37,11 @@ type Props = {
   /** Says how HTTPS is turned off before a delete. */
   offHint?: string;
   title?: string;
+  /**
+   * Shows the choice of HTTP-01 or DNS-01 (ADR-0076); editable for
+   * admins. Left out for parked domains, which use HTTP only.
+   */
+  challenge?: { editable: boolean };
   onChange: () => Promise<void>;
 };
 type Mode = "" | "upload" | "csr" | "delete";
@@ -47,7 +55,7 @@ const emptyUpload: CertUpload = { certificate: "", chain: "", key: "", allowUntr
 // CertificateCard shows the live certificate of a site, a parked domain or
 // the panel and its actions (ADR-0039): renew now, upload an own
 // certificate, create a CSR, delete.
-export function CertificateCard({ base, name, tls, deletable = true, offHint, title, onChange }: Props) {
+export function CertificateCard({ base, name, tls, deletable = true, offHint, title, challenge, onChange }: Props) {
   const { t } = useTranslation();
   const [info, setInfo] = useState<CertInfo | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -156,6 +164,21 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint, ti
           </label>
         </fieldset>
 
+        {challenge && !own && (
+          <ChallengeChoice
+            name={name}
+            value={tls.challenge ?? "http"}
+            editable={challenge.editable}
+            busy={busy}
+            onChoose={(c) =>
+              void act(async () => {
+                await setCertChallenge(base, c);
+                return t(`dnsAccounts.challenge.done.${c}`);
+              })
+            }
+          />
+        )}
+
         {loadError && <Notice tone="err" title={loadError} />}
         {info && !cert && <p className="ui-hint">{t("certificate.none")}</p>}
         {cert && <CertFacts own={tls.certSource === "custom"} cert={cert} />}
@@ -209,6 +232,30 @@ export function CertificateCard({ base, name, tls, deletable = true, offHint, ti
         {done && <Notice tone="ok" title={done} />}
       </div>
     </Card>
+  );
+}
+
+// ChallengeChoice is how Let's Encrypt checks the domains: a file on port
+// 80, or a TXT record through a DNS account (ADR-0076).
+function ChallengeChoice({ name, value, editable, busy, onChoose }: { name: string; value: CertChallenge; editable: boolean; busy: boolean; onChoose: (c: CertChallenge) => void }) {
+  const { t } = useTranslation();
+  return (
+    <fieldset className="ui-fieldset ui-stack-tight">
+      <legend>{t("dnsAccounts.challenge.legend")}</legend>
+      {(["http", "dns"] as const).map((c) => (
+        <label key={c} className="ui-check">
+          <input type="radio" name={name + "-cert-challenge"} value={c} checked={value === c} disabled={busy || !editable} onChange={() => onChoose(c)} />
+          {t(`dnsAccounts.challenge.${c}`)}
+        </label>
+      ))}
+      <p className="ui-hint">
+        {editable ? (
+          <Trans i18nKey="dnsAccounts.challenge.noAccounts" components={{ a: <a href={formatHash({ page: "dns", query: new URLSearchParams() })} /> }} />
+        ) : (
+          t("dnsAccounts.challenge.adminOnly")
+        )}
+      </p>
+    </fieldset>
   );
 }
 
@@ -386,6 +433,7 @@ export function PanelCertificate() {
       title={t("certificate.panelTitle", { domain: tls.domain })}
       tls={{ ...tls, enabled: true }}
       deletable={false}
+      challenge={{ editable: true }}
       onChange={load}
     />
   );

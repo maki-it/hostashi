@@ -3,6 +3,7 @@
 import {
   ArrowSquareIn,
   Browser,
+  Certificate,
   ClockCounterClockwise,
   ListMagnifyingGlass,
   Code,
@@ -79,6 +80,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { page: "users", icon: UsersThree, roles: admin },
       { page: "mail", icon: EnvelopeSimple, roles: admin },
+      { page: "dns", icon: Certificate, roles: admin },
       { page: "import", icon: ArrowSquareIn, roles: admin },
       { page: "audit", icon: ListMagnifyingGlass, roles: admin },
     ],

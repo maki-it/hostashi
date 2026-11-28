@@ -1,0 +1,93 @@
+{
+  "title": "DNS-Konten",
+  "description": "Zugänge bei DNS-Anbietern für Let's Encrypt über DNS-01: Zertifikate ohne Port 80, bevor das DNS hierher zeigt, und später für Wildcard-Namen.",
+  "add": "DNS-Konto hinzufügen",
+  "allAccounts": "Alle DNS-Konten",
+  "loading": "DNS-Konten werden geladen …",
+  "empty": "Noch keine DNS-Konten.",
+  "columns": {
+    "account": "Konto",
+    "provider": "Anbieter",
+    "zones": "Zonen",
+    "state": "Zugriff",
+    "actions": "Aktionen"
+  },
+  "states": {
+    "ok": "Darf schreiben",
+    "error": "Fehlgeschlagen",
+    "unchecked": "Nicht geprüft"
+  },
+  "checked": "geprüft <time></time>",
+  "check": "Prüfen",
+  "checkLabel": "Zugriff von {{label}} prüfen",
+  "checkOk": "{{label}} darf seine Zonen schreiben.",
+  "checkFailed": "{{label}} darf seine Zonen nicht schreiben: {{reason}}",
+  "editLabel": "{{label}} bearbeiten",
+  "remove": "Entfernen",
+  "removeLabel": "{{label}} entfernen",
+  "removeTitle": "{{label}} entfernen?",
+  "removeText": "Die Zugangsdaten werden aus dem Panel gelöscht. Sites, die ihr Zertifikat über dieses Konto bekommen, müssen vorher auf HTTP oder ein anderes Konto wechseln. Der Zugang beim Anbieter bleibt; widerrufe das Token auch dort.",
+  "removeSubmit": "Konto entfernen",
+  "removed": "{{label}} entfernt.",
+  "added": "{{label}} hinzugefügt und geprüft: Es darf seine Zonen schreiben.",
+  "addedWithError": "{{label}} hinzugefügt, aber die Prüfung ist fehlgeschlagen: {{reason}}",
+  "saved": "{{label}} gespeichert.",
+  "savedWithError": "{{label}} gespeichert, aber die Prüfung ist fehlgeschlagen: {{reason}}",
+  "cname": {
+    "title": "Empfohlen: eine eigene Zone für die Prüfungen",
+    "text": "Lege einmal pro Domain <code>_acme-challenge.example.com CNAME example.com.acme.example.net</code> an und gib dem Konto nur die Zone <code>acme.example.net</code>. Dann braucht sein Token keine Rechte an deinen echten Zonen."
+  },
+  "new": {
+    "title": "DNS-Konto hinzufügen",
+    "description": "Zur Prüfung legt das Panel in jeder Zone einen Test-Eintrag an und löscht ihn wieder. Die Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.",
+    "provider": "Anbieter",
+    "label": "Name",
+    "labelHint": "Erscheint in der Liste, zum Beispiel „INWX Hauptkonto“.",
+    "zones": "Zonen",
+    "zonesHint": "Eine Zone pro Zeile, zum Beispiel example.com. Eine Domain nutzt das Konto, dessen Zone ihren _acme-challenge-Namen abdeckt, nach einem CNAME.",
+    "credentials": "Zugangsdaten für {{provider}}",
+    "optional": "(optional)",
+    "checking": "Zugriff wird geprüft …"
+  },
+  "edit": {
+    "title": "{{label}} bearbeiten",
+    "short": "Bearbeiten",
+    "replace": "Zugangsdaten ersetzen",
+    "keep": "Die gespeicherten Zugangsdaten bleiben.",
+    "submit": "Speichern"
+  },
+  "fields": {
+    "cloudflare": { "apiToken": "API-Token" },
+    "hetzner": { "apiToken": "API-Token (Hetzner Cloud)" },
+    "inwx": { "username": "Benutzername", "password": "Passwort", "sharedSecret": "Zwei-Faktor-Schlüssel" }
+  },
+  "hints": {
+    "cloudflare": "Lege ein API-Token mit „Zone: Read“ und „DNS: Edit“ nur für die nötigen Zonen an. Nimm nie den globalen API-Key.",
+    "hetzner": "Nimm ein Lese-/Schreib-Token eines eigenen Hetzner-Cloud-Projekts, das nur DNS-Zonen enthält. Ein Token eines Projekts mit Servern kann diese Server löschen.",
+    "inwx": "Nimm einen Unterbenutzer nur mit DNS-Rechten, wenn dein INWX-Konto das anbietet."
+  },
+  "problems": {
+    "label": "Gib einen Namen ein.",
+    "zones": "Gib mindestens eine Zone ein.",
+    "zone": "{{zone}} ist kein gültiger Zonenname.",
+    "field": "Fülle „{{field}}“ aus."
+  },
+  "errors": {
+    "dns_account_exists": "Ein DNS-Konto mit diesem Namen gibt es schon. Wähle einen anderen Namen.",
+    "dns_zone_taken": "Ein anderes DNS-Konto bedient diese Zone. Jede Zone gehört zu einem Konto.",
+    "dns_account_in_use": "Sites oder die Panel-Adresse bekommen ihr Zertifikat noch über dieses Konto. Stell sie vorher auf HTTP um oder gib die Zone einem anderen Konto.",
+    "dns_accounts_unavailable": "DNS-Konten sind auf diesem Panel nicht verfügbar.",
+    "not_found": "Dieses DNS-Konto gibt es nicht mehr. Lade die Seite neu."
+  },
+  "challenge": {
+    "legend": "Prüfung durch Let's Encrypt",
+    "http": "HTTP: eine Datei auf Port 80, die Domains müssen auf diesen Server zeigen",
+    "dns": "DNS: ein TXT-Eintrag über ein DNS-Konto",
+    "adminOnly": "Nur Admins können DNS wählen, weil es ihre DNS-Konten nutzt.",
+    "noAccounts": "DNS braucht für jede Domain ein DNS-Konto. <a>Lege eins unter DNS-Konten an.</a>",
+    "done": {
+      "http": "Let's Encrypt prüft die Domains ab jetzt über HTTP.",
+      "dns": "Let's Encrypt prüft die Domains ab jetzt über DNS."
+    }
+  }
+}

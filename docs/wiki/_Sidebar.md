@@ -9,6 +9,7 @@
 - [Sites](Sites.md)
 - [Site types](Site-types.md)
 - [Domains and HTTPS](Domains-and-HTTPS.md)
+- [DNS accounts](DNS-accounts.md)
 - [SSH and SFTP](SSH-and-SFTP.md)
 - [Cron jobs](Cron-jobs.md)
 - [Git deploy](Git-deploy.md)

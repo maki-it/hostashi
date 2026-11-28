@@ -1,0 +1,93 @@
+{
+  "title": "DNS accounts",
+  "description": "Logins at DNS providers for Let's Encrypt over DNS-01: certificates without port 80, before DNS points here, and later for wildcard names.",
+  "add": "Add DNS account",
+  "allAccounts": "All DNS accounts",
+  "loading": "Loading DNS accounts…",
+  "empty": "No DNS accounts yet.",
+  "columns": {
+    "account": "Account",
+    "provider": "Provider",
+    "zones": "Zones",
+    "state": "Access",
+    "actions": "Actions"
+  },
+  "states": {
+    "ok": "Can write",
+    "error": "Failed",
+    "unchecked": "Not checked"
+  },
+  "checked": "checked <time></time>",
+  "check": "Check",
+  "checkLabel": "Check access of {{label}}",
+  "checkOk": "{{label}} can write its zones.",
+  "checkFailed": "{{label}} cannot write its zones: {{reason}}",
+  "editLabel": "Edit {{label}}",
+  "remove": "Remove",
+  "removeLabel": "Remove {{label}}",
+  "removeTitle": "Remove {{label}}?",
+  "removeText": "The credentials are deleted from the panel. Sites that get their certificate over this account must switch to HTTP or to another account first. The login at the provider stays; revoke the token there too.",
+  "removeSubmit": "Remove account",
+  "removed": "{{label}} removed.",
+  "added": "{{label}} added and checked: it can write its zones.",
+  "addedWithError": "{{label}} added, but the check failed: {{reason}}",
+  "saved": "{{label}} saved.",
+  "savedWithError": "{{label}} saved, but the check failed: {{reason}}",
+  "cname": {
+    "title": "Recommended: a separate zone for the challenges",
+    "text": "Create <code>_acme-challenge.example.com CNAME example.com.acme.example.net</code> once per domain and give the account only the zone <code>acme.example.net</code>. Then its token needs no rights on your real zones."
+  },
+  "new": {
+    "title": "Add DNS account",
+    "description": "The panel creates and deletes a test record in each zone to check the access. The credentials are stored encrypted and never shown again.",
+    "provider": "Provider",
+    "label": "Name",
+    "labelHint": "Shown in the list, for example \"INWX main account\".",
+    "zones": "Zones",
+    "zonesHint": "One zone per line, for example example.com. A domain uses the account whose zone covers its _acme-challenge name, after a CNAME.",
+    "credentials": "{{provider}} credentials",
+    "optional": "(optional)",
+    "checking": "Checking the access…"
+  },
+  "edit": {
+    "title": "Edit {{label}}",
+    "short": "Edit",
+    "replace": "Replace the credentials",
+    "keep": "The stored credentials stay.",
+    "submit": "Save"
+  },
+  "fields": {
+    "cloudflare": { "apiToken": "API token" },
+    "hetzner": { "apiToken": "API token (Hetzner Cloud)" },
+    "inwx": { "username": "Username", "password": "Password", "sharedSecret": "Two-factor secret" }
+  },
+  "hints": {
+    "cloudflare": "Create an API token with Zone: Read and DNS: Edit for the needed zones only. Never use the global API key.",
+    "hetzner": "Use a read/write token of a separate Hetzner Cloud project that holds only DNS zones. A token of a project with servers can delete those servers.",
+    "inwx": "Use a sub-user with DNS rights only, if your INWX account offers one."
+  },
+  "problems": {
+    "label": "Enter a name.",
+    "zones": "Enter at least one zone.",
+    "zone": "{{zone}} is no valid zone name.",
+    "field": "Fill in {{field}}."
+  },
+  "errors": {
+    "dns_account_exists": "A DNS account with this name exists. Choose another name.",
+    "dns_zone_taken": "Another DNS account serves this zone. Each zone belongs to one account.",
+    "dns_account_in_use": "Sites or the panel address still get their certificate over this account. Switch them to HTTP or give the zone to another account first.",
+    "dns_accounts_unavailable": "DNS accounts are not available on this panel.",
+    "not_found": "This DNS account does not exist any more. Reload the page."
+  },
+  "challenge": {
+    "legend": "Check by Let's Encrypt",
+    "http": "HTTP: a file on port 80, the domains must point to this server",
+    "dns": "DNS: a TXT record through a DNS account",
+    "adminOnly": "Only admins can choose DNS, because it uses their DNS accounts.",
+    "noAccounts": "DNS needs a DNS account for every domain. <a>Add one under DNS accounts.</a>",
+    "done": {
+      "http": "Let's Encrypt checks the domains over HTTP from now on.",
+      "dns": "Let's Encrypt checks the domains over DNS from now on."
+    }
+  }
+}
