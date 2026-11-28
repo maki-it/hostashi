@@ -82,6 +82,7 @@ Index of all architecture decision records; the full texts are in [`adr/`](adr/)
 | 0076 | DNS-01 certificates via DNS provider APIs | Accepted on 2026-11-26 ([adr/0076](adr/0076-dns-01-certificates-via-dns-provider-apis.md)) | Planned for 1.1 |
 | 0077 | Automatic security updates for pinned runtimes | Accepted on 2026-11-26 ([adr/0077](adr/0077-automatic-security-updates-for-pinned-runtimes.md)) | |
 | 0078 | fail2ban bans in the panel | Accepted on 2026-11-26 ([adr/0078](adr/0078-fail2ban-bans-in-the-panel.md)) | |
+| 0079 | Website and documentation with Zensical, self-hosted on Hostashi | Proposed ([adr/0079](adr/0079-website-and-docs-with-zensical.md)) | |
 
 ---
 
@@ -510,3 +511,7 @@ These questions were asked before the first line of code. They are all answered:
 ## ADR-0078 fail2ban bans in the panel
 
 **Full text (status Accepted, 2026-11-26, by Kim):** [adr/0078](adr/0078-fail2ban-bans-in-the-panel.md). Summary: a card "Blocked addresses" on the Firewall page shows the four Hostashi jails and their banned addresses, and admins can unblock an address. A new `os/exec` exception `internal/f2bctl` runs only `/usr/bin/fail2ban-client` with three fixed argument shapes; the address is checked with `netip`. Decided by Kim on 2026-11-26: on the Firewall page, unblock in all jails at once, in v1.
+
+## ADR-0079 Website and documentation with Zensical, self-hosted on Hostashi
+
+**Full text (status Proposed):** [adr/0079](adr/0079-website-and-docs-with-zensical.md). Summary: the user documentation moves from the GitHub wiki to a Zensical site; the website and docs are served by a static Hostashi site on a server of the maintainer, which deploys a CI-built branch `website` with Git deploy and a webhook; `get.hostashi.com` stays on GitHub Pages.
