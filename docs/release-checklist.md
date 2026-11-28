@@ -1,6 +1,6 @@
 # Release checklist
 
-Go through this list for every stable release `vX.Y.Z`. How the release workflow signs and publishes is described in the wiki page [Releases](wiki/Releases.md) ([ADR-0050](adr/0050-signed-releases-and-apt-updates.md)); this page is what to check around it. Section 5 applies to 1.0 only.
+Go through this list for every stable release `vX.Y.Z`. How the release workflow signs and publishes is described in the wiki page [Releases](../website/docs/docs/Releases.md) ([ADR-0050](adr/0050-signed-releases-and-apt-updates.md)); this page is what to check around it. Section 5 applies to 1.0 only.
 
 The changelog is the release notes that GitHub generates from the merged pull requests, grouped by their `Kind/*` labels ([.github/release.yml](../.github/release.yml)). There is no separate `CHANGELOG` file.
 
@@ -44,7 +44,7 @@ The changelog is the release notes that GitHub generates from the merged pull re
   ```
 
 - [ ] The suite `runtimes` still answers and is signed by the runtimes key (`https://get.hostashi.com/apt/dists/runtimes/InRelease`, key `packaging/keyring/hostashi-runtimes-keyring.asc`).
-- [ ] The downloads verify (Sigstore and build provenance), as in the wiki page [Releases](wiki/Releases.md#check-a-download).
+- [ ] The downloads verify (Sigstore and build provenance), as in the wiki page [Releases](../website/docs/docs/Releases.md#check-a-download).
 - [ ] `https://get.hostashi.com/install.sh` is the script from the tagged commit (`diff` against `packaging/get/install.sh`).
 - [ ] Fresh install from `get.hostashi.com` on a new Debian 13 and Ubuntu 26.04 server (or `release-upgrade-test.sh` with `FROM=X.Y.Z`, whose first step is exactly that).
 - [ ] Own servers: `apt upgrade` (or the automatic update) on the maintainer's servers, then **Health** in the panel and `hostashi doctor` show no new warnings.
