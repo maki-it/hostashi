@@ -104,6 +104,8 @@ jobs:
         run: HOSTASHI_SETUP_TOKEN_FILE="$RUNNER_TEMP/data/setup-token" npm run e2e
       - name: Phone width check (no page wider than 390 px)
         run: npm run e2e:phone
+      - name: Scrollbar check (content stays put when the scrollbar appears)
+        run: npm run e2e:scrollbar
       - name: Server log
         if: failure()
         run: cat "$RUNNER_TEMP/serve.log"

@@ -11,6 +11,13 @@
   box-sizing: border-box;
 }
 
+/* Keep room for the page scrollbar on every page, so the centred content
+   does not jump sideways between pages with and without one. Overlay
+   scrollbars (macOS default) take no room, so this changes nothing there. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);

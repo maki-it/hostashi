@@ -11,6 +11,7 @@
     "test": "vitest run",
     "e2e": "node e2e/login.e2e.mjs",
     "e2e:phone": "node e2e/phone-overflow.e2e.mjs",
+    "e2e:scrollbar": "node e2e/scrollbar-shift.e2e.mjs",
     "wiki-shots": "node e2e/wiki-shots.mjs"
   },
   "dependencies": {

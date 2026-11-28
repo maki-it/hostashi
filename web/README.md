@@ -13,6 +13,8 @@ npm test                  # unit tests (Vitest, jsdom)
 npm run typecheck         # TypeScript, strict
 npm run build             # typecheck, then write internal/ui/dist/
 npm run e2e               # browser test against a fresh "hostashi serve", see e2e/login.e2e.mjs
+npm run e2e:phone         # no page wider than a 390 px phone screen
+npm run e2e:scrollbar     # content does not shift when the page scrollbar appears
 ```
 
 After `npm run build`, rebuild the Go binary to embed the new files. A
