@@ -27,11 +27,11 @@ sudo bash install.sh --yes --panel-domain panel.example.com
 
 </div>
 
-<p class="hs-actions">
-  <a class="md-button md-button--primary" href="docs/Install/">Install guide</a>
-  <a class="md-button" href="docs/Home/">Read the docs</a>
-  <a class="md-button hs-button--plain" href="https://github.com/maki-it/hostashi">Source on GitHub</a>
-</p>
+<div class="hs-actions" markdown>
+[Install guide](docs/Install.md){ .md-button .md-button--primary }
+[Read the docs](docs/Home.md){ .md-button }
+[Source on GitHub](https://github.com/maki-it/hostashi){ .md-button .hs-button--plain }
+</div>
 
 </div>
 
@@ -167,9 +167,9 @@ One script installs everything, and the panel greets you with a setup page.
 
 <p class="hs-maker">Hostashi is built and maintained by <a href="https://maki-it.de/">Maki IT</a>, which uses it on its own servers.</p>
 
-<p class="hs-actions">
-  <a class="md-button md-button--primary" href="docs/Install/">Install Hostashi</a>
-  <a class="md-button" href="https://github.com/maki-it/hostashi/releases">Release notes</a>
-</p>
+<div class="hs-actions" markdown>
+[Install Hostashi](docs/Install.md){ .md-button .md-button--primary }
+[Release notes](https://github.com/maki-it/hostashi/releases){ .md-button }
+</div>
 
 </section>
