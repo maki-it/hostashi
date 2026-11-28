@@ -110,7 +110,7 @@ No database change: nothing is stored by the panel.
 
 ## Addendum 2: history of the last runs
 
-**Status:** Proposed. **Decides:** Kim.
+**Status:** Accepted (Kim, 2026-11-28). **Decides:** Kim.
 
 ### Context
 
