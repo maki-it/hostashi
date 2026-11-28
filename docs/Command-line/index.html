@@ -1,0 +1,2975 @@
+
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Open-source control panel for a single Linux server">
+      
+      
+      
+        <link rel="canonical" href="https://hostashi.com/docs/Command-line/">
+      
+      
+      
+      
+        <link rel="prev" href="../Audit-log/">
+      
+      
+        <link rel="next" href="../Ports-and-files/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.svg">
+      <meta name="generator" content="zensical-0.1.4">
+    
+    
+      
+        <title>Command line - Hostashi</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.5cb9f1ba.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.b60ce83d.min.css">
+      
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/hostashi.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
+    <div data-md-component="skip">
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Hostashi" class="md-header__button md-logo" aria-label="Hostashi" data-md-component="logo">
+      
+  <img src="../../assets/hostashi-mark.svg" alt="Hostashi">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+      <span class="md-visually-hidden">Navigation</span>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Hostashi
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Command line
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+          <span class="md-visually-hidden">Search</span>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Home/" class="md-tabs__link">
+          
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Sites/" class="md-tabs__link">
+          
+  
+  Sites
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Databases/" class="md-tabs__link">
+          
+  
+  Databases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Users-and-roles/" class="md-tabs__link">
+          
+  
+  Server
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+      
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="././" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Recovery/" class="md-tabs__link">
+          
+  
+  Troubleshooting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../Releases/" class="md-tabs__link">
+          
+  
+  Maintainers
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Hostashi" class="md-nav__button md-logo" aria-label="Hostashi" data-md-component="logo">
+      
+  <img src="../../assets/hostashi-mark.svg" alt="Hostashi">
+
+    </a>
+    Hostashi
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Getting started
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Home/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Introduction
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Install
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../First-steps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  First steps
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sites
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Sites
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Sites/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sites
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Site-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Site types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Domains-and-HTTPS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Domains and HTTPS
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DNS-accounts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  DNS accounts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SSH-and-SFTP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  SSH and SFTP
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Cron-jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Cron jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Git-deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Git deploy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Virus-scan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Virus scan
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Limits
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Parked-domains/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Parked domains
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PHP-settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  PHP settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Object-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Object cache
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Application-profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Application profiles
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Security-headers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Security headers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Real-visitor-address/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Real visitor address
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Access-protection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Access protection
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../File-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  File manager
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Reset-file-permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reset file permissions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Staging-and-copies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Staging and copies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Site-logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Site logs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Databases
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Databases
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Databases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Databases
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Database-limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Database limits
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Server
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Server
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Users-and-roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Users and roles
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../API-tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API tokens
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Backups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backups
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Firewall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Firewall
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CloudPanel-import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Moving from CloudPanel
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Services-and-dashboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Services and dashboard
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Site-usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Site usage
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../System-settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  System settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Email-notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Email notifications
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Audit-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Audit log
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Reference
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Command line
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Command line
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#getting-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Getting in
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-the-api-from-the-command-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using the API from the command line
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tab-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tab completion
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Checks
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#services" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Services
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Sites
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Storage pools
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Databases
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Backups
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#moving-from-cloudpanel" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Moving from CloudPanel
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#all-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        All commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Ports-and-files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ports and files
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Troubleshooting
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_7">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Troubleshooting
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Recovery
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Maintainers
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_8">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Maintainers
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Releases
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#getting-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Getting in
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-the-api-from-the-command-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using the API from the command line
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tab-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Tab completion
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Checks
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#services" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Services
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Sites
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Storage pools
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Databases
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Backups
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#moving-from-cloudpanel" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Moving from CloudPanel
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#all-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        All commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="././" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
+                
+                  
+
+
+<h1 id="command-line">Command line<a class="headerlink" href="#command-line" title="Permanent link">&para;</a></h1>
+<p><strong>For:</strong> server admin. Every command runs on the server as root, for example with <code>sudo</code>, unless it says otherwise.</p>
+<p>Most work is done in the panel. The command line is for what the panel cannot do for you: the first login, getting back in, checks and emergencies.</p>
+<h2 id="getting-in">Getting in<a class="headerlink" href="#getting-in" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi setup-token</code></td>
+<td>Prints the one-time token for the first login.</td>
+</tr>
+<tr>
+<td><code>hostashi user recover [-public-url URL] NAME</code></td>
+<td>Removes the password and second factors of account <code>NAME</code>, enables it and prints a new invitation link. See <a href="../Recovery/">Recovery</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="using-the-api-from-the-command-line">Using the API from the command line<a class="headerlink" href="#using-the-api-from-the-command-line" title="Permanent link">&para;</a></h2>
+<p>These commands work as any user and on any machine, not only on the server. They talk to the panel's API with an API token, so your role, the token's scopes and the audit log apply as in the panel.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi login [URL]</code></td>
+<td>Logs in through the browser. It prints a link and a code such as <code>WDJB-MJHT</code>. Open the link in a browser where you are logged in to the panel (with a passkey or a password and second factor), check that the panel shows the same code and the name of your computer, pick what the token may do and approve. The command then stores the token in <code>~/.config/hostashi/credentials.json</code> (only readable by you). <code>URL</code> is the panel's address, for example <code>https://panel.example.com</code>; on the server itself it defaults to <code>http://127.0.0.1:8080</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi login -token [URL]</code></td>
+<td>Reads an existing API token from stdin instead, for scripts (see below).</td>
+</tr>
+<tr>
+<td><code>hostashi whoami</code></td>
+<td>Shows the account, its role and the token's scopes.</td>
+</tr>
+<tr>
+<td><code>hostashi api</code></td>
+<td>Lists the areas of the API, such as <code>sites</code>, <code>databases</code> or <code>backups</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi api AREA</code></td>
+<td>Lists the commands of an area with their arguments.</td>
+</tr>
+<tr>
+<td><code>hostashi api AREA COMMAND -h</code></td>
+<td>Explains a command: the request it sends, the token scope it needs and its fields.</td>
+</tr>
+<tr>
+<td><code>hostashi api AREA COMMAND ARGS</code></td>
+<td>Runs it and prints the answer as JSON, or a download as it is.</td>
+</tr>
+<tr>
+<td><code>hostashi logout</code></td>
+<td>Removes the stored token. It stays valid until it expires; revoke it in the panel under <strong>Your account → API tokens</strong> if it may have leaked.</td>
+</tr>
+</tbody>
+</table>
+<p>For example, with the token in a password manager:</p>
+<div class="highlight"><pre><span></span><code>pass<span class="w"> </span>show<span class="w"> </span>hostashi<span class="w"> </span><span class="p">|</span><span class="w"> </span>hostashi<span class="w"> </span>login<span class="w"> </span>-token<span class="w"> </span>https://panel.example.com
+</code></pre></div>
+<p>Every operation of the API is a command of <code>hostashi api</code>, so anything the panel can do through its API, the command line can do as well. Arguments after the command are, in this order:</p>
+<ul>
+<li>the names in the route, such as the site: <code>hostashi api sites get blog</code></li>
+<li>fields as <code>key=value</code>; numbers, <code>true</code>/<code>false</code> and comma-separated lists are converted to the field's type: <code>hostashi api limits set-site blog preset=small</code></li>
+<li>any JSON value as <code>key:=JSON</code>: <code>hostashi api limits set-site blog 'custom:={"memory":1073741824}'</code></li>
+<li>the whole body with <code>-d JSON</code>, <code>-d @FILE</code> or <code>-d -</code> for stdin</li>
+<li>a file for an upload as <code>key=@FILE</code>: <code>hostashi api pages create-status name=sorry kind=maintenance file=@sorry.html</code></li>
+</ul>
+<p>Commands marked "panel only" refuse API tokens, for example creating tokens; use the panel for them (see <a href="../API-tokens/">API tokens</a>).</p>
+<p><code>HOSTASHI_URL</code> and <code>HOSTASHI_TOKEN</code> override the stored login, for example in CI jobs. Plain <code>http://</code> is only accepted for the server itself (<code>127.0.0.1</code>, <code>::1</code>, <code>localhost</code>), so that a token never crosses a network unencrypted.</p>
+<p>Approve only a login you started yourself: whoever started it gets a token for your account. A code is valid for ten minutes.</p>
+<h2 id="tab-completion">Tab completion<a class="headerlink" href="#tab-completion" title="Permanent link">&para;</a></h2>
+<p>The installer sets up tab completion for bash, zsh and fish. In a new shell, <code>hostashi si</code> and Tab completes to <code>hostashi site</code>, and <code>hostashi api sites create</code> and Tab shows the fields of that command. Completion knows the commands, their flags, the areas and commands of <code>hostashi api</code> and the keys of <code>hostashi site limits</code>. It needs no login and does not ask the panel, so it does not complete names of sites or databases.</p>
+<p>For bash, the package <code>bash-completion</code> must be installed (it is on most servers). On another machine, or for a shell the installer does not know, load the script yourself:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>&lt;<span class="o">(</span>hostashi<span class="w"> </span>completion<span class="w"> </span>bash<span class="o">)</span><span class="w">        </span><span class="c1"># in ~/.bashrc</span>
+<span class="nb">source</span><span class="w"> </span>&lt;<span class="o">(</span>hostashi<span class="w"> </span>completion<span class="w"> </span>zsh<span class="o">)</span><span class="w">         </span><span class="c1"># in ~/.zshrc, after compinit</span>
+hostashi<span class="w"> </span>completion<span class="w"> </span>fish<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="nb">source</span><span class="w">         </span><span class="c1"># in ~/.config/fish/config.fish</span>
+</code></pre></div>
+<h2 id="checks">Checks<a class="headerlink" href="#checks" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi doctor</code></td>
+<td>Checks the server and every site without changing anything. Exit code <code>3</code> if a check failed, <code>0</code> otherwise. <code>-json</code> prints the result as JSON.</td>
+</tr>
+<tr>
+<td><code>hostashi ping</code></td>
+<td>Checks that the agent answers.</td>
+</tr>
+<tr>
+<td><code>hostashi version</code></td>
+<td>Prints the version.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="services">Services<a class="headerlink" href="#services" title="Permanent link">&para;</a></h2>
+<p>These commands go through the panel's API like <a href="#using-the-api-from-the-command-line"><code>hostashi api</code></a>, also as root on the server: log in once with <code>hostashi login</code> first. Your role and the token's scopes (<code>services:…</code>, <code>system:…</code>) decide what works, and every change is in the audit log. Naming the action on the command line counts as the confirmation the panel asks for.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi service list</code></td>
+<td>Lists the services with their state and automatic restarts. <code>-json</code> prints JSON.</td>
+</tr>
+<tr>
+<td><code>hostashi service ID [SITE] ACTION</code></td>
+<td>Runs an action, for example <code>hostashi service nginx reload</code> or <code>hostashi service php blog restart</code>. Only the actions of the <a href="../Services-and-dashboard/#services">service catalog</a> work.</td>
+</tr>
+<tr>
+<td><code>hostashi system info</code></td>
+<td>Shows the hostname, time zone, clock, uptime and a pending reboot as JSON.</td>
+</tr>
+<tr>
+<td><code>hostashi system timezones</code></td>
+<td>Lists the time zones the server knows.</td>
+</tr>
+<tr>
+<td><code>hostashi system timezone ZONE</code></td>
+<td>Sets the time zone, for example <code>hostashi system timezone Europe/Berlin</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi system hostname NAME</code></td>
+<td>Sets the hostname and updates <code>/etc/hosts</code> (see <a href="../System-settings/">System settings</a>).</td>
+</tr>
+<tr>
+<td><code>hostashi system reboot HOSTNAME</code></td>
+<td>Reboots the server; the hostname confirms it.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sites">Sites<a class="headerlink" href="#sites" title="Permanent link">&para;</a></h2>
+<p><code>site create</code>, <code>site delete</code>, <code>site list</code> and <code>site limits</code> go through the panel's API and need <code>hostashi login</code>. <code>site files</code> talks to the agent and needs root on the server.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi site list</code></td>
+<td>Lists the sites with their type, pool, state and domains.</td>
+</tr>
+<tr>
+<td><code>hostashi site create NAME DOMAIN[,DOMAIN...] [POOL]</code></td>
+<td>Creates a static site with its domains, for example <code>hostashi site create blog blog.example.com,www.blog.example.com</code>. Change it afterwards in the panel or with <code>hostashi api</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi site delete NAME</code></td>
+<td>Deletes a site with its files, databases and virtual host.</td>
+</tr>
+<tr>
+<td><code>hostashi site files NAME</code></td>
+<td>Starts the file manager of a site and prints its socket. The panel does this by itself; the command is for checks.</td>
+</tr>
+<tr>
+<td><code>hostashi site limits NAME</code></td>
+<td>Shows the preset and the limits of a site.</td>
+</tr>
+<tr>
+<td><code>hostashi site limits NAME preset=PRESET</code></td>
+<td>Gives the site a limit preset.</td>
+</tr>
+<tr>
+<td><code>hostashi site limits NAME KEY=VALUE ...</code></td>
+<td>Changes single limits, for example <code>hostashi site limits blog memory=536870912 cpu-priority=high</code>. Values you leave out stay as they are; 0 means no limit.</td>
+</tr>
+</tbody>
+</table>
+<p><code>site limits</code> goes through the panel's API, like in <strong>Site → Limits</strong>: it needs <code>hostashi login</code> and a token with <code>limits:read</code> (and <code>limits:write</code> to change). The keys are <code>memory</code> and <code>disk</code> (bytes), <code>inodes</code>, <code>tasks</code>, <code>php-workers</code>, <code>cpu-priority</code> (<code>low</code>, <code>normal</code> or <code>high</code>), <code>cpu-quota</code> (percent of one CPU), <code>db-size</code> (bytes, only warns) and <code>db-connections</code>.</p>
+<h2 id="storage-pools">Storage pools<a class="headerlink" href="#storage-pools" title="Permanent link">&para;</a></h2>
+<p>A storage pool is an extra volume for site homes, for example a provider volume for large sites. Hostashi never formats or mounts a volume. You prepare it first:</p>
+<blockquote>
+<p><strong>Before you format:</strong> check the device twice.
+Formatting erases everything on the volume, and <code>mkfs</code> does not know whether you still need it. Before step 1, run <code>lsblk -f</code> and <code>cat /etc/fstab</code> and make sure the device is the new, empty volume: it has no mount point, no label or UUID that <code>/etc/fstab</code> still uses, and is not where <code>/home</code> lives. Hypervisors and cloud consoles may attach a volume under a name that an earlier disk had (<code>/dev/sdb</code>), so go by size and serial (<code>lsblk -o NAME,SIZE,SERIAL,LABEL,UUID,MOUNTPOINTS</code>), not by name.</p>
+<p>If the volume replaces an old one, remove or comment out the old line in <code>/etc/fstab</code> and run <code>systemctl daemon-reload</code>. A line whose device is gone makes systemd wait 90 seconds for it at every login below that mount point, and without <code>nofail</code> the next boot stops in emergency mode. <code>hostashi doctor</code> reports such lines (<code>system.fstab</code>).</p>
+</blockquote>
+<ol>
+<li>Create an ext4 or XFS file system on the volume. For disk limits per site, create it with project quota: <code>mkfs.ext4 -O quota,project -E quotatype=prjquota /dev/...</code> (an existing, unmounted ext4 volume: <code>tune2fs -O project,quota -Q prjquota /dev/...</code>). XFS needs nothing at this step.</li>
+<li>Add it to <code>/etc/fstab</code> by UUID (from <code>lsblk -f</code>, not <code>/dev/sdX</code>) with <code>nosuid,nodev,nofail</code> and, for disk limits, <code>prjquota</code>, for example <code>UUID=... /srv/vol1 ext4 nosuid,nodev,nofail,prjquota 0 2</code>, then run <code>systemctl daemon-reload</code> and mount it.</li>
+<li>Leave it empty (<code>lost+found</code> is fine).</li>
+</ol>
+<p>Without project quota a pool works, but its sites get no disk limit. The agent switches on the enforcement of the limits on every pool that counts usage, at its start and when a pool is added, so no <code>quotaon</code> is needed. <code>hostashi pool list</code> and <code>hostashi doctor</code> show the quota state of each pool: <code>enforced</code>, <code>counting</code> (limits are not enforced, doctor reports a failure) or <code>off</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi pool add [-default] NAME PATH</code></td>
+<td>Adds the mounted volume at PATH as pool NAME. It refuses, with the reason, a path that is not a mount point, not ext4 or XFS, not mounted with <code>nosuid,nodev</code>, not in <code>/etc/fstab</code>, not empty, inside a system directory or overlapping another pool. With <code>-default</code>, new sites land on it when they name no pool.</td>
+</tr>
+<tr>
+<td><code>hostashi pool list</code></td>
+<td>Lists the pools with their path, number of sites and quota state; the default pool ends with <code>default</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi pool rename NAME NEWNAME</code></td>
+<td>Gives a pool a new name. Its path, its sites and their files stay where they are. Goes through the panel's API (needs <code>hostashi login</code>).</td>
+</tr>
+<tr>
+<td><code>hostashi pool default NAME</code></td>
+<td>Makes a pool the default for new sites that name no pool. Goes through the panel's API (needs <code>hostashi login</code>).</td>
+</tr>
+<tr>
+<td><code>hostashi pool remove NAME</code></td>
+<td>Removes a pool without sites that is not the default. Then you can unmount the volume.</td>
+</tr>
+</tbody>
+</table>
+<p>The panel shows the same under <strong>Server → Storage pools</strong>, where admins can also rename a pool and make it the default. Adding and removing a pool stay on the command line, because they need a mounted volume on the server.</p>
+<p><code>hostashi doctor</code> fails a pool whose volume is not mounted or whose marker is missing, and warns when a pool's volume is mounted without <code>nosuid,nodev</code> or has no <code>/etc/fstab</code> entry. It also checks every block device in <code>/etc/fstab</code>: a device that does not exist fails without <code>nofail</code> and warns with it. While a volume is missing, its sites do not start and cannot be changed; mount it and restart <code>hostashi-agent</code>.</p>
+<p>A site gets its pool when it is created and stays there. Its databases stay in MariaDB's own directory.</p>
+<h2 id="databases">Databases<a class="headerlink" href="#databases" title="Permanent link">&para;</a></h2>
+<p>These commands go through the panel's API, like <strong>Site → Databases</strong>, and need <code>hostashi login</code> with the <code>databases:…</code> scopes.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi db list</code></td>
+<td>Lists the databases with their site and users.</td>
+</tr>
+<tr>
+<td><code>hostashi db create SITE NAME</code></td>
+<td>Creates a database for a site.</td>
+</tr>
+<tr>
+<td><code>hostashi db delete NAME</code></td>
+<td>Deletes a database and its users.</td>
+</tr>
+<tr>
+<td><code>hostashi db user create DATABASE USER</code></td>
+<td>Creates a database user. Reads the password from standard input; an empty line generates one and prints it once.</td>
+</tr>
+<tr>
+<td><code>hostashi db import DATABASE FILE</code></td>
+<td>Loads a dump into a database. <code>FILE</code> is relative to the site's home and ends in <code>.sql</code> or <code>.sql.gz</code>.</td>
+</tr>
+<tr>
+<td><code>hostashi db export DATABASE FILE</code></td>
+<td>Writes a dump of a database into the site's home.</td>
+</tr>
+<tr>
+<td><code>hostashi db user password USER</code></td>
+<td>Sets a new password for a database user. Reads it from standard input; an empty line generates one and prints it once.</td>
+</tr>
+<tr>
+<td><code>hostashi db user delete USER</code></td>
+<td>Removes a database user.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="backups">Backups<a class="headerlink" href="#backups" title="Permanent link">&para;</a></h2>
+<p>These commands go through the panel's API and need <code>hostashi login</code>, except <code>backup key show</code>, which only root on the server can run.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi backup get</code></td>
+<td>Shows the backup settings, the public key and the state as JSON.</td>
+</tr>
+<tr>
+<td><code>hostashi backup set</code></td>
+<td>Sets the target, retention and time window. Reads the settings as JSON from standard input.</td>
+</tr>
+<tr>
+<td><code>hostashi backup hostkey</code></td>
+<td>Confirms the host key of the backup server. Reads one public key line from standard input.</td>
+</tr>
+<tr>
+<td><code>hostashi backup start</code></td>
+<td>Starts a backup now.</td>
+</tr>
+<tr>
+<td><code>hostashi backup status</code></td>
+<td>Shows the state of the last backup.</td>
+</tr>
+<tr>
+<td><code>hostashi backup restore SITE SNAPSHOT</code></td>
+<td>Restores a snapshot into a new folder <code>restore-&lt;time&gt;</code> in the site's home. Nothing existing is overwritten.</td>
+</tr>
+<tr>
+<td><code>hostashi backup restore-status ID</code></td>
+<td>Shows the state of a restore.</td>
+</tr>
+<tr>
+<td><code>hostashi backup deleted [SITE]</code></td>
+<td>Lists deleted sites that still have snapshots, or the snapshots of one. A site name that a newer site took again shows the snapshots from before that site was created. Administrators only.</td>
+</tr>
+<tr>
+<td><code>hostashi backup restore-deleted SITE SNAPSHOT TARGET</code></td>
+<td>Restores a snapshot of a deleted site into a new folder <code>restore-&lt;time&gt;</code> in the home of the existing site <code>TARGET</code>. Administrators only.</td>
+</tr>
+<tr>
+<td><code>hostashi backup delete-deleted SITE</code></td>
+<td>Marks all snapshots of a deleted site, or of an earlier site of a reused name, for removal by the next backup run. Administrators only.</td>
+</tr>
+<tr>
+<td><code>hostashi backup keep-deleted SITE</code></td>
+<td>Takes the mark back before the next backup run. Administrators only.</td>
+</tr>
+<tr>
+<td><code>hostashi backup key show</code></td>
+<td>Prints the backup repository password and the panel key. Store them outside the server: without them, backups cannot be restored on a new server.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="moving-from-cloudpanel">Moving from CloudPanel<a class="headerlink" href="#moving-from-cloudpanel" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hostashi cloudpanel scan</code></td>
+<td>Run on the <strong>old</strong> CloudPanel server. Shows which sites can be moved, changes nothing.</td>
+</tr>
+</tbody>
+</table>
+<p>The rest of the move is done in the panel. A full guide follows.</p>
+<h2 id="all-commands">All commands<a class="headerlink" href="#all-commands" title="Permanent link">&para;</a></h2>
+<p><code>hostashi help</code> prints every command, including the ones the panel and the system services use internally.</p>
+<p>The package also installs a manual page with the same list, so <code>man hostashi</code> works on the server. It is made from the same text as <code>hostashi help</code> and changes with it.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../Audit-log/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Audit log">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Audit log
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../Ports-and-files/" class="md-footer__link md-footer__link--next" aria-label="Next: Ports and files">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Ports and files
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Hostashi is a product of <a href="https://maki-it.de/">Maki IT</a> · Text licensed under CC-BY-4.0 · © 2026 Maki IT
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/maki-it/hostashi" target="_blank" rel="noopener" title="Source on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M216.5 362.5c-66-8-112.5-55.5-112.5-117 0-25 9-52 24-70-6.5-16.5-5.5-51.5 2-66 20-2.5 47 8 63 22.5 19-6 39-9 63.5-9s44.5 3 62.5 8.5c15.5-14 43-24.5 63-22 7 13.5 8 48.5 1.5 65.5 16 19 24.5 44.5 24.5 70.5 0 61.5-46.5 108-113.5 116.5 17 11 28.5 35 28.5 62.5v52c0 15 12.5 23.5 27.5 17.5C441 459.5 512 369 512 257 512 115.5 397 0 255.5 0S0 115.5 0 257c0 111 70.5 203 165.5 237.5 13.5 5 26.5-4 26.5-17.5v-40c-7 3-16 5-24 5-33 0-52.5-18-66.5-51.5-5.5-13.5-11.5-21.5-23-23-6-.5-8-3-8-6 0-6 10-10.5 20-10.5 14.5 0 27 9 40 27.5 10 14.5 20.5 21 33 21s20.5-4.5 32-16c8.5-8.5 15-16 21-21"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["content.code.copy","content.tabs.link","navigation.footer","navigation.indexes","navigation.instant","navigation.path","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight"],"redirect":null,"search":"../../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.ef37db6d.min.js"></script>
+      
+      
+    
+  </body>
+</html>
