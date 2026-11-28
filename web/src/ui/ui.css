@@ -1395,14 +1395,38 @@ html:has(.ui-files) {
 .ui-filters .ui-input.ui-audit-ip {
   flex: 0 1 180px;
 }
+/* From and To stay on one line: the date range wraps as one unit. */
+.ui-audit-dates {
+  display: flex;
+  gap: var(--space-3);
+  min-width: 0;
+}
 .ui-audit-date {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
   color: var(--muted);
 }
 .ui-filters .ui-audit-date .ui-input {
   flex: 0 1 160px;
+  min-width: 0;
+}
+/* On a phone the labels go above the fields, so both dates still fit. */
+@media (max-width: 600px) {
+  .ui-audit-dates {
+    flex: 1 1 100%;
+  }
+  .ui-audit-date {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+  }
+  .ui-filters .ui-audit-date .ui-input {
+    flex: none;
+    max-width: none;
+  }
 }
 
 /* Charts of the dashboard (ADR-0052): thin lines on one axis from zero,

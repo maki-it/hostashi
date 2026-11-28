@@ -215,14 +215,16 @@ export function Audit({ query = new URLSearchParams(), onQuery = () => undefined
             value={filter.ip}
             onChange={(e) => set({ ip: e.target.value })}
           />
-          <label className="ui-audit-date">
-            {t("audit.filters.from")}
-            <input className="ui-input" type="date" value={filter.from} onChange={(e) => set({ from: e.target.value })} />
-          </label>
-          <label className="ui-audit-date">
-            {t("audit.filters.to")}
-            <input className="ui-input" type="date" value={filter.to} onChange={(e) => set({ to: e.target.value })} />
-          </label>
+          <div className="ui-audit-dates">
+            <label className="ui-audit-date">
+              {t("audit.filters.from")}
+              <input className="ui-input" type="date" value={filter.from} onChange={(e) => set({ from: e.target.value })} />
+            </label>
+            <label className="ui-audit-date">
+              {t("audit.filters.to")}
+              <input className="ui-input" type="date" value={filter.to} onChange={(e) => set({ to: e.target.value })} />
+            </label>
+          </div>
         </div>
         {entries === null ? (
           !error && <p className="ui-empty" aria-busy="true">{t("audit.loading")}</p>
