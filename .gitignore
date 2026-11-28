@@ -23,3 +23,7 @@
 
 # Binary from "go build ./cmd/hostashi" in the repository root.
 /hostashi
+
+# Website build output (ADR-0079)
+/website/site/
+/website/.cache/

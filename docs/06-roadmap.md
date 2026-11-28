@@ -1,6 +1,6 @@
 # 6. Roadmap
 
-> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](../website/docs/docs/Home.md) are current.
 
 **Assumption for all time estimates:** 2 full-time developers, one of them with Linux systems experience, frontend at least half a position. With one person the duration roughly doubles, with a larger team it does not shrink proportionally because of coordination. These are **estimates without a data basis**, please recalibrate after Phase 0.
 

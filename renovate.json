@@ -33,8 +33,21 @@
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "npm packages",
       "groupSlug": "npm-packages"
+    },
+    {
+      "description": "Website build tools (ADR-0079): one PR; uv compiles the lock file again from requirements.in",
+      "matchManagers": ["pip-compile"],
+      "groupName": "website build tools",
+      "groupSlug": "website-build-tools"
     }
   ],
+  "pip_requirements": {
+    "description": "website/requirements.txt is handled by pip-compile",
+    "enabled": false
+  },
+  "pip-compile": {
+    "managerFilePatterns": ["/^website/requirements\\.txt$/"]
+  },
   "customManagers": [
     {
       "description": "The reuse tool version in the Licenses workflow",

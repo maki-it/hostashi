@@ -1,6 +1,6 @@
 # 1. Research: CloudPanel
 
-> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](../website/docs/docs/Home.md) are current.
 
 Research as of 2026-11-17. It is based on the five public CloudPanel repositories (shallow-cloned and read). I did **not** evaluate the GitHub issues, the API was not enabled in that session. This can be done later.
 

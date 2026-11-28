@@ -2,7 +2,7 @@
 
 // Screenshots for the wiki (ADR-0043). Starts the panel's frontend with
 // Vite, answers every API call with the sample data in wiki-fixtures.mjs,
-// and writes one PNG per entry of `shots` to docs/wiki/images/.
+// and writes one PNG per entry of `shots` to website/docs/docs/images/.
 //
 //   cd web && node e2e/wiki-shots.mjs [name ...]
 //
@@ -19,7 +19,7 @@ import { answer } from "./wiki-fixtures.mjs";
 const root = resolve(import.meta.dirname, "..");
 // SHOTS_OUT, SHOTS_SCHEME (light, dark) and SHOTS_WIDTH take previews of
 // the same pages elsewhere, for example dark or at phone width.
-const out = process.env.SHOTS_OUT ? resolve(process.env.SHOTS_OUT) : resolve(root, "../docs/wiki/images");
+const out = process.env.SHOTS_OUT ? resolve(process.env.SHOTS_OUT) : resolve(root, "../website/docs/docs/images");
 const scheme = process.env.SHOTS_SCHEME === "dark" ? "dark" : "light";
 const width = Number(process.env.SHOTS_WIDTH) || 1280;
 

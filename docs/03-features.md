@@ -1,6 +1,6 @@
 # 3. Feature matrix
 
-> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](wiki/Home.md) are current.
+> **Planning document.** Written in November 2026 during the planning phase, before the first release, and kept as the record of why Hostashi is built the way it is. Where it differs from the product, the [ADRs](adr/) and the [user documentation](../website/docs/docs/Home.md) are current.
 
 **Priority:** `P0` = no release without it, `P1` = needed for 1.0, `P2` = afterwards.
 **Phase:** see [roadmap](06-roadmap.md). A = alpha (MVP), B = beta, 1 = release 1.0, 2+ = later.
