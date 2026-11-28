@@ -28,6 +28,7 @@ type fakeScans struct {
 	rtPolls     []agentapi.ScanRealtimePollRequest
 	rtFound     []agentapi.RealtimeFinding
 	signatures  string
+	statusErr   error
 }
 
 func (f *fakeScans) ScanEngineStatus(context.Context) (agentapi.ScanEngineStatus, error) {
@@ -86,6 +87,10 @@ func (f *fakeScans) ScanStart(_ context.Context, req agentapi.ScanStartRequest) 
 func (f *fakeScans) ScanStatus(_ context.Context, req agentapi.ScanStatusRequest) (agentapi.ScanStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.statusErr != nil {
+		return agentapi.ScanStatus{}, f.statusErr
+	}
 
 	if st, ok := f.state[req.ID]; ok {
 		return st, nil
@@ -699,5 +704,68 @@ func TestWaitsForOther(t *testing.T) {
 		if got := waitsForOther(c.active, 1); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// The site page asks the agent for the progress of a running scan, so the
+// bar moves between the polls of RunScans; without an answer it shows the
+// last poll.
+func TestSiteScanLiveProgress(t *testing.T) {
+	s, f := scanService(t)
+	ctx := t.Context()
+
+	if _, err := s.SetScanEngine(ctx, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := s.StartScan(ctx, 1, "blog", store.ScanSourcePanel, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.finish(r.ID, agentapi.ScanStatus{State: agentapi.ScanRunning, Progress: &agentapi.ScanProgress{Scanned: 10, Total: 100}})
+	s.pollScans(ctx) // starts the run
+	s.pollScans(ctx) // stores 10 of 100
+
+	progress := func() agentapi.ScanProgress {
+		t.Helper()
+
+		v, err := s.SiteScan(ctx, "blog")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return v.Progress[r.ID]
+	}
+
+	// Newer than the last poll.
+	f.finish(r.ID, agentapi.ScanStatus{State: agentapi.ScanRunning, Progress: &agentapi.ScanProgress{Scanned: 55, Total: 100}})
+
+	if p := progress(); p.Scanned != 55 {
+		t.Fatalf("live progress %+v", p)
+	}
+
+	// Asking does not replace what RunScans stored.
+	if p, _ := s.scanProgress.Load(r.ID); p.(agentapi.ScanProgress).Scanned != 10 {
+		t.Fatalf("stored %+v", p)
+	}
+
+	// The agent does not answer: the last poll.
+	f.mu.Lock()
+	f.statusErr = errors.New("agent down")
+	f.mu.Unlock()
+
+	if p := progress(); p.Scanned != 10 {
+		t.Fatalf("agent down %+v", p)
+	}
+
+	// The run ended at the agent but RunScans has not stored it yet.
+	f.mu.Lock()
+	f.statusErr = nil
+	f.mu.Unlock()
+	f.finish(r.ID, agentapi.ScanStatus{State: agentapi.ScanSucceeded})
+
+	if p := progress(); p.Scanned != 10 {
+		t.Fatalf("ended %+v", p)
 	}
 }
