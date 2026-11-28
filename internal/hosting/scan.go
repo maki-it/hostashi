@@ -186,6 +186,8 @@ type SiteScan struct {
 	Findings []store.ScanFinding
 	// NextScheduled is the next slot of the schedule, zero when off.
 	NextScheduled time.Time
+	// Progress is how far the running runs are, by run id.
+	Progress map[int64]agentapi.ScanProgress
 }
 
 func (s *Service) scanSite(ctx context.Context, name string) (store.Site, error) {
@@ -224,7 +226,19 @@ func (s *Service) SiteScan(ctx context.Context, name string) (SiteScan, error) {
 		return SiteScan{}, err
 	}
 
-	out := SiteScan{Schedule: sched, Runs: runs, Findings: found}
+	out := SiteScan{Schedule: sched, Runs: runs, Findings: found, Progress: map[int64]agentapi.ScanProgress{}}
+
+	for _, r := range runs {
+		if r.State != store.ScanRunning {
+			continue
+		}
+
+		if p, ok := s.scanProgress.Load(r.ID); ok {
+			out.Progress[r.ID] = p.(agentapi.ScanProgress)
+		} else {
+			out.Progress[r.ID] = agentapi.ScanProgress{}
+		}
+	}
 	if sched != store.ScanScheduleOff {
 		out.NextScheduled = nextScanSlot(site.Name, sched, s.now())
 	}
@@ -447,9 +461,17 @@ func (s *Service) pollScan(ctx context.Context, site store.Site, r store.ScanRun
 		return true
 	}
 
-	switch st.State {
-	case agentapi.ScanRunning:
+	if st.State == agentapi.ScanRunning {
+		if st.Progress != nil {
+			s.scanProgress.Store(r.ID, *st.Progress)
+		}
+
 		return true
+	}
+
+	s.scanProgress.Delete(r.ID)
+
+	switch st.State {
 	case agentapi.ScanUnknown:
 		s.failScan(ctx, r, "the server lost track of this scan")
 

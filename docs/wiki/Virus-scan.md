@@ -35,6 +35,7 @@ Open the site's **Security › Virus scan** tab.
 ![The Virus scan tab of a site](images/site-malware.png)
 
 - **Scan now** scans the site at once, or after the site that is being scanned now.
+- While a scan runs, a bar shows how many files it has read of the files in the site. The server lists the files first ("finding the total"); large files take longer, so the bar can pause.
 - **Schedule**: weekly (the default), every night, or only on request. Scheduled scans run between 1 and 5 at night, server time, each site at its own fixed time.
 
 ClamAV reads every file in the site's home, read only and without network, as the site's own user. The folder `.cache` is skipped. Site databases are not scanned.

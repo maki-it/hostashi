@@ -6898,6 +6898,22 @@
         ],
         "type": "object"
       },
+      "ScanProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "scanned": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scanned",
+          "total"
+        ],
+        "type": "object"
+      },
       "ScanRun": {
         "additionalProperties": false,
         "properties": {
@@ -6929,6 +6945,16 @@
             "type": [
               "array",
               "null"
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanProgress"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "source": {

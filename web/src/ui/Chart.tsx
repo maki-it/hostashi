@@ -161,6 +161,36 @@ export function LineChart({ title, times, series, format, max, days = false }: L
   );
 }
 
+type ProgressProps = { label: string; value: number; max: number; detail: string };
+
+/**
+ * Progress is a bar of work done so far, such as the files a scan has
+ * read. Unlike Meter it never turns warn or err: a full bar is good news.
+ * With max 0 the total is not known yet and the bar stays empty.
+ */
+export function Progress({ label, value, max, detail }: ProgressProps) {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div className="ui-meter">
+      <div className="ui-meter-head">
+        <strong>{label}</strong>
+        <span>{detail}</span>
+      </div>
+      <div
+        className="ui-meter-track"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={max > 0 ? Math.round(pct) : undefined}
+        aria-valuetext={detail}
+      >
+        <div className="ui-meter-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 type MeterProps = { label: string; value: number; max: number; detail: string };
 
 /** Meter is one horizontal bar of a share, such as the disk use of one file system. */

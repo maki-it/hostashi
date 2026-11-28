@@ -191,6 +191,18 @@ func TestScanRunAndFindings(t *testing.T) {
 		t.Fatalf("started %+v", f.started)
 	}
 
+	// A running run carries the progress of the last poll.
+	if v, _ := s.SiteScan(ctx, "blog"); v.Progress[r1.ID] != (agentapi.ScanProgress{}) || len(v.Progress) != 1 {
+		t.Fatalf("progress before a poll: %+v", v.Progress)
+	}
+
+	f.finish(r1.ID, agentapi.ScanStatus{State: agentapi.ScanRunning, Progress: &agentapi.ScanProgress{Scanned: 40, Total: 100}})
+	s.pollScans(ctx)
+
+	if v, _ := s.SiteScan(ctx, "blog"); v.Progress[r1.ID] != (agentapi.ScanProgress{Scanned: 40, Total: 100}) {
+		t.Fatalf("progress: %+v", v.Progress)
+	}
+
 	f.finish(r1.ID, agentapi.ScanStatus{State: agentapi.ScanSucceeded, Findings: []agentapi.ScanFinding{
 		{Path: "a.php", Signature: "Php.Shell-1", SHA256: shaA, Size: 3},
 		{Path: "b.php", Signature: "Php.Shell-1", SHA256: shaB, Size: 4},
@@ -209,6 +221,14 @@ func TestScanRunAndFindings(t *testing.T) {
 	v, err := s.SiteScan(ctx, "blog")
 	if err != nil || len(v.Findings) != 2 || v.Runs[0].State != store.ScanSucceeded || v.Runs[0].Found != 2 || v.Runs[0].NewFound != 2 {
 		t.Fatalf("site scan %+v %v", v, err)
+	}
+
+	if len(v.Progress) != 0 {
+		t.Fatalf("progress of a finished run: %+v", v.Progress)
+	}
+
+	if _, ok := s.scanProgress.Load(r1.ID); ok {
+		t.Fatal("progress kept after the run")
 	}
 
 	var a, b store.ScanFinding

@@ -42,7 +42,26 @@ export type ScanRun = {
   finishedAt: string;
   /** The files and folders a scan of a selection covered, relative to the home; empty for the whole site. */
   paths?: string[];
+  /** How far a running scan is; only set while it runs. */
+  progress?: ScanProgress;
 };
+
+/**
+ * ScanProgress counts files: scanned is how many ClamAV has reported on so
+ * far, total how many the agent counted in the home before (0 while it
+ * still counts). total is an estimate: files change during a scan.
+ */
+export type ScanProgress = { scanned: number; total: number };
+
+/**
+ * progressPercent is how much of a scan is done, in whole percent. It stays
+ * at 99 until the run has finished, since the count is an estimate; null
+ * while the total is not known yet.
+ */
+export function progressPercent(p: ScanProgress): number | null {
+  if (p.total <= 0) return null;
+  return Math.min(99, Math.floor((p.scanned / p.total) * 100));
+}
 
 export type FindingState = "open" | "ignored" | "quarantined" | "gone" | "restored";
 

@@ -180,6 +180,9 @@ type Service struct {
 	deployKick chan struct{}  // wakes RunDeploys
 	scans      ScanAgent      // nil: no malware scans (ADR-0064)
 	scanKick   chan struct{}  // wakes RunScans
+	// scanProgress is the progress of the running scans by run id, as
+	// the last poll got it from the agent.
+	scanProgress sync.Map
 	// rtCursor and rtPending belong to RunScans: where the real-time log
 	// was read to (0 after a start: the agent's log is read again, known
 	// findings are not reported twice) and the findings waiting for an

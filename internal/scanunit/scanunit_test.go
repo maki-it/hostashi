@@ -62,7 +62,7 @@ func newManager(t *testing.T) (*Manager, *fakeCtl, string) {
 
 	ctl := &fakeCtl{props: map[string]string{"ActiveState": "inactive"}}
 	m := &Manager{
-		Dir: filepath.Join(base, "state"), UnitDir: filepath.Join(base, "units"), LogDir: filepath.Join(base, "log"),
+		Dir: filepath.Join(base, "state"), UnitDir: filepath.Join(base, "units"), LogDir: filepath.Join(base, "log"), ListDir: filepath.Join(base, "lists"),
 		QuarantineDir: filepath.Join(base, "q"), DatabaseDir: "/var/lib/clamav",
 		Site: func(s string) (Site, error) {
 			if s != "blog" {
@@ -84,7 +84,7 @@ func sum(b string) string {
 }
 
 func TestDropInContent(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "", nil)
+	b, err := DropInContent("blog", Site{Home: "/home/blog.example"}, []string{"/srv/pool2"}, "/var/lib/clamav", "", "/var/lib/hostashi-scan/blog.list")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestDropInContent(t *testing.T) {
 		"RequiresMountsFor=/home/blog.example\n",
 		"TemporaryFileSystem=/srv/pool2:ro\n",
 		"BindReadOnlyPaths=/home/blog.example\n",
-		"ExecStart=\nExecStart=/usr/bin/clamscan --recursive --infected --no-summary --stdout --database=/var/lib/clamav \"--exclude-dir=^/home/blog\\\\.example/\\\\.cache$$\" \"/home/blog.example\"\n",
+		"ExecStart=\nExecStart=/usr/bin/clamscan --recursive --no-summary --stdout --database=/var/lib/clamav \"--exclude-dir=^/home/blog\\\\.example/\\\\.cache$$\" \"--file-list=/var/lib/hostashi-scan/blog.list\"\n",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("drop-in lacks %q:\n%s", want, s)
@@ -106,18 +106,22 @@ func TestDropInContent(t *testing.T) {
 	}
 
 	for _, bad := range []string{"/home/a b", "home/x", "/home/x/../y", "/home/$x", "/home/%i"} {
-		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", "", nil); err == nil {
+		if _, err := DropInContent("blog", Site{Home: bad}, nil, "/var/lib/clamav", "", "/var/lib/hostashi-scan/blog.list"); err == nil {
 			t.Errorf("home %q accepted", bad)
 		}
 	}
 
-	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", "", nil); err == nil {
+	if _, err := DropInContent("Bad", Site{Home: "/home/x"}, nil, "/var/lib/clamav", "", "/var/lib/hostashi-scan/blog.list"); err == nil {
 		t.Error("bad site accepted")
 	}
 
+	if _, err := DropInContent("blog", Site{Home: "/home/x"}, nil, "/var/lib/clamav", "", "/var/lib/a b.list"); err == nil {
+		t.Error("bad list accepted")
+	}
+
 	// With the real-time mode's clamd, clamdscan hands it the open files.
-	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", nil)
-	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --stream --infected --no-summary --stdout \"/home/blog\"\n") {
+	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", "/var/lib/hostashi-scan/blog.list")
+	if err != nil || !strings.Contains(string(b), "ExecStart=\nExecStart=/usr/bin/clamdscan --config-file=/etc/hostashi-scan/blog.conf --stream --no-summary --stdout \"--file-list=/var/lib/hostashi-scan/blog.list\"\n") {
 		t.Errorf("clamdscan drop-in: %v\n%s", err, b)
 	}
 }
@@ -126,10 +130,16 @@ func TestStartAndStatus(t *testing.T) {
 	ctx := context.Background()
 	m, ctl, home := newManager(t)
 
+	if err := os.WriteFile(filepath.Join(home, "index.php"), []byte("ok"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
 	st, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 7})
 	if err != nil || st.State != agentapi.ScanRunning {
 		t.Fatalf("start: %+v %v", st, err)
 	}
+
+	m.WaitLists()
 
 	if len(ctl.started) != 1 || ctl.started[0] != "hostashi-scan@blog.service" {
 		t.Fatalf("started %v", ctl.started)
@@ -143,8 +153,20 @@ func TestStartAndStatus(t *testing.T) {
 		t.Fatalf("second start: %v", err)
 	}
 
-	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanRunning {
-		t.Fatalf("running: %+v", st)
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.State != agentapi.ScanRunning || st.Progress == nil || *st.Progress != (agentapi.ScanProgress{Scanned: 0, Total: 1}) {
+		t.Fatalf("running: %+v %+v", st, st.Progress)
+	}
+
+	if b, err := os.ReadFile(m.ListFile("blog")); err != nil || string(b) != home+"/index.php\n" {
+		t.Fatalf("list %q %v", b, err)
+	}
+
+	if err := os.WriteFile(m.LogFile("blog"), []byte(home+"/index.php: OK\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if st, _ := m.Status(ctx, agentapi.ScanStatusRequest{Site: "blog", ID: 7}); st.Progress == nil || st.Progress.Scanned != 1 {
+		t.Fatalf("progress: %+v", st.Progress)
 	}
 
 	// The run found one file.
@@ -457,7 +479,8 @@ func TestFirstError(t *testing.T) {
 	for _, tc := range []struct{ log, want string }{
 		{"", ""},
 		{"/home/blog/a.php: X FOUND\nLibClamAV Warning: old\n", ""},
-		{"ERROR: Can't access file /home/blog/x\n", "ERROR: Can't access file /home/blog/x"},
+		{"ERROR: Can't access file /srv/other/x\n", "ERROR: Can't access file /srv/other/x"},
+		{"/home/blog/x: Access denied\n", "/home/blog/x: Access denied"},
 		{"LibClamAV Error: cli_loaddbdir(): no db\nERROR: later\n", "LibClamAV Error: cli_loaddbdir(): no db"},
 		{"/home/blog/\x1b[31mx: Excluded\n/home/blog/\x1bsock: Not supported file type ERROR\n", "/home/blog/ sock: Not supported file type ERROR"},
 		{"/home/blog/" + strings.Repeat("a", 600) + ": Permission denied ERROR\n", "/home/blog/" + strings.Repeat("a", maxErrorLine-len("/home/blog/")) + "..."},
@@ -467,12 +490,12 @@ func TestFirstError(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got := firstError(name); got != tc.want {
+		if got, _ := firstError(name, "/home/blog"); got != tc.want {
 			t.Errorf("firstError(%q) = %q, want %q", tc.log, got, tc.want)
 		}
 	}
 
-	if got := firstError(filepath.Join(dir, "missing")); got != "" {
+	if got, _ := firstError(filepath.Join(dir, "missing"), "/home/blog"); got != "" {
 		t.Errorf("missing log: %q", got)
 	}
 }
@@ -535,29 +558,6 @@ func TestClientConfigContent(t *testing.T) {
 	}
 }
 
-func TestDropInContentTargets(t *testing.T) {
-	b, err := DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "", []string{"htdocs/wp-content", "100% \"odd\" $name.php"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := "\"/home/blog/htdocs/wp-content\" \"/home/blog/100%% \\\"odd\\\" $$name.php\"\n"
-	if !strings.Contains(string(b), want) || strings.Contains(string(b), "\"/home/blog\" ") || strings.Contains(string(b), "\"/home/blog\"\n") {
-		t.Errorf("targets: want %q in\n%s", want, b)
-	}
-
-	b, err = DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "/etc/hostashi-scan/blog.conf", []string{"htdocs"})
-	if err != nil || !strings.HasSuffix(string(b), "--stdout \"/home/blog/htdocs\"\n") {
-		t.Errorf("clamdscan targets: %v\n%s", err, b)
-	}
-
-	for _, bad := range [][]string{{"../other"}, {"/etc"}, {"a/../b"}, {"a", "a"}, {"x\n"}, {"\xff"}, {""}} {
-		if _, err := DropInContent("blog", Site{Home: "/home/blog"}, nil, "/var/lib/clamav", "", bad); err == nil {
-			t.Errorf("targets %q accepted", bad)
-		}
-	}
-}
-
 func TestStartTargets(t *testing.T) {
 	ctx := context.Background()
 	m, ctl, home := newManager(t)
@@ -584,17 +584,29 @@ func TestStartTargets(t *testing.T) {
 		t.Fatalf("started %v", ctl.started)
 	}
 
+	if err := os.WriteFile(filepath.Join(home, "htdocs", "up", "a.jpg"), []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "other.php"), []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := m.Start(ctx, agentapi.ScanStartRequest{Site: "blog", ID: 3, Paths: []string{"htdocs/up", "htdocs/index.php"}}); err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(m.UnitDir, "hostashi-scan@blog.service.d", DropIn))
-	if err != nil || !strings.Contains(string(b), appQuote(home+"/htdocs/up")+" "+appQuote(home+"/htdocs/index.php")+"\n") {
-		t.Fatalf("drop-in %v\n%s", err, b)
+	m.WaitLists()
+
+	b, err := os.ReadFile(m.ListFile("blog"))
+	if err != nil || string(b) != home+"/htdocs/up/a.jpg\n"+home+"/htdocs/index.php\n" {
+		t.Fatalf("list %q %v", b, err)
+	}
+
+	if len(ctl.started) != 1 {
+		t.Fatalf("started %v", ctl.started)
 	}
 }
-
-func appQuote(s string) string { return "\"" + strings.ReplaceAll(s, "%", "%%") + "\"" }
 
 func TestValidateScanTargetsLimit(t *testing.T) {
 	many := make([]string, agentapi.MaxScanTargets+1)

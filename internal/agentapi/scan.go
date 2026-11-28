@@ -158,6 +158,16 @@ type ScanStatus struct {
 	// Dropped counts findings over MaxScanFindings and lines that did not
 	// name a regular file inside the home.
 	Dropped int `json:"dropped,omitempty"`
+	// Progress is set while the run is running.
+	Progress *ScanProgress `json:"progress,omitempty"`
+}
+
+// ScanProgress is how far a running scan is: Scanned files of Total, the
+// files the agent listed for it (ADR-0064, progress addendum). Total is 0 while
+// the agent still lists them, or for a home with too many files to list.
+type ScanProgress struct {
+	Scanned int64 `json:"scanned"`
+	Total   int64 `json:"total"`
 }
 
 // ScanFinding is one file ClamAV flagged. Path is relative to the site's

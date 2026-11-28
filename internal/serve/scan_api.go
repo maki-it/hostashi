@@ -69,6 +69,16 @@ type scanRunJSON struct {
 	// Paths are the files and folders a scan of a selection covered,
 	// relative to the site's home; empty for the whole site.
 	Paths []string `json:"paths"`
+	// Progress is set while the scan runs.
+	Progress *scanProgressJSON `json:"progress,omitempty"`
+}
+
+// scanProgressJSON is how far a running scan is: Scanned of Total files.
+// Total is 0 while the server still lists the files, or when a site has
+// too many to list.
+type scanProgressJSON struct {
+	Scanned int64 `json:"scanned"`
+	Total   int64 `json:"total"`
 }
 
 // scanStartRequest narrows a scan to files and folders; without a body,
@@ -244,7 +254,12 @@ func registerScans(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		}
 
 		for _, run := range v.Runs {
-			out.Runs = append(out.Runs, toScanRunJSON(run))
+			j := toScanRunJSON(run)
+			if p, ok := v.Progress[run.ID]; ok {
+				j.Progress = &scanProgressJSON{Scanned: p.Scanned, Total: p.Total}
+			}
+
+			out.Runs = append(out.Runs, j)
 		}
 
 		for _, f := range v.Findings {
