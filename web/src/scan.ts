@@ -83,6 +83,8 @@ export type SiteScan = {
   schedule: ScanSchedule;
   /** The next scheduled scan, "" when off. */
   nextScheduled: string;
+  /** A queued run waits for another site's scan; without it, it is about to start. */
+  waitingForOther: boolean;
   runs: ScanRun[];
   findings: ScanFinding[];
 };

@@ -8036,6 +8036,9 @@
           },
           "schedule": {
             "type": "string"
+          },
+          "waitingForOther": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -8043,7 +8046,8 @@
           "findings",
           "nextScheduled",
           "runs",
-          "schedule"
+          "schedule",
+          "waitingForOther"
         ],
         "type": "object"
       },

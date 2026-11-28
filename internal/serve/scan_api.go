@@ -110,9 +110,12 @@ type siteScanJSON struct {
 	// Schedule is "off", "daily" or "weekly".
 	Schedule string `json:"schedule"`
 	// NextScheduled is the next scheduled scan, RFC 3339; "" when off.
-	NextScheduled string            `json:"nextScheduled"`
-	Runs          []scanRunJSON     `json:"runs"`
-	Findings      []scanFindingJSON `json:"findings"`
+	NextScheduled string `json:"nextScheduled"`
+	// WaitingForOther is true while the site's queued run waits for the
+	// scan of another site; a queued run without it is about to start.
+	WaitingForOther bool              `json:"waitingForOther"`
+	Runs            []scanRunJSON     `json:"runs"`
+	Findings        []scanFindingJSON `json:"findings"`
 }
 
 type scanScheduleRequest struct {
@@ -245,7 +248,7 @@ func registerScans(mux *routeMux, a authn, svc *hosting.Service, log *slog.Logge
 		}
 
 		out := siteScanJSON{
-			Engine: agentapi.ScanEngineOff, Schedule: v.Schedule, NextScheduled: rfc3339(v.NextScheduled),
+			Engine: agentapi.ScanEngineOff, Schedule: v.Schedule, NextScheduled: rfc3339(v.NextScheduled), WaitingForOther: v.WaitingForOther,
 			Runs: make([]scanRunJSON, 0, len(v.Runs)), Findings: make([]scanFindingJSON, 0, len(v.Findings)),
 		}
 
