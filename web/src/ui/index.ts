@@ -6,7 +6,7 @@
 export { Badge, type Tone } from "./Badge";
 export { Button, IconButton, IconLink, RowActions, type ButtonVariant } from "./Button";
 export { Card } from "./Card";
-export { LineChart, Meter, type Series } from "./Chart";
+export { LineChart, Meter, Progress, type Series } from "./Chart";
 export { CopyButton, CopyValue, copyText } from "./Copy";
 export { Field } from "./Field";
 export { JobCard, useJobCard, type JobState } from "./JobCard";

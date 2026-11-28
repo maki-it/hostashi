@@ -63,9 +63,8 @@ const (
 	// startGrace is how long a queued start may take before the run
 	// counts as failed. Runs wait for each other in the panel, not here.
 	startGrace = 5 * time.Minute
-	// maxLogLine and maxLogLines bound what is read of a log.
-	maxLogLine  = 64 << 10
-	maxLogLines = 200_000
+	// maxLogLine bounds a line read of a log.
+	maxLogLine = 64 << 10
 	// maxErrorTail is how much of the log a failed run carries.
 	maxErrorTail = 2048
 	// maxErrorLine bounds the error line a partial run carries.
@@ -119,6 +118,7 @@ type Manager struct {
 	QuarantineDir string // default DefaultQuarantineDir
 	DatabaseDir   string // default DefaultDatabaseDir
 	ClientDir     string // default DefaultClientDir
+	ListDir       string // default DefaultListDir
 	// Site returns the account of a site user.
 	Site func(site string) (Site, error)
 	// Hidden returns the pools the unit must hide (sites.HiddenPaths).
@@ -132,6 +132,10 @@ type Manager struct {
 	now func() time.Time
 
 	mu sync.Mutex
+	// prog is the progress of the running scans, by site (under mu).
+	prog map[string]*progress
+	// lists counts the list walks still going; tests wait for them.
+	lists sync.WaitGroup
 }
 
 // Unit is the scan unit of a site.
@@ -254,19 +258,19 @@ func safePath(p string) bool {
 }
 
 // DropInContent ties the unit to the site's home, read only, and sets the
-// scan: clamscan over the home with the fixed signature directory, or with
-// a clamdscan configuration (clientConf, see ClientConfigContent) clamdscan,
-// which hands each open file to the running clamd of the real-time mode.
-// The template holds the sandbox, the slice, the log and the exit codes.
-// targets, relative to the home and checked by the caller, narrow the scan
-// to those files and folders; none scans the whole home.
-func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf string, targets []string) ([]byte, error) {
+// scan: clamscan with the fixed signature directory, or with a clamdscan
+// configuration (clientConf, see ClientConfigContent) clamdscan, which
+// hands each file to the running clamd of the real-time mode. Both read
+// the files to scan from list (see writeList) and print a line for each,
+// which is what the progress counts. The template holds the sandbox, the
+// slice, the log and the exit codes.
+func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf, list string) ([]byte, error) {
 	if err := agentapi.ValidateSiteUser(site); err != nil {
 		return nil, err
 	}
 
-	if !safePath(acct.Home) || !safePath(dbDir) || (clientConf != "" && !safePath(clientConf)) {
-		return nil, fmt.Errorf("scanunit: invalid home %q or database directory %q", acct.Home, dbDir)
+	if !safePath(acct.Home) || !safePath(dbDir) || (clientConf != "" && !safePath(clientConf)) || !safePath(list) {
+		return nil, fmt.Errorf("scanunit: invalid home %q, database directory %q or list %q", acct.Home, dbDir, list)
 	}
 
 	unit, service := sites.UnitIsolation(acct.Home, hidden)
@@ -284,7 +288,9 @@ func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf st
 	w("WorkingDirectory=", acct.Home)
 	w("Environment=HOME=", acct.Home)
 
-	cmd := []string{Clamscan, "--recursive", "--infected", "--no-summary", "--stdout", "--database=" + dbDir}
+	// --recursive: a list names a folder where a file name could not
+	// stand on a line, or when the home has too many files.
+	cmd := []string{Clamscan, "--recursive", "--no-summary", "--stdout", "--database=" + dbDir}
 	for _, d := range Excluded {
 		cmd = append(cmd, appunit.Quote("--exclude-dir=^"+regexp.QuoteMeta(acct.Home+"/"+d)+"$"))
 	}
@@ -293,20 +299,10 @@ func DropInContent(site string, acct Site, hidden []string, dbDir, clientConf st
 		// --stream, not --fdpass: the unit opens files in its own mount
 		// namespace, and AppArmor refuses clamd a descriptor whose path
 		// it cannot resolve ("disconnected path", web3 2026-11-25).
-		cmd = []string{Clamdscan, "--config-file=" + clientConf, "--stream", "--infected", "--no-summary", "--stdout"}
+		cmd = []string{Clamdscan, "--config-file=" + clientConf, "--stream", "--no-summary", "--stdout"}
 	}
 
-	if err := agentapi.ValidateScanTargets(targets); err != nil {
-		return nil, err
-	}
-
-	if len(targets) == 0 {
-		cmd = append(cmd, appunit.Quote(acct.Home))
-	}
-
-	for _, t := range targets {
-		cmd = append(cmd, appunit.Quote(acct.Home+"/"+t))
-	}
+	cmd = append(cmd, appunit.Quote("--file-list="+list))
 
 	w("ExecStart=")
 	w("ExecStart=", strings.Join(cmd, " "))
@@ -341,7 +337,7 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 	}
 
 	r, ok := st[req.Site]
-	if m.phase(props["ActiveState"], r, ok) == agentapi.ScanRunning {
+	if m.phase(req.Site, props["ActiveState"], r, ok) == agentapi.ScanRunning {
 		return agentapi.ScanStatus{}, ErrBusy
 	}
 
@@ -383,7 +379,7 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 		}
 	}
 
-	content, err := DropInContent(req.Site, acct, hidden, m.dbDir(), clientConf, req.Paths)
+	content, err := DropInContent(req.Site, acct, hidden, m.dbDir(), clientConf, m.ListFile(req.Site))
 	if err != nil {
 		return agentapi.ScanStatus{}, err
 	}
@@ -413,23 +409,100 @@ func (m *Manager) Start(ctx context.Context, req agentapi.ScanStartRequest) (age
 
 	_ = m.Ctl.ResetFailed(ctx, unit)
 
+	// The output of the last run would count as progress of this one.
+	_ = os.Remove(m.LogFile(req.Site))
+
 	st[req.Site] = run{ID: req.ID, Started: m.clock().UTC()}
 	if err := m.save(st); err != nil {
 		return agentapi.ScanStatus{}, err
 	}
 
-	if err := m.Ctl.StartNoBlock(ctx, unit); err != nil {
-		return agentapi.ScanStatus{}, err
-	}
+	// The list may take a while on a large home: it is written in the
+	// background, and the unit starts once it is there. Until then the
+	// run counts as running (see phase).
+	wctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	m.setProgress(req.Site, &progress{id: req.ID, listing: true, atStart: true, cancel: cancel})
+
+	m.lists.Add(1)
+
+	go func() {
+		defer m.lists.Done()
+		defer cancel()
+
+		m.list(wctx, req.Site, req.ID, acct, req.Paths)
+	}()
 
 	m.log().InfoContext(ctx, "scan started", "site", req.Site, "id", req.ID)
 
-	return agentapi.ScanStatus{Site: req.Site, ID: req.ID, State: agentapi.ScanRunning}, nil
+	return agentapi.ScanStatus{Site: req.Site, ID: req.ID, State: agentapi.ScanRunning, Progress: &agentapi.ScanProgress{}}, nil
 }
 
+// setProgress replaces the progress of a site's scan, ending a list walk
+// of an earlier one. Callers hold m.mu.
+func (m *Manager) setProgress(site string, p *progress) {
+	if m.prog == nil {
+		m.prog = map[string]*progress{}
+	}
+
+	if old := m.prog[site]; old != nil && old.cancel != nil {
+		old.cancel()
+	}
+
+	if p == nil {
+		delete(m.prog, site)
+
+		return
+	}
+
+	m.prog[site] = p
+}
+
+// list writes the list of run id and starts its unit, unless another run
+// or the removal of the site came first.
+func (m *Manager) list(ctx context.Context, site string, id int64, acct Site, targets []string) {
+	n, err := writeList(ctx, m.ListFile(site), acct.Home, targets, acct.GID)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	p := m.prog[site]
+	if p == nil || p.id != id || ctx.Err() != nil {
+		return
+	}
+
+	p.listing = false
+
+	if err != nil {
+		m.log().ErrorContext(ctx, "scan list", "site", site, "id", id, "err", err)
+		p.err = "the files of the site could not be listed"
+
+		return
+	}
+
+	p.total = n
+
+	if err := m.Ctl.StartNoBlock(ctx, Unit(site)); err != nil {
+		m.log().ErrorContext(ctx, "start scan", "site", site, "id", id, "err", err)
+		p.err = "the scan did not start"
+	}
+}
+
+// WaitLists waits for the list walks still going (tests).
+func (m *Manager) WaitLists() { m.lists.Wait() }
+
 // phase maps the unit's ActiveState to the state of the stored run r, as
-// in deployunit: the template has RemainAfterExit=yes.
-func (m *Manager) phase(state string, r run, ok bool) string {
+// in deployunit: the template has RemainAfterExit=yes. While the agent
+// still writes the run's list, the run is running. Callers hold m.mu.
+func (m *Manager) phase(site, state string, r run, ok bool) string {
+	if p := m.prog[site]; ok && p != nil && p.id == r.ID {
+		switch {
+		case p.listing:
+			return agentapi.ScanRunning
+		case p.err != "" && state == "inactive":
+			return agentapi.ScanFailed
+		}
+	}
+
 	switch state {
 	case "activating", "deactivating", "reloading":
 		return agentapi.ScanRunning
@@ -508,9 +581,32 @@ func (m *Manager) Status(ctx context.Context, req agentapi.ScanStatusRequest) (a
 		return out, err
 	}
 
-	switch m.phase(props["ActiveState"], r, true) {
+	p := m.prog[req.Site]
+	if p != nil && p.id != req.ID {
+		p = nil
+	}
+
+	if p != nil && p.err != "" && props["ActiveState"] == "inactive" {
+		out.State, out.Error = agentapi.ScanFailed, p.err
+
+		return out, nil
+	}
+
+	switch m.phase(req.Site, props["ActiveState"], r, true) {
 	case agentapi.ScanRunning:
 		out.State = agentapi.ScanRunning
+
+		// After a restart of the agent, the list and the log tell.
+		if p == nil {
+			p = &progress{id: req.ID, total: countLines(m.ListFile(req.Site)), atStart: true}
+			m.setProgress(req.Site, p)
+		}
+
+		if !p.listing {
+			p.advance(m.LogFile(req.Site))
+		}
+
+		out.Progress = p.report()
 
 		return out, nil
 	case agentapi.ScanSucceeded:
@@ -529,9 +625,13 @@ func (m *Manager) Status(ctx context.Context, req agentapi.ScanStatusRequest) (a
 	}
 
 	if props["ExecMainStatus"] == exitErrors {
-		out.Error = "some files could not be scanned"
-		if e := firstError(m.LogFile(req.Site)); e != "" {
-			out.Error += ": " + e
+		// Files deleted between the list and the scan are no error: a
+		// busy site removes cache files all the time.
+		if e, gone := firstError(m.LogFile(req.Site), acct.Home); e != "" || !gone {
+			out.Error = "some files could not be scanned"
+			if e != "" {
+				out.Error += ": " + e
+			}
 		}
 	}
 
@@ -569,8 +669,8 @@ func failReason(result string) string {
 	return "the scan failed (" + result + ")"
 }
 
-// ParseLog reads clamscan's output (--infected --stdout) and returns the
-// findings below home: lines "<path>: <signature> FOUND" whose path is a
+// ParseLog reads the scanner's output (--stdout, a line per file) and
+// returns the findings below home: lines "<path>: <signature> FOUND" whose path is a
 // regular file inside home, with its SHA-256 and size. The log is the
 // output of a run as the site user over files the site user controls, so
 // every line is untrusted: a file name with a newline can make up a line,
@@ -587,7 +687,9 @@ func ParseLog(r io.Reader, home string) (findings []agentapi.ScanFinding, droppe
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 4096), maxLogLine)
 
-	for n := 0; n < maxLogLines && sc.Scan(); n++ {
+	// No bound on the lines: the log has one per file of the home, and
+	// the findings are bounded by MaxScanFindings.
+	for sc.Scan() {
 		line, ok := strings.CutSuffix(sc.Text(), " FOUND")
 		if !ok {
 			continue
@@ -668,45 +770,79 @@ func hashFile(root *os.Root, rel string) (string, int64, error) {
 	return hex.EncodeToString(h.Sum(nil)), fi.Size(), nil
 }
 
-// tail is the end of a log, at most maxErrorTail bytes on one line.
-// firstError returns the first line of a log that reports an error of
-// clamscan or clamdscan ("<path>: <reason> ERROR", "ERROR: ...",
-// "LibClamAV Error: ..."), cut to maxErrorLine and with control
-// characters replaced; "" if there is none.
-func firstError(name string) string {
+// clean replaces control characters and invalid UTF-8 of a log line.
+func clean(line string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+
+		return r
+	}, strings.ToValidUTF8(line, "?"))
+}
+
+// vanished returns the file a line says is gone, as clamscan ("<path>: No
+// such file or directory") and clamdscan ("ERROR: Can't access file
+// <path>") report a listed file deleted before its turn.
+func vanished(line string) (string, bool) {
+	if p, ok := strings.CutSuffix(line, ": No such file or directory"); ok {
+		return p, true
+	}
+
+	return strings.CutPrefix(line, "ERROR: Can't access file ")
+}
+
+// isError reports whether a log line is an error of clamscan or clamdscan
+// ("<path>: <reason> ERROR", "ERROR: ...", "LibClamAV Error: ...",
+// "<path>: Access denied").
+func isError(line string) bool {
+	return strings.HasSuffix(line, " ERROR") || strings.HasPrefix(line, "ERROR: ") ||
+		strings.HasPrefix(line, "LibClamAV Error: ") || strings.HasSuffix(line, ": Access denied")
+}
+
+// firstError returns the first line of a log that reports an error, cut
+// to maxErrorLine and with control characters replaced; "" if there is
+// none. A line about a file below home that was listed but is gone now is
+// no error: gone reports that there was such a line and no other error.
+func firstError(name, home string) (line string, gone bool) {
 	f, err := os.Open(name)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 4096), maxLogLine)
 
-	for n := 0; n < maxLogLines && sc.Scan(); n++ {
+	for sc.Scan() {
 		line := sc.Text()
-		if !strings.HasSuffix(line, " ERROR") && !strings.HasPrefix(line, "ERROR: ") && !strings.HasPrefix(line, "LibClamAV Error: ") {
+
+		if p, ok := vanished(line); ok && strings.HasPrefix(p, home+"/") {
+			if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+				gone = true
+
+				continue
+			}
+		}
+
+		if !isError(line) {
 			continue
 		}
 
-		line = strings.Map(func(r rune) rune {
-			if r < 0x20 || r == 0x7f {
-				return ' '
-			}
-
-			return r
-		}, strings.ToValidUTF8(line, "?"))
-
+		line = clean(line)
 		if len(line) > maxErrorLine {
 			line = strings.ToValidUTF8(line[:maxErrorLine], "") + "..."
 		}
 
-		return line
+		return line, false
 	}
 
-	return ""
+	return "", gone
 }
 
+// tail is the end of a log without the lines about single files (the
+// scanner's own messages, which say why it stopped), at most maxErrorTail
+// bytes on one line.
 func tail(name string) string {
 	f, err := os.Open(name)
 	if err != nil {
@@ -719,22 +855,32 @@ func tail(name string) string {
 		return ""
 	}
 
-	off := max(fi.Size()-maxErrorTail, 0)
+	off := max(fi.Size()-tailWindow, 0)
 
 	b := make([]byte, fi.Size()-off)
 	if _, err := f.ReadAt(b, off); err != nil && !errors.Is(err, io.EOF) {
 		return ""
 	}
 
-	s := strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return ' '
+	lines := strings.Split(string(b), "\n")
+	if off > 0 {
+		lines = lines[1:] // cut in the middle
+	}
+
+	kept := lines[:0]
+
+	for _, l := range lines {
+		if !strings.HasPrefix(l, "/") {
+			kept = append(kept, l)
 		}
+	}
 
-		return r
-	}, strings.ToValidUTF8(string(b), "?"))
+	s := strings.TrimSpace(clean(strings.Join(kept, "\n")))
+	if len(s) > maxErrorTail {
+		s = strings.ToValidUTF8(s[len(s)-maxErrorTail:], "")
+	}
 
-	return strings.TrimSpace(s)
+	return s
 }
 
 // Remove deletes the unit's drop-in, the state, log and quarantine of a
@@ -759,6 +905,9 @@ func (m *Manager) Remove(ctx context.Context, site string) error {
 	_ = os.Remove(dir)
 	_ = os.Remove(m.LogFile(site))
 	_ = os.Remove(m.ClientConfig(site))
+	_ = os.Remove(m.ListFile(site))
+
+	m.setProgress(site, nil)
 
 	if err := os.RemoveAll(filepath.Join(m.qDir(), site)); err != nil {
 		return fmt.Errorf("scanunit: %w", err)

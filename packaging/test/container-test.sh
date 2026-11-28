@@ -621,6 +621,12 @@ done
   fail "findings: $(x cat /tmp/api.out)"
 fid=$(jget 'd["findings"][0]["id"]')
 [ "$(x stat -c %U /var/log/hostashi/scan/blog.log)" = root ] || fail "scan log not root's"
+# The scan read the agent's list of files and reported each one: that is
+# what the progress counts (ADR-0064, progress addendum).
+expect_mode /var/lib/hostashi-scan "711 root:root"
+expect_mode /var/lib/hostashi-scan/blog.list "640 root:blog"
+x grep -qx '/home/blog/htdocs/eicar.com' /var/lib/hostashi-scan/blog.list || fail "eicar.com not in the scan list: $(x head -5 /var/lib/hostashi-scan/blog.list)"
+x grep -q ': OK$' /var/log/hostashi/scan/blog.log || fail "scan log has no line per file: $(x head -5 /var/log/hostashi/scan/blog.log)"
 [ "$(api POST "/api/v1/sites/blog/malware-findings/$fid/quarantine")" = 200 ] || fail "quarantine: $(x cat /tmp/api.out)"
 x test ! -e /home/blog/htdocs/eicar.com || fail "quarantined file still in the site"
 [ "$(x find /var/lib/hostashi-agent/quarantine/blog -name '*.bin' | wc -l)" = 1 ] || fail "nothing in the quarantine"
