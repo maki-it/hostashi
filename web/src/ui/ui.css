@@ -2410,6 +2410,98 @@ html:has(.ui-files) {
     padding-right: var(--space-2);
   }
 }
+/* The last runs beside the output (ADR-0028 Addendum 2); above it on a
+   narrow screen, as a row that scrolls sideways. */
+.ui-cron-output-body {
+  display: grid;
+  grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.ui-cron-output-main {
+  display: grid;
+  min-width: 0;
+}
+.ui-cron-runs {
+  display: grid;
+  gap: var(--space-2);
+}
+.ui-cron-runs-title {
+  font-size: 13px;
+}
+.ui-cron-runs ol {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-cron-run {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.ui-cron-run:hover {
+  background: var(--sunken);
+}
+.ui-cron-run:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ui-cron-run[aria-current="true"] {
+  background: var(--sunken);
+  border-color: var(--accent);
+}
+.ui-cron-run-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.ui-cron-run-dot-ok {
+  background: var(--ok);
+}
+.ui-cron-run-dot-err {
+  background: var(--err);
+}
+.ui-cron-run-dot-warn {
+  background: var(--warn);
+}
+.ui-cron-run-when {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ui-cron-run-meta {
+  grid-column: 2;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (max-width: 760px) {
+  .ui-cron-output-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ui-cron-runs ol {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(11rem, max-content);
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+  }
+}
 .ui-cron-output-empty {
   margin: 0;
   padding: var(--space-3);

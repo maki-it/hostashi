@@ -545,6 +545,25 @@ const cronOutputs = {
   },
 };
 
+// The last runs of the jobs (ADR-0028 Addendum 2), newest first: WP-Cron
+// every 5 minutes, the export nightly with one earlier failure.
+const runId = (job, i) => (String(job) + String(i)).padStart(32, "0");
+const cronRuns = {
+  1: Array.from({ length: 10 }, (_, i) => {
+    const start = unix(0, 16, 55) - i * 300;
+    return { id: runId(1, i), start, end: start + 2, running: false, result: "success", exitStatus: 0 };
+  }),
+  2: Array.from({ length: 10 }, (_, i) => {
+    const start = unix(i);
+    const failed = i === 0 || i === 4;
+    return { id: runId(2, i), start, end: start + (failed ? 14 : 61 + i), running: false, result: failed ? "exit-code" : "success", exitStatus: failed ? 1 : 0 };
+  }),
+};
+const cronRunOutput = (job, run) =>
+  job === "2" && run !== runId(2, 0) && run !== runId(2, 4)
+    ? { ran: true, truncated: false, lines: ["Exporting orders since the day before …", "  128 orders, 470 line items", "Writing exports/orders.csv", "Done."] }
+    : cronOutputs[job];
+
 // DNS accounts for DNS-01 certificates (ADR-0076).
 const dnsProviders = [
   { id: "cloudflare", name: "Cloudflare", fields: [{ name: "apiToken", label: "API token", secret: true, optional: false }], hint: "An API token with Zone: Read and DNS: Edit on the needed zones only, never the global API key." },
@@ -569,7 +588,8 @@ const dnsAccounts = [
 const routes = [
   ["GET", /^\/sites\/blog\/cron$/, () => ({ jobs: cronJobs, statusKnown: true })],
   ["GET", /^\/sites\/[^/]+\/cron$/, () => ({ jobs: [], statusKnown: true })],
-  ["GET", /^\/sites\/blog\/cron\/(\d+)\/output$/, (m) => cronOutputs[m[1]]],
+  ["GET", /^\/sites\/blog\/cron\/(\d+)\/output$/, (m, q) => (q?.get?.("run") ? cronRunOutput(m[1], q.get("run")) : cronOutputs[m[1]])],
+  ["GET", /^\/sites\/blog\/cron\/(\d+)\/runs$/, (m) => ({ runs: cronRuns[m[1]] ?? [] })],
   ["GET", /^\/sites\/([^/]+)\/object-cache$/, (m) => ({
     enabled: true,
     memoryMb: 64,

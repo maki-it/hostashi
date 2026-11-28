@@ -43,9 +43,60 @@ export const updateCron = (site: string, id: number, j: CronInput) => request<Cr
 export const deleteCron = (site: string, id: number) => request<void>("DELETE", cronPath(site, id));
 export const runCron = (site: string, id: number) => request<void>("POST", cronPath(site, id) + "/run");
 
-/** CronOutput is what the last run of a job wrote (ADR-0028 Addendum 1). */
+/**
+ * CronOutput is what one run of a job wrote: the last run without a run id
+ * (ADR-0028 Addendum 1), else one of the last runs (Addendum 2).
+ */
 export type CronOutput = { ran: boolean; lines: string[]; truncated: boolean };
-export const cronOutput = (site: string, id: number) => request<CronOutput>("GET", cronPath(site, id) + "/output");
+export const cronOutput = (site: string, id: number, run?: string) =>
+  request<CronOutput>("GET", cronPath(site, id) + "/output" + (run ? "?run=" + encodeURIComponent(run) : ""));
+
+/** CronRun is one of the last runs of a job (ADR-0028 Addendum 2). Times are Unix seconds. */
+export type CronRun = {
+  id: string;
+  start: number;
+  end?: number; // missing while it runs or when the journal has no end
+  running: boolean;
+  result?: string; // like CronStatus.result; missing when unknown
+  exitStatus?: number;
+};
+export const cronRuns = (site: string, id: number) => request<{ runs: CronRun[] }>("GET", cronPath(site, id) + "/runs");
+
+/** runResult says in a word or two how a run went, for the list of runs. */
+export function runResult(r: CronRun): string {
+  if (r.running) return i18n.t("cron.runs.result.running");
+  switch (r.result) {
+    case undefined:
+    case "":
+      return i18n.t("cron.runs.result.unknown");
+    case "success":
+      return i18n.t("cron.runs.result.success");
+    case "exit-code":
+      return i18n.t("cron.runs.result.exitCode", { code: r.exitStatus ?? i18n.t("cron.last.unknownCode") });
+    case "timeout":
+      return i18n.t("cron.runs.result.timeout");
+    case "signal":
+    case "core-dump":
+      return i18n.t("cron.runs.result.killed");
+    default:
+      return i18n.t("cron.runs.result.other", { result: r.result });
+  }
+}
+
+/** runStatus describes a run like a job's last run, for lastRun and lastRunTone. */
+export const runStatus = (r: CronRun): CronStatus => ({
+  running: r.running,
+  lastStart: r.start,
+  ...(r.result === undefined ? {} : { result: r.result }),
+  ...(r.exitStatus === undefined ? {} : { exitStatus: r.exitStatus }),
+  ...(r.end === undefined ? {} : { lastEnd: r.end }),
+});
+
+/** runLabel describes one of the last runs, like lastRun a job's last run. */
+export function runLabel(r: CronRun): string {
+  if (!r.running && !r.result) return i18n.t("cron.last.unknown", { when: formatTime(r.start) });
+  return lastRun(runStatus(r));
+}
 
 // inputOf turns a job back into what PUT expects, so a change keeps the
 // fields it does not touch.
@@ -217,6 +268,8 @@ export const formatTime = (unix: number) => formatDateTime(new Date(unix * 1000)
 export function cronMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
+      case "run_not_found":
+        return i18n.t("cron.errors.run_not_found");
       case "cron_unavailable":
       case "agent_precondition":
       case "site_busy":
