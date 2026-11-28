@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<!--
+  Start page of get.hostashi.com (ADR-0050, look of hostashi.com per
+  ADR-0079). The Pages workflow publishes it next to install.sh, the apt
+  repository and the WP-CLI mirror. Self-contained: the fonts sit next to
+  it, nothing is loaded from another host.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Hostashi</title>
+<meta name="description" content="Install script and signed apt repository of Hostashi, the open-source control panel for a single Linux server.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+@font-face { font-family: "Sora"; font-weight: 700; font-display: swap; src: url("fonts/sora-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Sora"; font-weight: 600; font-display: swap; src: url("fonts/sora-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+
+:root {
+  color-scheme: light;
+  --bg: #fcfcfa; --surface: #ffffff; --sunken: #eef3ef; --line: #d6dfda;
+  --fg: #0d1f1a; --muted: #3b4a44; --accent: #1f6b55; --on-accent: #ffffff;
+  --brand: #ff6f61; --code-bg: #0d1f1a; --code-fg: #e8f0ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0d1f1a; --surface: #1a2c22; --sunken: #132820; --line: #2f4337;
+    --fg: #fdfcfa; --muted: #9db3ab; --accent: #5cbc9d; --on-accent: #0d1f1a;
+    --code-bg: #07130f; --code-fg: #e8f0ec;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 17px/1.6 "IBM Plex Sans", system-ui, sans-serif;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; }
+code, pre { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.wrap { max-width: 52rem; margin: 0 auto; padding: 0 16px; }
+header { border-bottom: 1px solid var(--line); }
+header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; height: 64px; }
+.brand { display: flex; align-items: center; gap: 0.6rem; color: var(--fg); text-decoration: none; font: 700 1.15rem "Sora", system-ui, sans-serif; letter-spacing: -0.03em; }
+.brand svg { width: 30px; height: 30px; }
+header nav { display: flex; gap: 1.2rem; font-size: 0.95rem; }
+header nav a { color: var(--muted); text-decoration: none; }
+header nav a:hover { color: var(--fg); }
+main.wrap { padding-top: 3.5rem; padding-bottom: 2rem; }
+.eyebrow { font: 400 0.75rem "IBM Plex Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.8rem; }
+.eyebrow::before { content: ""; display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 0.15rem; background: var(--brand); margin-right: 0.5rem; vertical-align: -0.03rem; }
+h1, h2 { font-family: "Sora", system-ui, sans-serif; letter-spacing: -0.04em; line-height: 1.1; }
+h1 { font-size: clamp(2rem, 1.4rem + 2.4vw, 2.9rem); margin: 0 0 1rem; }
+h2 { font-size: 1.35rem; letter-spacing: -0.03em; margin: 0 0 0.6rem; }
+.lead { font-size: 1.1rem; color: var(--muted); margin: 0 0 2rem; max-width: 40rem; }
+.terminal { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 40px -16px rgb(13 31 26 / 35%); }
+.terminal__bar { display: flex; gap: 6px; padding: 12px 14px; }
+.terminal__bar span { width: 10px; height: 10px; border-radius: 50%; background: #2f4337; }
+.terminal__bar span:first-child { background: var(--brand); }
+.terminal pre { margin: 0; padding: 0 18px 18px; overflow-x: auto; font-size: 0.9rem; line-height: 1.75; }
+.terminal .c { color: #8fa79e; }
+.terminal .p { color: #5cbc9d; user-select: none; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 1.6rem 0 0; }
+.button { display: inline-block; padding: 0.6rem 1.15rem; border-radius: 999px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.button--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 3.5rem 0 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.2rem 1.3rem; }
+.card p { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.95rem; }
+.card p:last-child { margin-bottom: 0; }
+.card code { font-size: 0.85em; background: var(--sunken); padding: 0.1em 0.35em; border-radius: 4px; color: var(--fg); overflow-wrap: anywhere; }
+.card--wide { grid-column: 1 / -1; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.35rem 1rem; margin: 0.4rem 0 0; font-size: 0.92rem; }
+dt { color: var(--muted); }
+dd { margin: 0; min-width: 0; }
+footer { border-top: 1px solid var(--line); margin-top: 3rem; padding: 1.5rem 0 2.5rem; color: var(--muted); font-size: 0.88rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+@media (max-width: 40rem) {
+  header nav a.hide-sm { display: none; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  dl { grid-template-columns: minmax(0, 1fr); }
+  dt { margin-top: 0.4rem; }
+  .terminal pre { font-size: 0.8rem; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="https://hostashi.com/">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#ff6f61"/><path d="M9 8v16M23 8v16M9 16h14" stroke="#0d1f1a" stroke-width="3.5" stroke-linecap="round" fill="none"/></svg>
+      Hostashi
+    </a>
+    <nav>
+      <a href="https://hostashi.com/docs/Install/">Docs</a>
+      <a class="hide-sm" href="https://github.com/maki-it/hostashi/releases">Releases</a>
+      <a href="https://github.com/maki-it/hostashi">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="eyebrow">get.hostashi.com</p>
+  <h1>Install Hostashi</h1>
+  <p class="lead">On a fresh Debian 13 or Ubuntu 26.04 server, amd64 or arm64. Read the script first, look at the plan, then install.</p>
+
+  <div class="terminal" role="group" aria-label="Install commands">
+    <div class="terminal__bar" aria-hidden="true"><span></span><span></span><span></span></div>
+<pre><code><span class="p">$ </span>curl -fsSLO https://get.hostashi.com/install.sh
+<span class="p">$ </span>less install.sh
+<span class="p">$ </span>sudo bash install.sh --panel-domain panel.example.com        <span class="c"># shows the plan</span>
+<span class="p">$ </span>sudo bash install.sh --yes --panel-domain panel.example.com  <span class="c"># installs</span></code></pre>
+  </div>
+
+  <div class="actions">
+    <a class="button button--primary" href="https://hostashi.com/docs/Install/">Full install guide</a>
+    <a class="button" href="install.sh">View install.sh</a>
+  </div>
+
+  <div class="cards">
+    <section class="card card--wide" aria-labelledby="apt">
+      <h2 id="apt">apt repository</h2>
+      <p>The script adds this repository; later updates come with <code>apt upgrade</code>.</p>
+      <dl>
+        <dt>Address</dt><dd><code>https://get.hostashi.com/apt</code></dd>
+        <dt>Suite <code>stable</code></dt><dd>Hostashi itself · key <a href="apt/hostashi.asc">apt/hostashi.asc</a><br><code>64F6 AE8D C40D 1299 E68A 008F 735A 7A2D 7411 49DB</code></dd>
+        <dt>Suite <code>runtimes</code></dt><dd>Node.js, CPython and WP-CLI pins only · key <a href="apt/hostashi-runtimes.asc">apt/hostashi-runtimes.asc</a><br><code>E304 A159 2CBD A945 EF69 AC32 3BC5 F483 620A 16A2</code></dd>
+      </dl>
+    </section>
+    <section class="card" aria-labelledby="verify">
+      <h2 id="verify">Check a download</h2>
+      <p>Every release is signed with Sigstore. The <a href="https://hostashi.com/docs/Releases/#check-a-download">release docs</a> show how to verify it.</p>
+    </section>
+    <section class="card" aria-labelledby="wpcli">
+      <h2 id="wpcli">WP-CLI mirror</h2>
+      <p><code>/wp-cli</code> holds the pinned WP-CLI builds for servers without IPv4.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Hostashi is free software under the AGPL-3.0 · © 2026 Maki IT</span>
+    <a href="https://hostashi.com/">hostashi.com</a>
+  </div>
+</footer>
+</body>
+</html>

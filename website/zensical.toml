@@ -19,7 +19,7 @@ extra_css = ["stylesheets/hostashi.css"]
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = [
-    { "Home" = "docs/Home.md" },
+    { "Introduction" = "docs/Home.md" },
     { "Install" = "docs/Install.md" },
     { "First steps" = "docs/First-steps.md" },
   ] },
@@ -75,6 +75,7 @@ nav = [
 
 [project.theme]
 language = "en"
+custom_dir = "overrides"
 # No Google Fonts: the fonts come from stylesheets/hostashi.css.
 font = false
 logo = "assets/hostashi-mark.svg"
