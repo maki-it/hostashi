@@ -1,6 +1,6 @@
 # ADR-0028 Cron jobs per site
 
-**Status:** Accepted (2026-11-19, by Kim: option A); Addendum 1 Accepted (Kim, 2026-11-27). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
+**Status:** Accepted (2026-11-19, by Kim: option A); Addendum 1 Accepted (Kim, 2026-11-27); Addendum 2 Accepted (Kim, 2026-11-28). **Date drafted:** 2026-11-19. **Decides:** Kim. **Related:** ADR-0004 (web/agent privilege split), ADR-0007 (isolation model), ADR-0015 (per-site resource limits, Proposed), ADR-0017 (CloudPanel import), ADR-0026 (migration transfer), [`03-features.md`](../03-features.md) row "Cron jobs per site" (P0).
 
 Evidence tags as in [README](README.md): [V] verified, [A] assumption, [E] estimate, [U] unverified general knowledge.
 
