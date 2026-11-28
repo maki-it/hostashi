@@ -19,7 +19,7 @@ const width = 390;
 const host = "panel.example.com";
 const port = 5186;
 
-const pages = ["", "sites", "sites?new=1", "databases", "parked", "pages", "health", "services", "system", "pools", "php", "node", "python", "backups", "firewall", "limits", "profiles", "users", "mail", "audit", "account"];
+const pages = ["", "sites", "sites?new=1", "databases", "parked", "pages", "health", "services", "system", "pools", "php", "node", "python", "backups", "firewall", "limits", "profiles", "dns", "dns?new=1", "users", "mail", "audit", "account"];
 const tabs = ["overview", "domains", "access", "web", "files", "malware", "php", "cache", "cron", "ssh", "limits", "usage", "logs", "nginx", "https", "headers", "realip", "hardening"];
 const hashes = [...pages.map((p) => "#/" + p), ...tabs.map((t) => "#/sites/blog/" + t)];
 
